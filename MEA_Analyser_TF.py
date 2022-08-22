@@ -11,12 +11,13 @@ import shutil
 
 #NETWORK Per-electrode analysis
 
-exportedDataFolder = 'C:/Users/Tim/Documents/Dev/MEA Data/ExampleRawData/' #This is the folder with raw data straight from MXWbio computer
+exportedDataFolder = 'C:/Users/Tim/Documents/Dev/MEA Data/ExampleRawData2/' #This is the folder with raw data straight from MXWbio computer
 
 electrodeData_dir = "1000_electrode_data_test/" #This is the name of the folder which will be created to contain all 'electrod_metrics.csv' files as well as averaged data csv
 
 
-def compile_electrodeData(exportedDataFolder):
+
+def compile_electrodeData(exportedDataFolder): #function to Copy all electrode_metrics.csv files into a single folder
     outputfolderpath = os.path.join(exportedDataFolder,electrodeData_dir) #New folder where compiled csvs will be stored
     outputfolder = os.mkdir(outputfolderpath) #make the new folder that we just made the path for
     i=0
@@ -28,7 +29,7 @@ def compile_electrodeData(exportedDataFolder):
                 oldpath = os.path.join(exportedDataFolder, dirs,f) #where the old file was
                 newpath = os.path.join(exportedDataFolder, dirs,new_name) #current path of new file with new file name
                 newfilename = os.rename(oldpath,newpath)
-                destpath = os.path.join(outputfolderpath,new_name) # final new path of new file/filename
+                destpath = os.path.join(outputfolderpath,new_name) # final new path of new file/filename (because of recursive nature of os.walk, numbers won't be n,n+1...)
                 shutil.copy(newpath, destpath) #copy the renamed file to new destination
         i=i+1
     return exportedDataFolder
@@ -39,7 +40,7 @@ def read_electrode_data(exportedDataFolder):
     working_folder = os.chdir(os.path.join(exportedDataFolder,electrodeData_dir)) #folder with electrode data .csvs
     files = os.listdir(working_folder) #get list of files in directory
     compiled_df = pd.DataFrame() #empty df to concat to
-    colsToAverage = ['Wellplate ID','Electrode Spike Count', 'Electrode Firing Rate', 'Electrode Spike Amplitude', 'Mean Electrode ISI'] #which columns to average
+    colsToAverage = ['Wellplate ID','Electrode Spike Count', 'Electrode Firing Rate', 'Electrode Spike Amplitude', 'Mean Electrode ISI'] #which columns to average. Can add more later if desired
     date = ['Date'] #date column to append to averages.
 
     for i in range (0,len(files)):
@@ -50,33 +51,74 @@ def read_electrode_data(exportedDataFolder):
 
     compiled_df2 = compiled_df.transpose().reset_index(drop=True)
     compiled_df2.sort_values(['Date','Wellplate ID'], inplace=True, ascending=True)
-    print(compiled_df2)
+    #print(compiled_df2)
 
     compiled_df2.to_csv('compiledMeanData.csv')
 
+    #############################################################################################################
+    #3000 electrode data below (take 3 chips of 1000 electrodes, average over 3000 electrodes and get SEM)
+    
+    # WTchip = [16657, 16744, 16665]
+    # HETchip = [16757, 16742, 16963]
+    # WTedf = pd.DataFrame()
+    # HETedf = pd.DataFrame()
+    # compiled_allElectrode_df = pd.DataFrame()
+
+    # for i in range(0,len(files)):
+    #     allElectrode_df = pd.read_csv(files[i], skiprows=1,parse_dates=['Date']).iloc[:,:-4]
+    #     compiled_allElectrode_df = pd.concat([compiled_allElectrode_df,allElectrode_df])
+           
+    # mean_edf = compiled_allElectrode_df.groupby(['Date','Wellplate ID'])[colsToAverage].agg(['mean','sem'])
+    # mean_edf.columns = mean_edf.columns.map('_'.join)
+    # mean_edf.reset_index()
+    # mean_edf['Genotype'] = np.where(mean_edf['Wellplate ID'].isin(WTchip),'WT','HET')
+    # print(mean_edf)
+    # #mean_edf.to_csv('3000electrode_means_sems.csv')
+    
+    ######Uncomment below lines to print out a huge df with all raw electrode values (1000 electrodes per chip read)
+    # compiled_allElectrode_df.transpose().reset_index(drop=True)
+    # compiled_allElectrode_df.sort_values(['Date','Wellplate ID'],inplace=True,ascending=True)
+    # compiled_allElectrode_df.to_csv('allElectrode_compiled.csv')
+
     return compiled_df2
+
+
 
 def plot_perElectrode_activity(compiled_df2):
 
+    df = pd.read_csv(compileddata)
+    df.sort_values(by=['Wellplate ID'], inplace=True)
+    #df = compiled_df2 #uncomment when running all the way through
+    
+    wt_data = pd.DataFrame()
+    het_data = pd.DataFrame()
+
+    for i, WTchip in df:
+        if WTchip in df['Wellplate ID']:
+            wt_data.concat(i)
+        else:
+            het_data.concat(i)
+    
+    print(wt_data)
+
     #plot stuff
-    # fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2)
-    # ax1.bar(edf['Instance'], edf['Electrode Spike Count'], color='red')
-    # ax2.bar(edf['Instance'], edf['Electrode Spike Amplitude'], color='blue')
-    # ax3.bar(edf['Instance'], edf['Electrode Firing Rate'], color='green')
-    # ax4.bar(edf['Instance'], edf['Mean Electrode ISI'], color='black')
-    # plt.show()
+    width = .1
+    xscale = np.unique(df['Date'])
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2)
+    ax1.bar(xscale, df['Electrode Spike Count'], width, color='red')
+    ax2.bar(xscale+width, df['Electrode Spike Amplitude'], width, color='blue')
+    ax3.bar(xscale+2*width, df['Electrode Firing Rate'],width, color='green')
+    ax4.bar(xscale+3*width, df['Mean Electrode ISI'],width, color='black')
+    plt.show()
     return
 
 
 #compile_electrodeData(exportedDataFolder)
 read_electrode_data(exportedDataFolder)
 
+# compileddata = 'C:/Users/Tim/Documents/Dev/MEA Data/1000 electrode data/compiledMeanData.csv'
 
-
-
-
-
-
+# plot_perElectrode_activity(compileddata)
 
 
 
