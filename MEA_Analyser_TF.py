@@ -11,9 +11,29 @@ import shutil
 
 #NETWORK Per-electrode analysis
 
+#############&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&###################
+#README:
+# Code below is for analyzing the 1000 electrode activity data from NETWORK scans only (not from whole chip recording). It will take the raw, exported data and take averages from each chip from each date.
+# The current columns that are averaged are the Electrode spike count, firing rate, spike amplitude, and mean electrode ISI.
+# To use the code, change variable "exportedDataFolder" to the path of the folder of your network exports.
+# Example path: To analyze B6J Baseline data on the recording computer currently in R2, the path would be /home/mxwbio/Data/exported_data/B6J Baseline Exports/B6J Network/
+# The code below will look at all files and folders and search for any file named "electrode_metrics".
+# It will then rename the file with a number and copy all electrod_metrics_# files into a new folder (which you can rename) called "1000_electrode_data" (variable = electrodeData_dir).
+# After compiling all files in 1000_electrode_data folder, a new file will be created called "compiledMeanData.csv" which will contain the date, chip ID, and averages for the metrics listed above.
+# IF we want, other files can be compiled by changing the 'electrode_metrics' string in the "compile_electrodeData" function to compile all files in a single folder.
+# Note: this code is still a rough work in progress. 
+# Desired additions: 
+#       User enters WT/HET/treatment chip IDs and code will add whether each chip is WT or HET or treatment, and sort data based on that.
+#       Automated plotting of Network 1000 electrode data.
+#       Ability to average between all electrodes from n different chips rather than average each chip.
+#       Combine and streamline Tim's and Roy's code so both activity and network data is analyzed with one folder input.
+#       Analyze spike_metrics.csv data.      
+#############&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&###################
+
+
 exportedDataFolder = 'C:/Users/Tim/Documents/Dev/MEA Data/ExampleRawData2/' #This is the folder with raw data straight from MXWbio computer
 
-electrodeData_dir = "1000_electrode_data_test/" #This is the name of the folder which will be created to contain all 'electrod_metrics.csv' files as well as averaged data csv
+electrodeData_dir = "1000_electrode_data/" #This is the name of the folder which will be created to contain all 'electrod_metrics.csv' files as well as averaged data csv
 
 
 
@@ -55,7 +75,7 @@ def read_electrode_data(exportedDataFolder):
 
     compiled_df2.to_csv('compiledMeanData.csv')
 
-    #############################################################################################################
+    #########################################################################################################
     #3000 electrode data below (take 3 chips of 1000 electrodes, average over 3000 electrodes and get SEM)
     
     # WTchip = [16657, 16744, 16665]
@@ -124,7 +144,10 @@ read_electrode_data(exportedDataFolder)
 
 
 
-
+############################################################################
+############################################################################
+############################################################################
+############################################################################
 ############################################################################
 ######Roy's code for graphing Activity and Network
 def read_file(fn):
