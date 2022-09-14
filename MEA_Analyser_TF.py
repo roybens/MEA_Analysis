@@ -31,7 +31,7 @@ import shutil
 #############&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&###################
 
 
-exportedDataFolder = '/hdd/Data4TB/Syngap2/SyngapBurstTemp' #This is the folder with raw data straight from MXWbio computer
+exportedDataFolder = 'C:/Users/Tim/Documents/Silverman/Syngap/MEA/SyngapBurstTemp' #This is the folder with raw data straight from MXWbio computer
 
 electrodeData_dir = "1000_electrode_data/" #This is the name of the folder which will be created to contain all 'electrod_metrics.csv' files as well as averaged data csv
 
@@ -93,8 +93,8 @@ def compile_burstData(exportedDataFolder): #function to Copy all electrode_metri
     for dirs, subdirs, files, in os.walk(exportedDataFolder): #read all files and folders 
         for f in files:
             f_name, f_ext = os.path.splitext(f) #split names so we can rename
-            #if f_name.endswith('burst_metrics'):
-            if "burst_metrics" in f_name: #only choose electrode_metrics sheets
+            if f_name.endswith('burst_metrics'):
+            #if "burst_metrics" in f_name: #only choose electrode_metrics sheets
                 new_name = '{}_{}{}'.format(f_name,i,f_ext) #string which will be new name
                 #f_name.strip("_0123456789")
                 #new_name = '{}{}'.format(f_name,".csv")
@@ -112,13 +112,13 @@ def read_burst_data(exportedDataFolder):
     working_folder = os.chdir(os.path.join(exportedDataFolder,burstData_dir)) #folder with electrode data .csvs
     files = os.listdir(working_folder) #get list of files in directory
     compiled_df1 = pd.DataFrame() #empty df to concat to
-    colsToAverage = ['Burst time','Spikes per Burst', 'Spikes per Burst per Electrode', 'Burst Duration', 'Burst Peak Firing Rate','IBI','Mean Burst ISI','Burst ISI CV'] #which columns to average. Can add more later if desired
+    colsToAverage = ['Wellplate ID','Burst time','Spikes per Burst', 'Spikes per Burst per Electrode', 'Burst Duration', 'Burst Peak Firing Rate','IBI','Mean Burst ISI','Burst ISI CV'] #which columns to average. Can add more later if desired
     date = ['Date'] #date column to append to averages.
 
     for i in range (0,len(files)):
         edf = pd.read_csv(files[i], skiprows=1, parse_dates=['Date']).iloc[:,:-4] #skip top line, drop the last 4 columns, read date
         edf_means = edf[colsToAverage].mean() #average specified columns
-        edf_means = pd.concat([edf.iloc[2][date], edf_means]) #add date to top of averaged columns
+        edf_means = pd.concat([edf.iloc[1][date], edf_means]) #add date to top of averaged columns (for some reason needed a 1 in row vs 2 in row for electrode data. not sure why)
         compiled_df1 = pd.concat([compiled_df1, edf_means], axis=1) #add each new chip averages to one compiled dataframe
 
     compiled_df3 = compiled_df1.transpose().reset_index(drop=True)
@@ -128,6 +128,7 @@ def read_burst_data(exportedDataFolder):
     compiled_df3.to_csv('compiledMeanBurstData.csv')
     return compiled_df3
 
+#compile_burstData(exportedDataFolder)
 read_burst_data(exportedDataFolder)
     
     
