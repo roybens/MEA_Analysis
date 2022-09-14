@@ -10,7 +10,7 @@ import shutil
 
 
 #NETWORK Per-electrode analysis
-
+ 
 #############&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&###################
 #README:
 # Code below is for analyzing the 1000 electrode activity data from NETWORK scans only (not from whole chip recording). It will take the raw, exported data and take averages from each chip from each date.
@@ -31,7 +31,7 @@ import shutil
 #############&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&###################
 
 
-exportedDataFolder = 'C:/Users/Tim/Documents/Dev/MEA Data/ExampleRawData2/' #This is the folder with raw data straight from MXWbio computer
+exportedDataFolder = '/hdd/Data4TB/Syngap2/SyngapBurstTemp' #This is the folder with raw data straight from MXWbio computer
 
 electrodeData_dir = "1000_electrode_data/" #This is the name of the folder which will be created to contain all 'electrod_metrics.csv' files as well as averaged data csv
 
@@ -75,6 +75,76 @@ def read_electrode_data(exportedDataFolder):
 
     compiled_df2.to_csv('compiledMeanData.csv')
 
+    
+#read_electrode_data(exportedDataFolder)
+
+
+############################################################################################################################3
+#Burst Metrics below. Same code as above but changed folder names and colsToAverage. Will consolidate later. -09/14/22
+
+
+
+burstData_dir = "burst_data/" #This is the name of the folder which will be created to contain all 'electrod_metrics.csv' files as well as averaged data csv
+
+def compile_burstData(exportedDataFolder): #function to Copy all electrode_metrics.csv files into a single folder
+    outputfolderpath = os.path.join(exportedDataFolder,burstData_dir) #New folder where compiled csvs will be stored
+    outputfolder = os.mkdir(outputfolderpath) #make the new folder that we just made the path for
+    i=0
+    for dirs, subdirs, files, in os.walk(exportedDataFolder): #read all files and folders 
+        for f in files:
+            f_name, f_ext = os.path.splitext(f) #split names so we can rename
+            #if f_name.endswith('burst_metrics'):
+            if "burst_metrics" in f_name: #only choose electrode_metrics sheets
+                new_name = '{}_{}{}'.format(f_name,i,f_ext) #string which will be new name
+                #f_name.strip("_0123456789")
+                #new_name = '{}{}'.format(f_name,".csv")
+                oldpath = os.path.join(exportedDataFolder, dirs,f) #where the old file was
+                newpath = os.path.join(exportedDataFolder, dirs,new_name) #current path of new file with new file name
+                newfilename = os.rename(oldpath,newpath)
+                destpath = os.path.join(outputfolderpath,new_name) # final new path of new file/filename (because of recursive nature of os.walk, numbers won't be n,n+1...)
+                shutil.copy(newpath, destpath) #copy the renamed file to new destination
+        i=i+1
+    return exportedDataFolder
+
+
+def read_burst_data(exportedDataFolder):
+    compile_burstData(exportedDataFolder)
+    working_folder = os.chdir(os.path.join(exportedDataFolder,burstData_dir)) #folder with electrode data .csvs
+    files = os.listdir(working_folder) #get list of files in directory
+    compiled_df1 = pd.DataFrame() #empty df to concat to
+    colsToAverage = ['Burst time','Spikes per Burst', 'Spikes per Burst per Electrode', 'Burst Duration', 'Burst Peak Firing Rate','IBI','Mean Burst ISI','Burst ISI CV'] #which columns to average. Can add more later if desired
+    date = ['Date'] #date column to append to averages.
+
+    for i in range (0,len(files)):
+        edf = pd.read_csv(files[i], skiprows=1, parse_dates=['Date']).iloc[:,:-4] #skip top line, drop the last 4 columns, read date
+        edf_means = edf[colsToAverage].mean() #average specified columns
+        edf_means = pd.concat([edf.iloc[2][date], edf_means]) #add date to top of averaged columns
+        compiled_df1 = pd.concat([compiled_df1, edf_means], axis=1) #add each new chip averages to one compiled dataframe
+
+    compiled_df3 = compiled_df1.transpose().reset_index(drop=True)
+    compiled_df3.sort_values(['Date','Wellplate ID'], inplace=True, ascending=True)
+    #print(compiled_df2)
+
+    compiled_df3.to_csv('compiledMeanBurstData.csv')
+    return compiled_df3
+
+read_burst_data(exportedDataFolder)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     #########################################################################################################
     #3000 electrode data below (take 3 chips of 1000 electrodes, average over 3000 electrodes and get SEM)
     
@@ -100,11 +170,11 @@ def read_electrode_data(exportedDataFolder):
     # compiled_allElectrode_df.sort_values(['Date','Wellplate ID'],inplace=True,ascending=True)
     # compiled_allElectrode_df.to_csv('allElectrode_compiled.csv')
 
-    return compiled_df2
+    
 
 
 
-def plot_perElectrode_activity(compiled_df2):
+def plot_perElectrode_activity(compiled_df2,chip_dict = None):
 
     df = pd.read_csv(compileddata)
     df.sort_values(by=['Wellplate ID'], inplace=True)
@@ -113,13 +183,21 @@ def plot_perElectrode_activity(compiled_df2):
     wt_data = pd.DataFrame()
     het_data = pd.DataFrame()
 
-    for i, WTchip in df:
-        if WTchip in df['Wellplate ID']:
-            wt_data.concat(i)
-        else:
-            het_data.concat(i)
+    if chip_dict:
+        df_dicts = {}
+        for curr_cond in chip_dict.keys():
+            df_dicts[curr_cond] = pd.DataFrame()
     
-    print(wt_data)
+        for entry in df:
+            chip_id = int(df['Wellplate ID'])
+
+
+            if WTchip in df['Wellplate ID']:
+                wt_data.concat(i)
+            else:
+                het_data.concat(i)
+        
+        print(wt_data)
 
     #plot stuff
     width = .1
@@ -132,9 +210,16 @@ def plot_perElectrode_activity(compiled_df2):
     plt.show()
     return
 
+def get_chip_condition(chip_dict,chip_id):
+    conditions = chip_dict.keys()
+    id_list = chip_dict.values()
+    for ind,chip_list in enumerate(id_list):
+        if chip_id in chip_list:
+            return conditions[ind]
 
 #compile_electrodeData(exportedDataFolder)
-read_electrode_data(exportedDataFolder)
+
+chip_dict = {'30K':[16364,16378,16461], '60K':[16465,16384,16380],'90K':[16709,16821],'110K':[16856,16874]}
 
 # compileddata = 'C:/Users/Tim/Documents/Dev/MEA Data/1000 electrode data/compiledMeanData.csv'
 
