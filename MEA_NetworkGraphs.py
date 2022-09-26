@@ -9,7 +9,7 @@ f = 'compiledMeanData.xlsx'
 
 def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compiledMeanData.xlsx', 'Network Spike Count')
     df = pd.read_excel(file)
-    
+
     #define input based on output
     if out == 'Network Spike Count':
         inp = 'Electrode Spike Count'
@@ -18,6 +18,7 @@ def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compile
         inp = 'Electrode Firing Rate'
         inp_title = 'Electrode Firing Rate (Hz)'
     if out == 'Network Spike Amplitude':
+
         inp = 'Electrode Spike Amplitude'
         inp_title = 'Electrode Spike Amplitude (uV)'
     if out == 'Network Electrode ISI':
@@ -25,13 +26,14 @@ def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compile
         inp_title = 'Mean Electrode ISI'
     
     #convert date to day(s) from start date
-    df['start date'] = df['Date'].min() # start date
+    df['start date'] = df['Date'].min() # start date as earliest date
     d = 4 #Assume the first recodring day is the d-th day
     df['Day'] = (df['Date'] - df['start date']) / np.timedelta64(1, 'D') + d # Day as delta-date
 
     ##form plot data structure
     #day array
     day = df['Day'].unique()
+    total_days = len(day)
     #output array
     out_wt = [] #empty wt array
     out_het = [] #empty het array
@@ -43,19 +45,24 @@ def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compile
 
     ##plot
     # bar width
-    w = 0.5
+    w = total_days/32
     #create x-coordinates of bars
+    x_day = [] #creat x-axis values
+    for i in range(0,len(day)):
+        x_day.append(int(day[i]))
     x_wt = []
-    x_het = []
-    for i in day:
+    x_het = []   
+    x_d = list(range(1,total_days+1)) #create x-axis bar centers
+    for i in x_d:
         x_wt.append(i-w*.75)
         x_het.append(i+w*.75)
     #data series
     y_wt = out_wt
     y_het = out_het
+
     #plotting
     fig, ax = plt.subplots()
-    #plot wt bar
+    #plot WT bar
     ax.bar(x_wt, 
            height=[np.mean(yi) for yi in y_wt],
            yerr=[np.std(yi) for yi in y_wt],    # error bars
@@ -64,7 +71,7 @@ def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compile
            color=(0,0,0,0),  # face color transparent
            edgecolor='black',
            ecolor='black')
-    #plot het bar
+    #plot HET bar
     ax.bar(x_het, 
            height=[np.mean(yi) for yi in y_het],
            yerr=[np.std(yi) for yi in y_het],    # error bars
@@ -78,6 +85,7 @@ def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compile
         wt = ax.scatter(x_wt[i]+np.zeros(y_wt[i].size), y_wt[i], color='black', label='WT', s=20)
     for i in range(len(x_het)):
         het = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='HET', s=20)
+
     #axis scaling
     xmin = 0
     xmax = (max(df['Day']) - xmin)*1.25
@@ -88,10 +96,11 @@ def plot_network_graph(file,out): #input: (file name, plot output) eg. ('compile
     plt.title(out)
     plt.xlabel('Day in Vitro')
     plt.ylabel(inp_title)
-    plt.xticks(day)
-    plt.axis([xmin, xmax, ymin, ymax])
+    plt.xticks(x_d, x_day)
+    plt.axis([xmin, total_days + 1, ymin, ymax])
     #save plot
     plt.savefig(out +'.png', dpi=300)
+
 
 #Call the functions based on output types
 plot_network_graph(f,'Network Spike Count')
