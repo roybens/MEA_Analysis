@@ -1,0 +1,7 @@
+Python/kilosort*
+Python/*.json
+Python/*.gz
+Python/*.txt
+Python/maxlab
+Python/waveforms*
+Python/__pycache__
