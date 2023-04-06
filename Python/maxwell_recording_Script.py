@@ -11,6 +11,7 @@ CHIP_ID = 16848
 
 def main():
 
+    print("Script begin")
     unit = 16
     if len(sys.argv) > 1:
         unit = int(sys.argv[1])
@@ -21,6 +22,8 @@ def main():
     # Set the gain to 1
     amplifier = maxlab.chip.Amplifier().set_gain(512)
     maxlab.send(amplifier)
+
+    maxlab.util.hpf("1Hz")
 
     characterizer = maxlab.characterize.StimulationUnitCharacterizer()
 
@@ -37,6 +40,7 @@ def main():
     for y in range(6):  #TODO : change the hardcoding
         for x in range(5):
             block_number += 1
+            print(f"For the block {block_number}")
             #print("(",XMULTIPLIER*x,YMULTIPLIER*y,XMULTIPLIER*x+XMULTIPLIER-1,YMULTIPLIER*y+YMULTIPLIER-1,")")
             selected_electrodes = maxlab.chip.electrode_rectangle_indices(XMULTIPLIER*x,YMULTIPLIER*y,XMULTIPLIER*x+XMULTIPLIER-1,YMULTIPLIER*y+YMULTIPLIER-1)
             array = maxlab.chip.Array('online')
@@ -62,10 +66,11 @@ def main():
                 #sleep for recording time
                 time.sleep(60)
                 saving_object.stop()
+                print("recording stop")
             except Exception as e:
                 print(e)
                 sys.exit(0)
-
+    print("Script end")
 
 
             
