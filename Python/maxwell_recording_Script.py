@@ -4,6 +4,7 @@ import maxlab.util
 import maxlab.chip
 import maxlab.saving
 import maxlab.characterize
+import maxlab.config
 import time
 from datetime import datetime
 
@@ -42,7 +43,7 @@ def main():
             block_number += 1
             print(f"For the block {block_number}")
             #print("(",XMULTIPLIER*x,YMULTIPLIER*y,XMULTIPLIER*x+XMULTIPLIER-1,YMULTIPLIER*y+YMULTIPLIER-1,")")
-            selected_electrodes = maxlab.chip.electrode_rectangle_indices(XMULTIPLIER*x,YMULTIPLIER*y,XMULTIPLIER*x+XMULTIPLIER-1,YMULTIPLIER*y+YMULTIPLIER-1)
+            selected_electrodes = maxlab.config.electrode_rectangle_indices(XMULTIPLIER*x,YMULTIPLIER*y,XMULTIPLIER*x+XMULTIPLIER-1,YMULTIPLIER*y+YMULTIPLIER-1)
             array = maxlab.chip.Array('online')
             array.reset()
             array.clear_selected_electrodes( )
