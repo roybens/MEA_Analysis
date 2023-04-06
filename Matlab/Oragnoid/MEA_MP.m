@@ -4,7 +4,7 @@ clear
 close all
 
 
-pathFileNetwork = '/Users/mandarmp/Documents/mmpatil/networkdata.raw.h5';
+pathFileNetwork = '/home/mmpatil/Documents/spikesorting/Data/organoid/16866/Network/000006/data.raw.h5';
 
 
 networkData = mxw.fileManager(pathFileNetwork);
@@ -75,8 +75,8 @@ requiredRawDataChannels= ntwTracesRaw(:,ind(1:n));
 
 
 %Taking LFP of the surrounding electrodes.
-
-LFPData2 = bandpass(requiredRawDataChannels,[1 ,100],1000);
+fs = 1000; % Set the sampling rate
+LFPData2 = bandpass(requiredRawDataChannels,[1 100],fs);
 
 %average it 
 meanLFPData2 = mean(LFPData2,2);
@@ -84,24 +84,118 @@ meanLFPData2 = mean(LFPData2,2);
 %pxx = pwelch(ntwTracesRaw);
 
 %nfft = 512; % play with this to change your frequency resolution
-nfft = 512;
-noverlap = round(nfft * 0.25); % 75% overlap
-window = hanning(nfft);
-[psd,freqs] = pwelch(meanLFPData2, 500, [], [], fsNetwork);
+
+% nfft = 512;
+% noverlap = round(nfft * 0.25); % 75% overlap
+% window = hanning(nfft);
+% window_length = round(length(meanLFPData2)/4); % Set the window length to 25% of the signal length
+% window_overlap = round(window_length/2); % Set the overlap to 50% of the window length
+% nfft = 2^(nextpow2(window_length)); % Set the number of FFT points to the next power of 2
+%
+% % 
+%  [p,f] = pwelch(meanLFPData2, window_length, window_overlap, nfft, fs);
+
+
+[psd,freqs] = pwelch(meanLFPData2, fs,[],[],fs);
     %notes: F = fsNetwork/nfft
 figure;
-plot(log(psd))   
+plot(freqs,log10(psd))   
 xlim ([0 100]);
+ylim([-2 2])
+  
 
-freqs = freqs';
-psd = psd';
+% freqs = freqs';
+% psd = psd';
 
 % FOOOF settings
-settings = struct();  % Use defaults
-f_range = [1, 30];
+% FOOOF settings
+settings =struct(...
+        'peak_width_limits', [2, 12], ...
+        'max_n_peaks', Inf, ...
+        'min_peak_height', 0.0, ...
+        'peak_threshold', 2.0, ...
+        'aperiodic_mode', 'fixed', ...
+        'verbose', true ...
+    );
+f_range = [1 100];
+
 
 % Run FOOOF
-fooof_results = fooof(freqs, psd, f_range, settings);
+fooof_results = fooof(freqs', psd', f_range, settings, true);
+
+fooof_plot(fooof_results)
+% 
+% if grp_proc_info_in.fooof_background_mode == 1 %fixed
+%     fooofed_psd = fooof_results.peak_params(1,1) - log10(freqs.^fooof_results.peak_params(1,2)); %knee parameter is 0, and not output
+% else %knee
+%     fooofed_psd = fooof_results.peak_params(1,1) - log10(fooof_results.peak_params(1,2) + freqs.^fooof_results.peak_params(1,3));
+%     %fooofed_psd = 10^fooof_results.background_params(1,1) * (1./(fooof_results.background_params(1,2)+freqs.^fooof_results.background_params(1,3)));
+% end
+% background_fit = fooofed_psd;
+% for i=1:size(fooof_results.peak_params,1)
+%     fooofed_psd = fooofed_psd + fooof_results.gaussian_params(i,2) * exp(-((freqs - fooof_results.gaussian_params(i,1)).^2) / (2*fooof_results.gaussian_params(i,3)).^2);
+% end
+% plot(freqs,log10(psd),freqs,fooofed_psd,freqs,background_fit,'--')
+% xlabel('Frequency')
+% ylabel('Power')
+% legend('Original Spectrum', 'Full Model Fit', 'Background Fit')
+% saveas(gcf, strcat(filename,'.png'))
+
+
+
+
+
+% plot_one_foof_results(freqs,psd,f_range,fooof_results)
+
+%https://github.com/vpapadourakis/fooof_mat/blob/master/matlab_wrapper_examples/plot_one_foof_results.m
+function [] = plot_one_foof_results(freqs, psd, f_range,fooof_results)
+
+%% get model data 
+%calc L
+bckgr = fooof_results.peak_params;
+if numel(bckgr)<3 %offset, slope
+    b = bckgr(1); chi = bckgr(2); k = 0;  
+else %offset, knee, slope
+    b = bckgr(1); chi = bckgr(3); k = bckgr(2);
+end
+
+L = b - log(k+(freqs.^chi));
+
+%calc sumG
+gaussians = fooof_results.gaussian_params;% this for plotting. This is used for the fit
+% peaks = fooof_results.peak_params; %these are the "true" amplitudes,
+% after subtracting the background (and other gaussians?)
+nG = size(gaussians,1); nFreqs = numel(freqs); 
+G = nan(nG,nFreqs);
+for iG = 1:nG
+    cf = gaussians(iG,1); a = gaussians(iG,2); w = gaussians(iG,3);
+    ee = (-(freqs-cf).^2)./(2*w^2);
+    G(iG,:) = a*exp(ee);
+end
+sumG = sum(G,1); 
+
+%% plot
+P = L + sumG; 
+
+figure('color',[1 1 1]); hold on 
+plot(freqs,log10(psd),'k'); 
+plot(freqs,P,'color',[0.8 0 0.2 .5],'linewidth',2);
+plot(freqs,L,'--','color',[0.2 0 0.8 .6],'linewidth',2);
+
+legend('Original Spectrum','Full Model Fit','Background fit')
+xlim(f_range); 
+grid on
+xlabel('Frequency'); ylabel('log10 Power');
+
+% figure; hold on 
+% plot(freqs,sumG);
+% xlim(f_range);
+
+end%function
+
+
+
+
 %ylim([0 0.4]);    
 % selData = Pxx(3:end,:);
 % meanPSD = mean(Pxx,2);
