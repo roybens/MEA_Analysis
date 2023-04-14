@@ -45,3 +45,13 @@ def load_json(filename):
 def inarrxnotinarry(arr1,arr2):
     print(f" in array1 not in array2 :{[x for x in arr1 if x not in arr2]} ")
     print(f" in array2 not in array1 :{[x for x in arr2 if x not in arr1]} ")
+
+
+def flatten(lst):
+    flat_list = []
+    for item in lst:
+        if isinstance(item, list):
+            flat_list.extend(flatten(item))
+        else:
+            flat_list.append(item)
+    return flat_list

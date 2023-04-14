@@ -10,7 +10,50 @@ from datetime import datetime
 import maxlab.apicomm
 import os
 
+
+## How to load configurations and run recordings
+#
+#
+# 0. Initialize system into a defined state
+#
+#    It is best to initialize the system into a defined state beforefile:///usr/share/doc/HTML/index.html
+#    Starting any script. This way, one can be sure that the system
+#    is always in the same state while running the script, regardless
+#    of what has been done before with it.
+#
+#
+# 1. Load your electrode selection
+#
+#    We use an existing config file to route the electrodes of interest.
+#
+# 2. Start a recording
+#
+#    Once we are ready to start an experiment e.g. a stimulation protocol
+#    we can start a recording.
+#
+# 3. Stop and store the recording
+#
+#    When our experiment is done, we can stop the recording and store the data
+#    at a location of our choice.
+#
+#
+
+###############################################################################
+# User Input 
+###############################################################################
+
 CHIP_ID = 16848
+#Path of the directory where the recording and sequence log should be stored
+
+data_path = '~/recording/'
+
+# Input your choice of data format (True for legacy format)
+use_legacy_write = True
+# Input wheter you want to record spikes only, or signals as well
+record_only_spikes = False
+# Input how many wells you want to record from (range(1) for MaxOne, range(6) for MaxTwo)
+wells = range(1)
+
 
 def main():
 	try:
@@ -24,16 +67,9 @@ def main():
 		print("Init complete")
 
 		# Set the gain to 1
-		#amplifier = maxlab.chip.Amplifier().set_gain(512)
-		#maxlab.send(amplifier)
+
 		#maxlab.util.set_gain(512)
 		#maxlab.util.hpf("1Hz")
-
-	#	characterizer = maxlab.characterize.StimulationUnitCharacterizer()
-
-		#print("\n************ Characterizing unit: %d *************\n" % unit) 
-		#dac_code = characterizer.characterize(unit)
-		#print("\n0V DAC CODE = %d\n" % dac_code)
 
 		#select and record block by block.
 		#going with 35 blocks of size to (44 x 20) to cover the whole chip
@@ -65,12 +101,13 @@ def main():
 				saving_object = maxlab.saving.Saving()
 				try:
 					
-					#
-					#saving_object.open_directory("~/recordings/")
+					saving_object.group_delete_all()
+					saving_object.open_directory("~/recordings/")
 					#saving_object.start_recording()
 					#saving_object.start(filename)
-					saving_object.start_recording()
+					#
 					saving_object.start_file(filename)
+					saving_object.start_recording()
 					
 					print("recording start")
 
@@ -78,7 +115,7 @@ def main():
 					time.sleep(60)
 					
 					saving_object.stop_file()
-					saving_object.stop_recording()
+					#saving_object.stop_recording()
 					#saving_object.stop_recording()
 					#saving_object.stop()
 					#
