@@ -42,9 +42,11 @@ def preprocess(recording):  ## some hardcoded stuff.
     
     """
     recording_bp = spre.bandpass_filter(recording, freq_min=300, freq_max=6000)
-    recording_bp.annotate(is_filtered=True)
+    
 
     recording_cmr = spre.common_reference(recording_bp, reference='global', operator='median')
+
+    recording_cmr.annotate(is_filtered=True)
 
     return recording_cmr
 
@@ -73,40 +75,34 @@ def run_kilosort(recording,output_folder):
 def extract_waveforms(recording,sorting_KS3,folder):
     folder = Path(folder)
 
-    waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
-
+    waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True,**job_kwargs)
+    #waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True, sparse = True, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
     return waveforms
 
+def get_quality_metrics(waveforms):
 
-def remove_violated_units(sortingKS3, waveforms):
+    metrics = qm.compute_quality_metrics(waveforms, metric_names=['firing_rate', 'presence_ratio', 'snr',
+                                                       'isi_violation', 'amplitude_cutoff'], **job_kwargs)
+
+    return metrics
+
+def remove_violated_units(metrics):
 
     """
     Removing based on Refractory violations, Firing_rate , snr_ratio
     
     """
-    all_units = sortingKS3.get_unit_ids()
-    print(f"Total units counts {len(all_units)}")
-    print(f"Units : {all_units}")
-    rp_contamination,rp_violation = qm.compute_refrac_period_violations(waveforms)
-    print(f"rp_contaminaiton : {rp_contamination}")
+    amplitude_cutoff_thresh = 0.1
+    isi_violations_ratio_thresh = 1
+    presence_ratio_thresh = 0.9
+    firing_rate = 0.1
+    our_query = f"(amplitude_cutoff < {amplitude_cutoff_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) & (presence_ratio > {presence_ratio_thresh}) & (firing_rate > {firing_rate})"
 
-    refrct_violated_units = [unit for unit,ratio in rp_contamination.items() if ratio >0.0]
+    keep_units = metrics.query(our_query)
 
-    snr_ratio = qm.compute_snrs(waveforms)
-    print(f"SNR ratio : {snr_ratio}")
-    snr_violated_units = [unit for unit,ratio in snr_ratio.items() if ratio >5]
+    keep_unit_ids = keep_units.index.values
 
-    firing_rate = qm.compute_firing_rates(waveforms)
-    print(f"Firing rate : {firing_rate}")
-    fr_violated_units = [unit for unit,ratio in firing_rate.items() if ratio <=0.1]
-
-    violated_units = list(set(refrct_violated_units+fr_violated_units))
-    print(f"violated units {violated_units} removed")
-
-    
-    good_units = [units for units in all_units if units not in violated_units ]
-
-    return good_units
+    return keep_unit_ids
 
 
 
@@ -114,6 +110,7 @@ def remove_violated_units(sortingKS3, waveforms):
 def analyse_waveforms_sigui(waveforms) :
     import spikeinterface_gui
     # This creates a Qt app
+    waveforms.run_extract_waveforms(**job_kwargs)
     app = spikeinterface_gui.mkQApp() 
 
     # create the mainwindow and show
@@ -127,7 +124,10 @@ def analyse_waveforms_sigui(waveforms) :
 def get_unique_templates_channels(good_units, waveform):
     """
     Analyses all the units and their corresponding extremum channels.. Removes units which correspond to same channel keeping the highest amplitude one.
+    
+    ToDO : have to do some kind of peak matching to remove units which have same extremum electrode.
     """
+    
     #get_extremum_channels.
     unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveform, peak_sign='neg')
     #Step 1: keep only units that are in good_units 
@@ -137,7 +137,7 @@ def get_unique_templates_channels(good_units, waveform):
     output_units = [[key for key, value in unit_extremum_channel.items() if value == v] for v in set(unit_extremum_channel.values()) if list(unit_extremum_channel.values()).count(v) > 1]
     print(f"Units that correspond to same electrode: {output_units}")
     #Step 3: get the metrics
-    metrics = qm.compute_quality_metrics(waveform,**job_kwargs)
+    
 
     #Step4: select best units with same electrodes ( based on amp values)
     output=[]
@@ -194,7 +194,7 @@ def process_block(recnumber,file_path,time_in_s):
         kilosort_output_folder = dir_name+'/kilosort3_'+rec_name
         sortingKS3 = run_kilosort(recording_chunk,output_folder=kilosort_output_folder)
         waveform_folder =dir_name+'/waveforms_'+ rec_name
-        waveforms = extract_waveforms(recording,sortingKS3,folder = waveform_folder)
+        waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
     except Exception as e:
         print(e)
         print(f"Error in {rec_name} processing. Continuing to the next block")
@@ -204,34 +204,39 @@ def process_block(recnumber,file_path,time_in_s):
     end = timer()
     print("Sort and extract waveforms takes", end - start)
     start = timer()
-    non_violated_units = remove_violated_units(sortingKS3,waveforms)
-    template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
-    non_redundant_templates = list(template_channel_dict.keys())
+    metrics = get_quality_metrics(waveforms)
+    non_violated_units = remove_violated_units(metrics)
+    #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
+    #non_redundant_templates = list(template_channel_dict.keys())
+    # extremum_channel_dict = 
+    # ToDo Until the peak matching routine is implemented. We use this.
+    unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='neg')
+    #Step 1: keep only units that are in good_units 
+    unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
+    waveform_good = waveforms.select_units(non_violated_units,new_folder='waveforms_good_'+rec_name)
+    
     end = timer()
     print("Removing redundant items takes", end - start)
-    start = timer()
-    waveform_good = waveforms.select_units(non_redundant_templates,new_folder='waveforms_good_'+rec_name)
-    waveform_good.run_extract_waveforms()
+
     channel_location_dict = get_channel_locations_mapping(recording_chunk)
     # New dictionary with combined information
     new_dict = {}
 
     # Iterate over each template in the template_channel_dict dictionary
-    for template, channel in template_channel_dict.items():
+    for template, channel in unit_extremum_channel.items():
 
         # If this channel is not already in the new dictionary, add it
-        if channel not in new_dict:
-            new_dict[channel] = {}
+        if template not in new_dict:
+            new_dict[template] = {}
 
         # Add an entry for this template and its corresponding location to the new dictionary
-        new_dict[channel][template] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
+        new_dict[template][channel] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
     
 
     os.chdir(current_directory)
     file_name = 'Electrodes_'+rec_name
     helper.dumpdicttofile(new_dict,file_name)
-    end = timer()
-    print("Saving electrode configuraiton takes: ",end -start)
+    
     x =1
     return 1
 

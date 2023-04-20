@@ -55,3 +55,20 @@ def flatten(lst):
         else:
             flat_list.append(item)
     return flat_list
+
+def get_templates_with_same_channels(electrode_file):
+
+    my_dict = load_json(electrode_file)
+
+    templates_with_channel = {}
+
+    for template_name, template_data in my_dict.items():
+        for channel_name in template_data:
+            if channel_name in templates_with_channel:
+                templates_with_channel[channel_name].append(template_name)
+            else:
+                templates_with_channel[channel_name] = [template_name]
+    
+    same_channel_templates = [templates for channel, templates in templates_with_channel.items() if len(templates) > 1]
+
+    return same_channel_templates
