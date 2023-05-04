@@ -8,13 +8,13 @@ close all
 
 %% settings
 % set DIV 0 date
-div0 = '11/09/2022'; % format: MM/DD/YYYY
+div0 = '03/01/2023'; % format: MM/DD/YYYY
 
 %set path to folder containing subfolders that contain h5 files
-%parentFolderPath = 'C:/Users/Tim/Documents/Silverman/Syngap/MEA/Syngap 2/Raw Data h5 files/testParentFolder/';
-parentFolderPath = '/home/jonathan/Documents/Data/B6J_Drugs';
+%parentFolderPath = '/mnt/harddrive-2/Organoids_Mandeep_Fink_Lab';
+parentFolderPath = '/mnt/harddrive-2/CDKL5';
 %make output folder
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scrpits_output/B6J_Drugs/network_outputs/';
+opDir = '/home/jonathan/Documents/Scripts/Matlab/scrpits_output/CDKL5/network_outputs/';
 
 %% defines
 % convert div 0 to date datatype
@@ -79,7 +79,7 @@ for k = 1 : length(theFiles)
     % set Gaussian kernel standard deviation [s]
     gaussianSigma = 0.14;
     % set burst detection threshold [rms firing rate]
-    thresholdBurst = 1.3;
+    thresholdBurst = 0.85;
     % compute Network Activity and detect bursts
     networkAct = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize,'GaussianSigma', gaussianSigma);
     networkStats = mxw.networkActivity.computeNetworkStats(networkAct, 'Threshold', thresholdBurst);
@@ -165,7 +165,7 @@ for k = 1 : length(theFiles)
         %box off;
         %hold on;
         plot(networkStats.maxAmplitudesTimes,networkStats.maxAmplitudesValues,'or');
-        ylim([0 5])
+        ylim([0 20])
         %xlim([0 round(max(relativeSpikeTimes.time)/4)])
         %xlim([0 60])
         hold on;
@@ -198,4 +198,5 @@ Spike_per_Burst = Spike_per_Burst';
 T = table(Run_ID,DIV,Time,Chip_ID,IBI,Burst_Peak,Number_Bursts,Spike_per_Burst);
 T = sortrows(T,"Run_ID","ascend");
 writetable(T, fullfile(opDir,'Compiled_Networks.csv'));
+
 
