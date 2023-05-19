@@ -1,5 +1,5 @@
 % This script goes through the h5 files in a parent folder,
-% plot the raster and burst activity,
+% plot the Raster and Burst Activities,
 % and compile a csv with the 4 mean burst properties over days
 
 clear
@@ -9,8 +9,16 @@ close all
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% settings
+% set path to folder containing subfolders that contain h5 files
+parentFolderPath = '/mnt/harddrive-2/ADNP/';
+% set path to excel file that has the reference note
+refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
+% set output folder
+opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
+
 % set DIV 0 date
 div0 = '05/05/2023'; % format: MM/DD/YYYY
+
 % set Gaussian kernel standard deviation [s] (smoothing window)
 gaussianSigma = 0.18;
 % set histogram bin size [s]
@@ -24,13 +32,6 @@ use_fixed_threshold = false;
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
 thresholdStartStop = 0.3;
 
-%set path to folder containing subfolders that contain h5 files
-parentFolderPath = '/mnt/harddrive-2/ADNP/';
-% set path to excel file that has the reference note
-refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
-%set output folder
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
-
 % setting ends here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -41,7 +42,9 @@ if use_fixed_threshold
 end
 
 % make output folder
-mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/'));
+if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/')))
+    mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/'));
+end
 
 % extract runID info from reference excel sheet
 T = readtable(refDir);
@@ -79,7 +82,6 @@ for k = 1 : length(theFiles)
     scan_div = 0;
 
     baseFileName = theFiles(k).name;
-    %fullFileName = fullfile(theFiles(k).folder, baseFileName);
     pathFileNetwork = fullfile(theFiles(k).folder, baseFileName);
     % extract dir information
     fileDirParts = strsplit(pathFileNetwork, filesep); % split dir into elements
@@ -220,4 +222,4 @@ if ~isempty(error_l)
     fprintf('Unable to read file with runID: %s, file skipped.\n',error_str);
 end
 
-fprintf('Network analysis successfully compiled!')
+fprintf('Network analysis successfully compiled.\n')
