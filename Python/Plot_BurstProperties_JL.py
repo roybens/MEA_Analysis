@@ -12,11 +12,13 @@ import os
 # set data and reference note dir
 data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/Network_outputs/Compiled_Networks.csv'
 reference_f = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx'
+# set plot saving dir
+opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/'
+
 # set exclude lists
 chip_exclude = []
 run_exclude = []
-# set plot saving dir
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/'
+
 # set the keywords for assay type
 #assay_type_keywords = ['today','last','best']
 assay_type_keywords = ['today','last']
