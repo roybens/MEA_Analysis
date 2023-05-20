@@ -7,16 +7,12 @@ close all
 
 % setting starts here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 %% settings
-% set path to folder containing subfolders that contain h5 files
-parentFolderPath = '/mnt/harddrive-2/ADNP/';
-% set path to excel file that has the reference note
-refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
-% set output folder
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
+auto_set_path = true; % turn this on to skip setting file paths. this requires all the input files be in the correct paths
+project_name = 'ADNP';
 
 % set DIV 0 date
+%div0 = '03/01/2023'; % format: MM/DD/YYYY
 div0 = '05/05/2023'; % format: MM/DD/YYYY
 
 % set Gaussian kernel standard deviation [s] (smoothing window)
@@ -25,15 +21,37 @@ gaussianSigma = 0.18;
 binSize = 0.1;
 % set minimum peak distance [s]
 minPeakDistance = 1.0;
-% set burst detection threshold [rms firing rate]
-thresholdBurst = 0.85;
+% set burst detection threshold [rms / fixed]
+thresholdBurst = 1.20;
 % set fixed threshold;
 use_fixed_threshold = false;
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
 thresholdStartStop = 0.3;
 
+%%%%% ignore settings below if choose to use auto path setting %%%%%
+
+% manually set path to folder containing subfolders that contain h5 files
+%parentFolderPath = '/mnt/harddrive-2/ADNP/';
+parentFolderPath = '/mnt/harddrive-2/CDKL5/';
+% set path to excel file that has the reference note
+%refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
+refDir = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx';
+% set output folder
+%opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
+opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/';
+
 % setting ends here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% automatically set paths if choose to use (requires to make sure files are in the correct directory)
+if auto_set_path
+    % set path to folder containing subfolders that contain h5 files
+    parentFolderPath = append('/mnt/harddrive-2/',project_name,'/');
+    % set path to excel file that has the reference note
+    refDir = append('/home/jonathan/Documents/Scripts/Python/',project_name,'_Notes.xlsx');
+    % set output folder
+    opDir = append('/home/jonathan/Documents/Scripts/Matlab/scripts_output/',project_name,'/');
+end
 
 % Set Threshold function for later use
 threshold_fn = 'Threshold';
@@ -72,14 +90,15 @@ filePattern = fullfile(parentFolderPath, '**/Network/**/*raw.h5');
 theFiles = dir(filePattern);
 for k = 1 : length(theFiles)
     % reset recording info
-    scan_runID = 0;
-    scan_chipID = 0;
-    meanIBI = 0;
-    meanBurstPeak = 0;
-    nBursts = 0;
-    meanSpikesPerBurst = 0;
-    hd5Date = 0; 
-    scan_div = 0;
+    scan_runID = nan;
+    scan_chipID = nan;
+    meanIBI = nan;
+    meanBurstPeak = nan;
+    nBursts = nan;
+    meanSpikesPerBurst = nan;
+    spikesPerBurst = nan;
+    hd5Date = nan; 
+    scan_div = nan;
 
     baseFileName = theFiles(k).name;
     pathFileNetwork = fullfile(theFiles(k).folder, baseFileName);
@@ -123,53 +142,54 @@ for k = 1 : length(theFiles)
         meanBurstPeak = mean(networkStats.maxAmplitudesValues);
         %Number of bursts
         nBursts = length(networkStats.maxAmplitudesTimes);
-        %average spikesPerBurst
         
-            if length(networkStats.maxAmplitudesTimes)>3
-                peakAmps = networkStats.maxAmplitudesValues';
-                peakTimes = networkStats.maxAmplitudesTimes;
-                
-                % get the times of the burst start and stop edges
-                edges = double.empty(length(peakAmps),0);
-                for i = 1:length(peakAmps)
+
+
+        %average spikesPerBurst        
+        if length(networkStats.maxAmplitudesTimes)>3
+            peakAmps = networkStats.maxAmplitudesValues';
+            peakTimes = networkStats.maxAmplitudesTimes;
+            
+            % get the times of the burst start and stop edges
+            edges = double.empty(length(peakAmps),0);
+            for i = 1:length(peakAmps)
                % take a sizeable (±6 s) chunk of the network activity curve 
                % around each burst peak point
-                   idx = networkAct.time>(peakTimes(i)-6) & networkAct.time<(peakTimes(i)+6);
-                   t1 = networkAct.time(idx);
-                   a1 = networkAct.firingRate(idx)';
-                  
-                   % get the amplitude at the desired peak width
-                   peakWidthAmp = (peakAmps(i)-round(peakAmps(i)*thresholdStartStop));
-                   
-                   % get the indices of the peak edges
-                   idx1 = find(a1<peakWidthAmp & t1<peakTimes(i));
-                   idx2 = find(a1<peakWidthAmp & t1>peakTimes(i));
-                   
-                   if ~isempty(idx1)&&~isempty(idx2)       
-                       tBefore = t1(idx1(end));
-                       tAfter = t1(idx2(1));
-                       edges(i,[1 2]) = [tBefore tAfter];
-                   end
-                end
-                
-               % identify spikes that fall within the bursts
-                ts = ((double(networkData.fileObj.spikes.frameno)...
-                    - double(networkData.fileObj.firstFrameNum))/networkData.fileObj.samplingFreq)';
-                ch = networkData.fileObj.spikes.channel;
-                
-                spikesPerBurst = double.empty(length(edges),0);
-                tsWithinBurst = [];
-                chWithinBurst = [];
-                for i = 1:length(edges)
-                   idx = (ts>edges(i,1) & ts<edges(i,2));
-                   spikesPerBurst(i) = sum(idx); 
-                   tsWithinBurst = [tsWithinBurst ts(idx)];
-                   chWithinBurst = [chWithinBurst ch(idx)'];
-                   meanSpikesPerBurst = mean(spikesPerBurst);
-                end
+               idx = networkAct.time>(peakTimes(i)-6) & networkAct.time<(peakTimes(i)+6);
+               t1 = networkAct.time(idx);
+               a1 = networkAct.firingRate(idx)';
+              
+               % get the amplitude at the desired peak width
+               peakWidthAmp = (peakAmps(i)-round(peakAmps(i)*thresholdStartStop));
+               
+               % get the indices of the peak edges
+               idx1 = find(a1<peakWidthAmp & t1<peakTimes(i));
+               idx2 = find(a1<peakWidthAmp & t1>peakTimes(i));
+               
+               if ~isempty(idx1)&&~isempty(idx2)       
+                   tBefore = t1(idx1(end));
+                   tAfter = t1(idx2(1));
+                   edges(i,[1 2]) = [tBefore tAfter];
+               end
             end
-        meanSpikesPerBurst = mean(spikesPerBurst);
-    
+            
+           % identify spikes that fall within the bursts
+            ts = ((double(networkData.fileObj.spikes.frameno)...
+                - double(networkData.fileObj.firstFrameNum))/networkData.fileObj.samplingFreq)';
+            ch = networkData.fileObj.spikes.channel;
+            
+            spikesPerBurst = double.empty(length(edges),0);
+            tsWithinBurst = [];
+            chWithinBurst = [];
+            for i = 1:length(edges)
+               idx = (ts>edges(i,1) & ts<edges(i,2));
+               spikesPerBurst(i) = sum(idx); 
+               tsWithinBurst = [tsWithinBurst ts(idx)];
+               chWithinBurst = [chWithinBurst ch(idx)'];
+            end
+            meanSpikesPerBurst = mean(spikesPerBurst);
+        end
+   
         % append information to table elements
         Run_ID = [Run_ID scan_runID];
         DIV = [DIV scan_div];
@@ -197,8 +217,8 @@ for k = 1 : length(theFiles)
             %xlim([0 round(max(relativeSpikeTimes.time)/4)])
             xlim([0 120])
 
-            saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/',scan_runID_text,'.png'))
-            %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/',scan_runID_text,'.fig'))
+            saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.png'))
+            %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.fig'))
     end
 end
 
@@ -219,7 +239,7 @@ writetable(T, fullfile(opDir,'Network_outputs/Compiled_Networks.csv'));
 
 if ~isempty(error_l)
     error_str = strjoin(error_l,', ');
-    fprintf('Unable to read file with runID: %s, file skipped.\n',error_str);
+    fprintf('Unable to read file with runID: %s, file(s) skipped.\n',error_str);
 end
 
 fprintf('Network analysis successfully compiled.\n')
