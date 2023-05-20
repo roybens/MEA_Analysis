@@ -43,7 +43,7 @@ if parameter_start == 0 && or(strcmp(parameter,'Gaussian'),strcmp(parameter,'Bin
 end
 parameter_end = args.VarParameter(3);
 % set output plot x-axis increment
-plot_inc = (parameter_end - parameter_start)/25;
+plot_inc = (parameter_end - parameter_start)*.1;
 
 % Set Threshold function for later use
 threshold_fn = 'Threshold';
@@ -98,19 +98,15 @@ for f = 1 : length(theFiles)
         %relativeSpikeTimes_opt = mxw.util.computeRelativeSpikeTimes(networkData);
     
         for k = parameter_start:parameter_inc:parameter_end
-        %for k=.08:.08:2
-        %{
-        % set Gaussian kernel standard deviation [s]
-        % This is the smoothing window from Scope software
-        %    gaussianSigma_opt = 0.14;
-        % set histogram bin size [s]
-        %    binSize_opt = 0.1;
-        % set minimum peak distance
-        %    minPeakDistance_opt = k;
-        % set burst detection threshold [rms firing rate]
-        %    thresholdBurst_opt = 0.85;
-        %}
-    
+
+            % reset values
+            meanSpikesPerBurst = nan;
+            meanIBI = nan;        
+            meanBurstPeak = nan;       
+            nBursts = nan;
+            spikesPerBurst = NaN;
+
+
             % compute network according to desired parameter to compare
             if strcmp(parameter, 'Gaussian')
                 networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', k);
@@ -257,18 +253,27 @@ elseif strcmp(parameter, 'MinPeakDistance')
     plot_x_title = 'Min Peak Distance';
 end
 
-%{
-%CDKL5
-wt = [16821,16963,16757,16742,16873,16940];
-het = [16665,16364,16787,16861,16856,16869];
-%}
+IBI_max = 0;
+BurstPeak_max = 0;
+nBursts_max = 0;
+spikePerBurst_max = 0;
 
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '*.csv'); 
 theFiles = dir(filePattern);
 for f = 1 : length(theFiles)
     baseFileName = theFiles(f).name;
-    %fullFileName = fullfile(theFiles(k).folder, baseFileName);
+    pathFileNetwork = fullfile(theFiles(f).folder, baseFileName);
+    datafile = (pathFileNetwork);
+    data = readtable(datafile,'PreserveVariableNames',true);
+    IBI_max = max([IBI_max, max(data.(3))]);
+    BurstPeak_max = max([BurstPeak_max, max(data.(4))]);
+    nBursts_max = max([nBursts_max, max(data.(5))]);
+    spikePerBurst_max = max([spikePerBurst_max, max(data.(6))]);
+end
+
+for f = 1 : length(theFiles)
+    baseFileName = theFiles(f).name;
     pathFileNetwork = fullfile(theFiles(f).folder, baseFileName);
     fprintf(1, 'Now reading %s\n', pathFileNetwork);
     
@@ -294,32 +299,36 @@ for f = 1 : length(theFiles)
     plot(data.(2),data.(3));
     title(string(extractChipID) + ' ' + genoStr + ' IBI')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 10])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 IBI_max*10/8])
     grid on
 
     subplot(2,2,2);
     plot(data.(2),data.(4));
     title(string(extractChipID) + ' ' + genoStr +' Burst Peak')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 20])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 BurstPeak_max*10/8])
     grid on
 
     subplot(2,2,3);
     plot(data.(2),data.(5));
     title(string(extractChipID) + ' ' + genoStr + ' # of Bursts')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 800])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 nBursts_max*10/8])
     grid on
 
     subplot(2,2,4);
     plot(data.(2),data.(6));
     title(string(extractChipID) + ' ' + genoStr + ' Spikes per Burst')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 150000])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 spikePerBurst_max*10/8])
     grid on
     
     exportFile = [opDir 'paramsCompare.pdf']; %folder and filename for raster figures
@@ -328,11 +337,6 @@ end
 %% Plot all lines on one plot
 fig2 = figure('color','w','Position',[0 0 800 800],'Visible','off');
 
-%{
-%CDKL5
-wt = [16821,16963,16757,16742,16873,16940];
-het = [16665,16364,16787,16861,16856,16869];
-%}
 
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '*.csv'); 
@@ -366,8 +370,9 @@ for k = 1 : length(theFiles)
     plot(data.(2),data.(3),color);
     title('IBI')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 10])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 IBI_max*10/8])
     grid on
     hold on
 
@@ -375,8 +380,9 @@ for k = 1 : length(theFiles)
     plot(data.(2),data.(4),color);
     title('Burst Peak')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 20])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 BurstPeak_max*10/8])
     grid on
     hold on
 
@@ -384,8 +390,9 @@ for k = 1 : length(theFiles)
     plot(data.(2),data.(5),color);
     title('# of Bursts')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 800])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 nBursts_max*10/8])
     grid on
     hold on
 
@@ -393,8 +400,9 @@ for k = 1 : length(theFiles)
     plot(data.(2),data.(6),color);
     title('Spikes per Burst')
     xlabel(plot_x_title)
-    xticks(parameter_start:plot_inc:parameter_end)
-    ylim([0 20000])
+    %xticks(parameter_start:plot_inc:parameter_end)
+    xticks('auto')
+    ylim([0 spikePerBurst_max*10/8])
     grid on
     hold on
     
