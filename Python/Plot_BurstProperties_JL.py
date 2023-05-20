@@ -10,10 +10,14 @@ import os
 ###############################################################################################################################################
 
 # set data and reference note dir
+#data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/Network_outputs/Compiled_Networks.csv'
 data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/Network_outputs/Compiled_Networks.csv'
+#reference_f = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx'
 reference_f = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx'
 # set plot saving dir
+#opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
 opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/'
+
 
 # set exclude lists
 chip_exclude = []
