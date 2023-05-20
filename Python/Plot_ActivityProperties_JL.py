@@ -11,9 +11,12 @@ import os
 
 # set data and reference note dir
 data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/ActivityScan_outputs/Compiled_ActivityScan.csv'
+#data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/ActivityScan_outputs/Compiled_ActivityScan.csv'
 reference_f = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx'
+#reference_f = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx'
 # set plot saving dir
 opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/'
+#opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
 
 # set exclude lists
 chip_exclude = []
@@ -92,13 +95,12 @@ def plot_network_graph(working_df,output_type, assay_type):
     #data series
     y_wt = wt
     y_het = het
-
     #plotting
     fig, ax = plt.subplots()
     #plot WT bar
     ax.bar(x_wt, 
-            height=[np.mean(yi) for yi in y_wt],
-            yerr=[np.std(yi, ddof=1)/np.sqrt(np.size(yi)) for yi in y_wt],    # error bars
+            height=[np.mean([n for n in yi if np.isfinite(n)]) for yi in y_wt],
+            yerr=[np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_wt],    # error bars
             capsize=3, # error bar cap width in points
             width=w,    # bar width
             color=(0,0,0,0),  # face color transparent
@@ -106,8 +108,8 @@ def plot_network_graph(working_df,output_type, assay_type):
             ecolor='black')
     #plot HET bar
     ax.bar(x_het, 
-            height=[np.mean(yi) for yi in y_het],
-            yerr=[np.std(yi, ddof=1)/np.sqrt(np.size(yi)) for yi in y_het],    # error bars
+            height=[np.mean([n for n in yi if np.isfinite(n)]) for yi in y_het],
+            yerr=[np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_het],    # error bars
             capsize=3, # error bar cap width in points
             width=w,    # bar width
             color=(0,0,0,0),  # face color transparent
