@@ -6,7 +6,7 @@ clear
 close all
 
 % set path to folder containing subfolders that contain h5 files
-dataDir = '/mnt/harddrive-2/ADNP/ADNP/230510';
+dataDir = '/mnt/harddrive-2/ADNP/ADNP/230519';
 % set path to excel file that has the reference note
 refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
 % set path to an output folder
@@ -18,8 +18,8 @@ gaussianSigma = 0.18;
 binSize = 0.1;
 % set minimum peak distance [s]
 minPeakDistance = 1.0;
-% set burst detection threshold [rms firing rate]
-thresholdBurst = 0.85;
+% set burst detection threshold [rms / fixed]
+thresholdBurst = 1.20;
 % set fixed threshold;
 use_fixed_threshold = false;
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
@@ -31,7 +31,7 @@ outDir = append(opDir, 'Network_outputs/');
 
 Compare_NetworkParameters(dataDir,refDir, outDir, 'Gaussian', 'VarParameter', [0,0.04,1], 'BaseParameters',base_parameters);
 Compare_NetworkParameters(dataDir,refDir, outDir, 'BinSize', 'VarParameter', [0,0.04,1], 'BaseParameters',base_parameters);
-Compare_NetworkParameters(dataDir,refDir, outDir, 'Threshold', 'VarParameter', [0,0.08,2], 'BaseParameters',base_parameters);
+Compare_NetworkParameters(dataDir,refDir, outDir, 'Threshold', 'VarParameter', [0,0.1,3], 'BaseParameters',base_parameters);
 Compare_NetworkParameters(dataDir,refDir, outDir, 'FixedThreshold','VarParameter', [0,1,20], 'BaseParameters',base_parameters);
 Compare_NetworkParameters(dataDir,refDir, outDir, 'StartStopThreshold','VarParameter', [0,0.04,1], 'BaseParameters',base_parameters);
 Compare_NetworkParameters(dataDir,refDir, outDir, 'MinPeakDistance','VarParameter', [0,0.08,2], 'BaseParameters',base_parameters);
