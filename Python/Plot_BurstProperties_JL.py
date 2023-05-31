@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-
+from scipy import stats
 # This script reads the compiled csv made by compileNetworkFiles_JL.m and a reference note
 # to plot the wt vs. het burst properties overdays
 
@@ -13,7 +13,7 @@ import os
 #data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/Network_outputs/Compiled_Networks.csv'
 data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/Network_outputs/Compiled_Networks.csv'
 #reference_f = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx'
-reference_f = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx'
+reference_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/New_ADNP_Notes.xlsx'
 # set plot saving dir
 #opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
 opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/'
@@ -25,7 +25,7 @@ run_exclude = []
 
 # set the keywords for assay type
 #assay_type_keywords = ['today','last','best']
-assay_type_keywords = ['today','last']
+assay_type_keywords = ['today']
 
 # setting ends here
 ###############################################################################################################################################
@@ -102,13 +102,56 @@ def plot_network_graph(working_df,output_type, assay_type):
     #data series
     y_wt = wt
     y_het = het
+    file_path = title + '_y_wt.txt'
+    y_wt_list = [list(row) for row in y_wt]
 
+    with open(file_path, 'w') as f:
+        for row in y_wt_list:
+            f.write('\t'.join(map(str, row)) + '\n')
+    
+    file_path = title + '_y_het.txt'
+
+    y_het_list = [list(row) for row in y_het]
+
+    with open(file_path, 'w') as f:
+        for row in y_het_list:
+            f.write('\t'.join(map(str, row)) + '\n')
+    #do some ttest
+   
     #plotting
     fig, ax = plt.subplots()
     #plot WT bar
+    mean_wt = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_wt]
+    yerr_wt = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_wt]
+    n_wt = [len(yi) for yi in y_wt]
+    mean_het = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_het]
+    yerr_het = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_het]
+    n_het = [len(yi) for yi in y_het]
+    output_file = title + '_wt_statistics.txt'
+    with open(output_file, 'w') as file:
+        file.write("WT Statistics\n")
+        file.write("Mean: " + ", ".join([str(m) for m in mean_wt]) + "\n")
+        file.write("SEM: " + ", ".join([str(sem) for sem in yerr_wt]) + "\n")
+        file.write("Sample Size (n): " + ", ".join([str(n) for n in n_wt]) + "\n")
+    output_file = title + '_het_statistics.txt'
+    with open(output_file, 'w') as file:
+        file.write("HeT Statistics\n")
+        file.write("Mean: " + ", ".join([str(m) for m in mean_het]) + "\n")
+        file.write("SEM: " + ", ".join([str(sem) for sem in yerr_het]) + "\n")
+        file.write("Sample Size (n): " + ", ".join([str(n) for n in n_het]) + "\n")
+    
+    p_values =[]
+
+    for i in range(len(mean_wt)):
+
+        t_stat,p_value = stats.ttest_ind_from_stats(mean_wt[i],yerr_wt[i],n_wt[i],
+                                                    
+                                                    mean_het[i],yerr_het[i],n_het[i])
+        p_values.append(p_value)
+    
     ax.bar(x_wt, 
-            height=[np.mean([n for n in yi if np.isfinite(n)]) for yi in y_wt],
-            yerr=[np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_wt],    # error bars
+            height=mean_wt,
+            yerr= yerr_wt,    # error bars
             capsize=3, # error bar cap width in points
             width=w,    # bar width
             color=(0,0,0,0),  # face color transparent
@@ -116,8 +159,8 @@ def plot_network_graph(working_df,output_type, assay_type):
             ecolor='black')
     #plot HET bar
     ax.bar(x_het, 
-            height=[np.mean([n for n in yi if np.isfinite(n)]) for yi in y_het],
-            yerr=[np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_het],    # error bars
+            height=mean_het,
+            yerr=yerr_het,    # error bars
             capsize=3, # error bar cap width in points
             width=w,    # bar width
             color=(0,0,0,0),  # face color transparent
@@ -128,7 +171,30 @@ def plot_network_graph(working_df,output_type, assay_type):
         wt_scatter = ax.scatter(x_wt[i]+np.zeros(y_wt[i].size), y_wt[i], color='black', label='WT', s=20)
     for i in range(len(x_het)):
         het_scatter = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='HET', s=20)
+    for i in range(len(x_wt)):
+        # wt_data = [n for n in y_wt[i] if np.isfinite(n)]
+        # het_data = [n for n in y_het[i] if np.isfinite(n)]
+        # t_stat, p_value = stats.ttest_ind(wt_data, het_data)
 
+        maxim = max(np.max(y_wt[i]), np.max(y_het[i]))
+        p_value = p_values[i]
+        if p_value > 0.05:
+            ax.plot([x_wt[i], x_het[i]], [maxim + 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "ns", ha='center', va='bottom', fontsize=10)
+            continue
+        elif p_value <= 0.001 :
+            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "***", ha='center', va='bottom', fontsize=10)
+            continue
+        elif p_value <= 0.01 :
+            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "**", ha='center', va='bottom', fontsize=10)
+            continue
+        elif p_value <= 0.05 :
+            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "*", ha='center', va='bottom', fontsize=10)
+            continue
+        
     #axis scaling
     xmin = 0
     xmax = (max(df['DIV']) - xmin)*1.25
