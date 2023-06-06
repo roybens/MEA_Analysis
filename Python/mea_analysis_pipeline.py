@@ -21,6 +21,11 @@ FOLDER = ''
 job_kwargs = dict(n_jobs=64, chunk_duration="1s", progress_bar=True)
 
 
+def export_to_phy_datatype(we):
+
+    from spikeinterface.exporters import export_to_phy
+    export_to_phy(we,output_folder='/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/phy_folder',**job_kwargs)
+
 def get_channel_recording_stats(recording):
     
     channel_ids = recording.get_channel_ids()
@@ -55,9 +60,9 @@ def get_kilosort_result(folder):
     sorter = ss.Kilosort3Sorter._get_result_from_folder(folder)
     return sorter
 
-def get_waveforms_result(sorter,folder):
+def get_waveforms_result(folder,with_recording= True,sorter = None):
 
-    waveforms = si.load_waveforms(folder,sorting=sorter)
+    waveforms = si.load_waveforms(folder,with_recording=with_recording,sorting=sorter)
 
     return waveforms
 
@@ -176,10 +181,6 @@ def get_data_maxwell(file_path,rec_num):
 def process_block(recnumber,file_path,time_in_s):
     time_start = 0
     time_end = time_start+time_in_s
-
-    #failed_sorting_rec = {}
- 
-        
     recording,rec_name = get_data_maxwell(file_path,recnumber)
     print(f"Processing recording: {rec_name}")
     fs, num_chan, channel_ids = get_channel_recording_stats(recording)
@@ -188,7 +189,7 @@ def process_block(recnumber,file_path,time_in_s):
     start = timer()
     current_directory = os.getcwd()
     try:
-        dir_name = '/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/sorter_workspace/block_'+rec_name
+        dir_name = '/mnt/disk15tb/mmpatil/Spikesorting/sorter_output/kilosort_trial/block_'+rec_name
         os.mkdir(dir_name,0o777)
         os.chdir(dir_name)
         kilosort_output_folder = dir_name+'/kilosort3_'+rec_name
@@ -234,7 +235,7 @@ def process_block(recnumber,file_path,time_in_s):
     
 
     os.chdir(current_directory)
-    file_name = 'Electrodes_'+rec_name
+    file_name = '/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
     helper.dumpdicttofile(new_dict,file_name)
     
     x =1
@@ -253,7 +254,6 @@ def routine_sequential(file_path,number_of_configurations,time_in_s):
 def routine_parallel(file_path,number_of_configurations,time_in_s):
 
     inputs = [(x, file_path, time_in_s) for x in range(number_of_configurations)]
-
     pool = multiprocessing.Pool(processes=4)
     results = pool.starmap(process_block, inputs)
     # close the pool of processes
