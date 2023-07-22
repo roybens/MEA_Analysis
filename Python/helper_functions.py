@@ -1,7 +1,16 @@
 import json
 import numpy as np
+import math
 
 
+def get_surrounding_coordinates(x, y, number):
+    surrounding_coordinates = []
+    number = math.sqrt(number)
+    for i in range(-2, 3):
+        for j in range(-2, 3):
+            surrounding_coordinates.append((x + i, y + j))
+    
+    return surrounding_coordinates
 
 
 def convert_int64_keys_to_ints(d):
@@ -22,6 +31,7 @@ def load_json(filename):
     with open(filename,'rb') as f:
         d = json.load(f)
     return d
+
 def dumpdicttofile(data,filename):
     data = convert_int64_keys_to_ints(data)
     json_data = json.dumps(data,indent=4)
@@ -36,11 +46,7 @@ def get_key_by_value(d, value):
     keys = [k for k, v in d.items() if v == value]
     return keys if keys else None
 
-def load_json(filename):
-    d = {}
-    with open(filename,'rb') as f:
-        d = json.load(f)
-    return d
+
 
 def inarrxnotinarry(arr1,arr2):
     print(f" in array1 not in array2 :{[x for x in arr1 if x not in arr2]} ")

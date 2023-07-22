@@ -11,12 +11,12 @@ from scipy import stats
 
 # set data and reference note dir
 #data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/Network_outputs/Compiled_Networks.csv'
-data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/Network_outputs/Compiled_Networks.csv'
+data_f = '/home/mmp/Documents/script_output/CDKL5/Network_outputs/Compiled_Networks.csv'
 #reference_f = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx'
-reference_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/New_ADNP_Notes.xlsx'
+reference_f = '/home/mmp/Documents/CDKL5_Notes.xlsx'
 # set plot saving dir
 #opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/'
+opDir = '/home/mmp/Documents/script_output/CDKL5/'
 
 
 # set exclude lists
@@ -209,7 +209,7 @@ def plot_network_graph(working_df,output_type, assay_type):
     plt.axis([xmin, total_div + 1, ymin, ymax])
 
     #save plot
-    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.png', dpi=300)
+    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.pdf', dpi=300)
 
 #exclude chip ids and runs that are in the exclude list
 exclude_l = []

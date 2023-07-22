@@ -1,0 +1,43 @@
+Timestamp: 20-Jul-2023 12:56:00
+Processing NetworkProject Name: CHD8
+DIV 0 Date: 06/21/2023
+Parent Folder Path: /mnt/disk15tb/jonathan/CHD8/
+Reference Directory: /home/mmp/Documents/CHD8_notes.xlsx
+Gaussian Sigma: 0.180000
+Bin Size: 0.300000
+Min Peak Distance: 0.025000
+Threshold Burst: 1.200000
+Threshold Start-Stop: 0.300000
+Output Directory: /home/mmp/Documents/CHD8_output/
+Assay Types: 0 0 0
+Exclude Chips: 
+Exclude Run IDs: 
+Timestamp: 20-Jul-2023 12:56:38
+Processing NetworkProject Name: CHD8
+DIV 0 Date: 06/21/2023
+Parent Folder Path: /mnt/disk15tb/jonathan/CHD8/
+Reference Directory: /home/mmp/Documents/CHD8_notes.xlsx
+Gaussian Sigma: 0.180000
+Bin Size: 0.300000
+Min Peak Distance: 0.025000
+Threshold Burst: 1.200000
+Threshold Start-Stop: 0.300000
+Output Directory: /home/mmp/Documents/CHD8_output/
+Assay Types: 0 0 0
+Exclude Chips: 
+Exclude Run IDs: 
+Timestamp: 20-Jul-2023 12:57:14
+Processing NetworkProject Name: CHD8
+DIV 0 Date: 06/21/2023
+Parent Folder Path: /mnt/disk15tb/jonathan/CHD8/
+Reference Directory: /home/mmp/Documents/CHD8_Notes.xlsx
+Gaussian Sigma: 0.180000
+Bin Size: 0.300000
+Min Peak Distance: 0.025000
+Threshold Burst: 1.200000
+Threshold Start-Stop: 0.300000
+Output Directory: /home/mmp/Documents/CHD8_output/
+Assay Types: 0 0 0
+Exclude Chips: 
+Exclude Run IDs: 
+Now reading /mnt/disk15tb/jonathan/CHD8/CHD8/230627/16364/Network/000016/data.raw.h5

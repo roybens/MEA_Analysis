@@ -15,10 +15,11 @@ from pathlib import Path
 from timeit import default_timer as timer
 import multiprocessing
 import os
+from datetime import datetime
 
-FOLDER = ''
+SORTINGFOLDER = '/mnt/disk15tb/mmpatil/Spikesorting/sorter_output/ks2_jul6'
 
-job_kwargs = dict(n_jobs=64, chunk_duration="1s", progress_bar=True)
+job_kwargs = dict(n_jobs=-1, chunk_duration="1s", progress_bar=True)
 
 
 def export_to_phy_datatype(we):
@@ -68,12 +69,12 @@ def get_waveforms_result(folder,with_recording= True,sorter = None):
 
 def run_kilosort(recording,output_folder):
    
-    default_KS3_params = ss.get_default_sorter_params('kilosort3')
-    default_KS3_params['keep_good_only'] = True
-    default_KS3_params['detect_threshold'] = 24
-    default_KS3_params['projection_threshold']=[30, 30]
-    default_KS3_params['preclust_threshold'] = 26
-    run_sorter = ss.run_kilosort3(recording, output_folder=output_folder, docker_image= "kilosort3-maxwellcomplib:latest",verbose=True, **default_KS3_params)
+    default_KS2_params = ss.get_default_sorter_params('kilosort2')
+    default_KS2_params['keep_good_only'] = True
+    default_KS2_params['detect_threshold'] = 12
+    default_KS2_params['projection_threshold']=[18, 10]
+    default_KS2_params['preclust_threshold'] = 14
+    run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "kilosort2-maxwellcomplib:latest",verbose=True, **default_KS2_params)
     sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
     return sorting_KS3
 
@@ -84,10 +85,25 @@ def extract_waveforms(recording,sorting_KS3,folder):
     #waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True, sparse = True, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
     return waveforms
 
-def get_quality_metrics(waveforms):
 
-    metrics = qm.compute_quality_metrics(waveforms, metric_names=['firing_rate', 'presence_ratio', 'snr',
-                                                       'isi_violation', 'amplitude_cutoff'], **job_kwargs)
+def get_template_metrics(waveforms):
+    return sp.compute_template_metrics(waveforms,load_if_exists=True)
+
+def get_temp_similarity_matrix(waveforms):
+    return sp.compute_template_similarity(waveforms,load_if_exists=True)
+
+
+
+
+def get_quality_metrics(waveforms): 
+    
+    #TO DO: to fix the SNR showing as INF by looking at the extensions of waveforms
+    # This is because the noise levels are 0.0
+    # Similar issue with https://github.com/SpikeInterface/spikeinterface/issues/1467 
+    # Best solution proposed was to stick with applying a gain to the entire recording before all preprocessing
+    sp.compute_spike_amplitudes(waveforms)
+    metrics = qm.compute_quality_metrics(waveforms, metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
+                                                       'isi_violation', 'amplitude_cutoff','amplitude_median'], **job_kwargs)
 
     return metrics
 
@@ -101,16 +117,38 @@ def remove_violated_units(metrics):
     isi_violations_ratio_thresh = 1
     presence_ratio_thresh = 0.9
     firing_rate = 0.1
-    our_query = f"(amplitude_cutoff < {amplitude_cutoff_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) & (presence_ratio > {presence_ratio_thresh}) & (firing_rate > {firing_rate})"
+    num_spikes = 200
+    our_query = f"(num_spikes > {num_spikes})&(amplitude_cutoff < {amplitude_cutoff_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) & (presence_ratio > {presence_ratio_thresh}) & (firing_rate > {firing_rate})"
 
     keep_units = metrics.query(our_query)
 
     keep_unit_ids = keep_units.index.values
 
+
     return keep_unit_ids
 
 
+def remove_similar_templates(waveforms):
 
+    matrix = sp.compute_template_similarity(waveforms,load_if_exists=True)
+    metrics = qm.compute_quality_metrics(waveforms,load_if_exists=True)
+    temp_metrics = sp.compute_template_metrics(waveforms,load_if_exists=True)
+    n = matrix.shape[0]
+
+    # Find indices where values are greater than 0.5 and not on the diagonal
+    indices = [(i,j) for i in range(1,n) for j in range(i-1) if matrix[i,j]>0.7]
+
+    removables =[]
+    # Print the indices
+    for ind in indices:
+        print(temp_metrics.index[ind[0]],temp_metrics.index[ind[1]])
+        if metrics['amplitude_median'].loc[temp_metrics.index[ind[0]]] < metrics['amplitude_median'].loc[temp_metrics.index[ind[1]]]:
+            smaller_index = temp_metrics.index[ind[0]]
+        else:
+            smaller_index = temp_metrics.index[ind[1]]
+
+        removables.append(smaller_index)
+    return removables
 
 def analyse_waveforms_sigui(waveforms) :
     import spikeinterface_gui
@@ -189,58 +227,65 @@ def process_block(recnumber,file_path,time_in_s):
     start = timer()
     current_directory = os.getcwd()
     try:
-        dir_name = '/mnt/disk15tb/mmpatil/Spikesorting/sorter_output/kilosort_trial/block_'+rec_name
+    
+        dir_name = SORTINGFOLDER+'/block_'+rec_name
         os.mkdir(dir_name,0o777)
         os.chdir(dir_name)
-        kilosort_output_folder = dir_name+'/kilosort3_'+rec_name
+        kilosort_output_folder = dir_name+'/kilosort2_'+rec_name
         sortingKS3 = run_kilosort(recording_chunk,output_folder=kilosort_output_folder)
         waveform_folder =dir_name+'/waveforms_'+ rec_name
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
+
+        end = timer()
+        print("Sort and extract waveforms takes", end - start)
+        start = timer()
+        qual_metrics = get_quality_metrics(waveforms)
+        
+        non_violated_units = remove_violated_units(qual_metrics)
+        
+        #check for template similarity.
+        redundant_units = remove_similar_templates(waveforms)
+        print(f"redundant-units : {redundant_units}")
+        non_violated_units = [item for item in non_violated_units if item not in redundant_units]
+        #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
+        #non_redundant_templates = list(template_channel_dict.keys())
+        # extremum_channel_dict = 
+        # ToDo Until the peak matching routine is implemented. We use this.
+        unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='neg')
+        #Step 1: keep only units that are in good_units 
+        unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
+        waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
+        
+        end = timer()
+        print("Removing redundant items takes", end - start)
+
+        channel_location_dict = get_channel_locations_mapping(recording_chunk)
+        # New dictionary with combined information
+        new_dict = {}
+
+        # Iterate over each template in the template_channel_dict dictionary
+        for template, channel in unit_extremum_channel.items():
+
+            # If this channel is not already in the new dictionary, add it
+            if template not in new_dict:
+                new_dict[template] = {}
+
+            # Add an entry for this template and its corresponding location to the new dictionary
+            new_dict[template][channel] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
+        
+
+        os.chdir(current_directory)
+        file_name = '/mnt/disk15tb/mmpatil/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
+        helper.dumpdicttofile(new_dict,file_name)
+        
+        x =1
+        return 1
     except Exception as e:
         print(e)
         print(f"Error in {rec_name} processing. Continuing to the next block")
         #failed_sorting_rec[rec_name] = e
         x = 2
         return x
-    end = timer()
-    print("Sort and extract waveforms takes", end - start)
-    start = timer()
-    metrics = get_quality_metrics(waveforms)
-    non_violated_units = remove_violated_units(metrics)
-    #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
-    #non_redundant_templates = list(template_channel_dict.keys())
-    # extremum_channel_dict = 
-    # ToDo Until the peak matching routine is implemented. We use this.
-    unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='neg')
-    #Step 1: keep only units that are in good_units 
-    unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
-    waveform_good = waveforms.select_units(non_violated_units,new_folder='waveforms_good_'+rec_name)
-    
-    end = timer()
-    print("Removing redundant items takes", end - start)
-
-    channel_location_dict = get_channel_locations_mapping(recording_chunk)
-    # New dictionary with combined information
-    new_dict = {}
-
-    # Iterate over each template in the template_channel_dict dictionary
-    for template, channel in unit_extremum_channel.items():
-
-        # If this channel is not already in the new dictionary, add it
-        if template not in new_dict:
-            new_dict[template] = {}
-
-        # Add an entry for this template and its corresponding location to the new dictionary
-        new_dict[template][channel] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
-    
-
-    os.chdir(current_directory)
-    file_name = '/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
-    helper.dumpdicttofile(new_dict,file_name)
-    
-    x =1
-    return 1
-
     #helper.dumpdicttofile(failed_sorting_rec,'./failed_recording_sorting')
 
 
