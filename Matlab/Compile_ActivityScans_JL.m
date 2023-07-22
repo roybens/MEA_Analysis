@@ -5,27 +5,31 @@
 clear
 close all
 
+mfilename('fullpath')
+fileDir = [pwd,'/',mfilename];
+
+
 % setting starts here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% settings
-auto_set_path = true; % turn this on to skip setting file paths. this requires all the input files be in the correct paths
-project_name = 'ADNP';
+auto_set_path = false; % turn this on to skip setting file paths. this requires all the input files be in the correct paths
+project_name = 'CDKL5';
 
 % set DIV 0 date
-%div0 = '03/01/2023'; % format: MM/DD/YYYY
-div0 = '05/05/2023'; % format: MM/DD/YYYY
+
+div0 = '03/07/2023'; % format: MM/DD/YYYY
 
 %%%%% ignore settings below if choose to use auto path setting %%%%%
 
 % manually set path to folder containing subfolders that contain h5 files
 %parentFolderPath = '/mnt/harddrive-2/ADNP/';
-parentFolderPath = '/mnt/harddrive-2/CDKL5/';
+parentFolderPath = '/mnt/harddrive-2/CDKL5_copy/';
 % set path to excel file that has the reference note
 %refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
-refDir = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx';
+refDir = '/home/mmp/Documents/CDKL5_Notes.xlsx';
 % set output folder
 %opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/';
+opDir = '/home/mmp/Documents/script_output/CDKL5/';
 
 % setting ends here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -67,7 +71,7 @@ Mean_FiringRate = [];
 Mean_SpikeAmplitude = [];
 error_l = [];
 
-%% interate through ActivityScans
+%% iterate through ActivityScans
 % get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '**/ActivityScan/**/*.mxassay'); 
 theFiles = dir(filePattern);
