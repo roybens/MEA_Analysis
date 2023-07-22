@@ -8,37 +8,36 @@ close all
 % setting starts here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% settings
-auto_set_path = true; % turn this on to skip setting file paths. this requires all the input files be in the correct paths
-project_name = 'ADNP';
+auto_set_path = false; % turn this on to skip setting file paths. this requires all the input files be in the correct paths
+project_name = 'CDKL5';
 
 % set DIV 0 date
 %div0 = '03/01/2023'; % format: MM/DD/YYYY
-div0 = '05/05/2023'; % format: MM/DD/YYYY
+div0 = '03/01/2023'; % format: MM/DD/YYYY
 
 % set Gaussian kernel standard deviation [s] (smoothing window)
-gaussianSigma = 0.18;
+gaussianSigma = 0.18; %0.18
 % set histogram bin size [s]
-binSize = 0.1;
+binSize = 0.3;
 % set minimum peak distance [s]
-minPeakDistance = 1.0;
+minPeakDistance = 0.025;
 % set burst detection threshold [rms / fixed]
-thresholdBurst = 1.20;
+thresholdBurst =1.2; %1.2
 % set fixed threshold;
 use_fixed_threshold = false;
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
-thresholdStartStop = 0.3;
+thresholdStartStop = 0.3; %0.3
 
 %%%%% ignore settings below if choose to use auto path setting %%%%%
-
 % manually set path to folder containing subfolders that contain h5 files
 %parentFolderPath = '/mnt/harddrive-2/ADNP/';
-parentFolderPath = '/mnt/harddrive-2/CDKL5/';
+parentFolderPath = '/mnt/harddrive-2/CDKL5_copy/';
 % set path to excel file that has the reference note
 %refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
-refDir = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx';
+refDir = '/home/mmp/Documents/CDKL5_Notes.xlsx';
 % set output folder
 %opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
-opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/';
+opDir = '/home/mmp/Documents/script_output/CDKL5/';
 
 % setting ends here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -67,7 +66,7 @@ end
 % extract runID info from reference excel sheet
 T = readtable(refDir);
 run_ids = unique(T.(4));
-
+run_id_and_type = [T(:,[4,7])];
 
 % defines
 % convert div 0 to date datatype
@@ -100,9 +99,9 @@ for k = 1 : length(theFiles)
     hd5Date = nan; 
     scan_div = nan;
 
-    baseFileName = theFiles(k).name;
+    baseFileName = theFiles(k).name;pathFileNetwork
     pathFileNetwork = fullfile(theFiles(k).folder, baseFileName);
-    % extract dir information
+    % extract dir informationfileNames
     fileDirParts = strsplit(pathFileNetwork, filesep); % split dir into elements
     scan_runID = str2double(fileDirParts{end-1}); % extract runID
     scan_runID_text = fileDirParts{end-1};
@@ -132,7 +131,7 @@ for k = 1 : length(theFiles)
         % compute Network Activity and detect bursts
         relativeSpikeTimes = mxw.util.computeRelativeSpikeTimes(networkData);
         networkAct = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize,'GaussianSigma', gaussianSigma);
-        networkStats = mxw.networkActivity.computeNetworkStats_JL(networkAct, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
+        networkStats = computeNetworkStats_JL(networkAct, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
     
         
         %% Tim's code for averaging and aggregating mean spiking data (IBI, Burst peaks, Spikes within Bursts, # of Bursts etc.)
@@ -199,7 +198,10 @@ for k = 1 : length(theFiles)
         Burst_Peak = [Burst_Peak meanBurstPeak];
         Number_Bursts = [Number_Bursts nBursts];
         Spike_per_Burst = [Spike_per_Burst meanSpikesPerBurst];
-      
+        runIDstemp = run_id_and_type.Run_;
+        types = run_id_and_type.NeuronSource;
+        index = find(runIDstemp == scan_runID);
+        targetType = types{index};
         % plot results
             figure('Color','w','Position',[0 0 400 800],'Visible','off');
             subplot(2,1,1);
@@ -216,8 +218,8 @@ for k = 1 : length(theFiles)
             plot(networkStats.maxAmplitudesTimes,networkStats.maxAmplitudesValues,'or')
             %xlim([0 round(max(relativeSpikeTimes.time)/4)])
             xlim([0 120])
-
-            saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.png'))
+            ylim([0 20])
+            saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',targetType,'.png'))
             %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.fig'))
     end
 end
