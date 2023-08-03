@@ -7,13 +7,13 @@ close all
 
 % manually set path to folder containing subfolders that contain h5 files
 %parentFolderPath = '/mnt/harddrive-2/ADNP/';
-dataDir = '/mnt/harddrive-2/CDKL5_copy/CDKL5/230328/';
+dataDir = '/mnt/disk15tb/jonathan/Syngap3/Syngap3/230109/';
 % set path to excel file that has the reference note
 %refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
-refDir = '/home/mmp/Documents/CDKL5_Notes.xlsx';
+refDir = '/home/mmp/Documents/Syngap3_Notes.xlsx';
 % set output folder
 %opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
-opDir = '/home/mmp/Documents/script_output/CDKL5/';
+opDir = '/home/mmp/Documents/script_output/Syngap3/';
 
 % set Gaussian kernel standard deviation [s] (smoothing window)
 gaussianSigma = 0.18; %0.18

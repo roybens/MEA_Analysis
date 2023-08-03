@@ -16,11 +16,31 @@ from timeit import default_timer as timer
 import multiprocessing
 import os
 from datetime import datetime
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-SORTINGFOLDER = '/mnt/disk15tb/mmpatil/Spikesorting/sorter_output/ks2_jul6'
+
 
 job_kwargs = dict(n_jobs=-1, chunk_duration="1s", progress_bar=True)
 
+
+def save_to_zarr(filepath,op_folder):
+    """
+    saves and compresses the file into the zarr format. 
+    IP: file and the corresponding output folder.
+    """
+    from flac_numcodecs import Flac
+    compressor = Flac(level =8)
+    rec_original = se.read_maxwell(filepath)
+    rec_int32 = spre.scale(rec_original, dtype="int32")
+    # remove the 2^15 offset
+    rec_rm_offset = spre.scale(rec_int32, offset=-2 ** 15)
+    # now we can safely cast to int16
+    rec_int16 = spre.scale(rec_rm_offset, dtype="int16")
+    recording_zarr = rec_int16.save(format = "zarr",folder=op_folder,compressor=compressor,
+                                    channel_chunk_size =2,n_jobs=64,chunk_duration="1s")
+    return recording_zarr
 
 def export_to_phy_datatype(we):
 
@@ -40,7 +60,7 @@ def get_channel_recording_stats(recording):
     print('Number of channels:', num_chan)
     print('Number of segments:', num_seg)
     print(f"total_recording: {total_recording} s")
-    return fs,num_chan,channel_ids
+    return fs,num_chan,channel_ids, total_recording
 
 def preprocess(recording):  ## some hardcoded stuff.
     """
@@ -216,36 +236,50 @@ def get_data_maxwell(file_path,rec_num):
     return recording,rec_name
 
 
-def process_block(recnumber,file_path,time_in_s):
+
+
+def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",clear_temp_files=True):
+    
+    
+    #check if sorting_folder exists and empty
+    if helper.isexists_folder_not_empty(sorting_folder):
+        helper.empty_directory(sorting_folder)
+    
+    recording,rec_name = get_data_maxwell(file_path,recnumber)
+    logging.info(f"Processing recording: {rec_name}")
+    fs, num_chan, channel_ids, total_rec_time= get_channel_recording_stats(recording)
+    if total_rec_time < time_in_s:
+        time_in_s = total_rec_time
     time_start = 0
     time_end = time_start+time_in_s
-    recording,rec_name = get_data_maxwell(file_path,recnumber)
-    print(f"Processing recording: {rec_name}")
-    fs, num_chan, channel_ids = get_channel_recording_stats(recording)
-    recording_chunk = recording.frame_slice(start_frame= time_start*fs,end_frame=time_end*fs)
+    recording_chunk = recording.frame_slice(start_frame= int(time_start*fs),end_frame=int(time_end*fs))
     recording_chunk = preprocess(recording_chunk)
-    start = timer()
+    
     current_directory = os.getcwd()
     try:
     
-        dir_name = SORTINGFOLDER+'/block_'+rec_name
+        dir_name = sorting_folder+'/block_'+rec_name
         os.mkdir(dir_name,0o777)
         os.chdir(dir_name)
         kilosort_output_folder = dir_name+'/kilosort2_'+rec_name
+        start = timer()
         sortingKS3 = run_kilosort(recording_chunk,output_folder=kilosort_output_folder)
+        sortingKS3 = sortingKS3.remove_empty_units()
+        sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk)
         waveform_folder =dir_name+'/waveforms_'+ rec_name
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
-
         end = timer()
-        print("Sort and extract waveforms takes", end - start)
+        logging.debug("Sort and extract waveforms takes", end - start)
+        
         start = timer()
+        
         qual_metrics = get_quality_metrics(waveforms)
         
         non_violated_units = remove_violated_units(qual_metrics)
         
         #check for template similarity.
         redundant_units = remove_similar_templates(waveforms)
-        print(f"redundant-units : {redundant_units}")
+        logging.info(f"redundant-units : {redundant_units}")
         non_violated_units = [item for item in non_violated_units if item not in redundant_units]
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
@@ -261,31 +295,37 @@ def process_block(recnumber,file_path,time_in_s):
 
         channel_location_dict = get_channel_locations_mapping(recording_chunk)
         # New dictionary with combined information
-        new_dict = {}
+        # new_dict = {}
 
-        # Iterate over each template in the template_channel_dict dictionary
-        for template, channel in unit_extremum_channel.items():
+        # # Iterate over each template in the template_channel_dict dictionary
+        # for template, channel in unit_extremum_channel.items():
 
-            # If this channel is not already in the new dictionary, add it
-            if template not in new_dict:
-                new_dict[template] = {}
+        #     # If this channel is not already in the new dictionary, add it
+        #     if template not in new_dict:
+        #         new_dict[template] = {}
 
-            # Add an entry for this template and its corresponding location to the new dictionary
-            new_dict[template][channel] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
+        #     # Add an entry for this template and its corresponding location to the new dictionary
+        #     new_dict[template][channel] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
         
 
         os.chdir(current_directory)
-        file_name = '/mnt/disk15tb/mmpatil/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
-        helper.dumpdicttofile(new_dict,file_name)
-        
-        x =1
-        return 1
+        # file_name = '/mnt/disk15tb/mmpatil/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
+        # helper.dumpdicttofile(new_dict,file_name)
+        electrodes = []
+
+        # Iterate over each template in the template_channel_dict dictionary
+        for template, channel in unit_extremum_channel.items():
+            # Add an entry for this template and its corresponding location to the new dictionary
+            electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
+        if clear_temp_files:
+            helper.empty_directory(sorting_folder)
+        return electrodes
     except Exception as e:
-        print(e)
-        print(f"Error in {rec_name} processing. Continuing to the next block")
-        #failed_sorting_rec[rec_name] = e
-        x = 2
-        return x
+        logging.info(e)
+        logging.info(f"Error in {rec_name} processing. Continuing to the next block")
+        if clear_temp_files:
+            helper.empty_directory(sorting_folder)
+        return e
     #helper.dumpdicttofile(failed_sorting_rec,'./failed_recording_sorting')
 
 

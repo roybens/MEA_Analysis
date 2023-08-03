@@ -74,6 +74,9 @@ asssy_runIDs = unique(assay_T.(4)).';
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '**/Network/**/*raw.h5'); 
 theFiles = dir(filePattern);
+%Mandar's implementation of electrodes./
+csv_data=readtable("/home/mmp/disktb/mmpatil/MEA_Analysis/Python/path_electrodes_2.csv" ,'Delimiter', ',');
+
 for f = 1 : length(theFiles)
     baseFileName = theFiles(f).name;
     %fullFileName = fullfile(theFiles(k).folder, baseFileName);
@@ -83,7 +86,8 @@ for f = 1 : length(theFiles)
     runID = str2double(fileDirParts{end-1}); % extract runID
     if ismember(runID,asssy_runIDs)
         fprintf(1, 'Now reading %s\n', pathFileNetwork);
-       
+        
+        
         % create fileManager object for the Network recording
         try
             networkData = mxw.fileManager(pathFileNetwork);
@@ -91,6 +95,65 @@ for f = 1 : length(theFiles)
             error_l = [error_l string(runID)];
             continue
         end
+
+        %mandars
+        % Step 2: Find the matching row index (assuming the file path is in the 'FilePath' column)
+        matchingRowIndex = find(strcmp(csv_data.path, pathFileNetwork));
+        
+        if isempty(matchingRowIndex)
+            disp('File path not found in the CSV file.');
+        else
+            % Step 3: Get the electrode value (assuming the electrode values are in the 'Electrode' column)
+            electrodesInterest = csv_data.electrodes(matchingRowIndex);
+
+            % Remove the brackets '[' and ']' from the character array
+            electrodesInterest = electrodesInterest{1};
+            electrodesInterest = strrep(electrodesInterest, '[', '');
+            electrodesInterest = strrep(electrodesInterest, ']', '');
+            electrodesInterest = str2num(electrodesInterest);
+
+            if isempty(electrodesInterest)
+                disp('No specific electrodes of interest')
+            else
+                matchingIndices =ismember(networkData.rawMap.map.electrode,electrodesInterest);
+
+                %updating networkData.rawMap
+                
+                networkData.rawMap.map.channel=networkData.rawMap.map.channel(matchingIndices);
+                networkData.rawMap.map.electrode=networkData.rawMap.map.electrode(matchingIndices);
+                networkData.rawMap.map.x=networkData.rawMap.map.x(matchingIndices);
+                networkData.rawMap.map.y=networkData.rawMap.map.y(matchingIndices);
+                
+                
+                %updating the extracted spikes.
+                networkData.extractedSpikes.frameno = networkData.extractedSpikes.frameno(matchingIndices);
+                networkData.extractedSpikes.amplitude = networkData.extractedSpikes.amplitude(matchingIndices);
+                
+                %now get channels mapping.
+                matchingChannelIndices = ismember(networkData.rawMap.spikes.channel,networkData.rawMap.map.channel);
+                networkData.rawMap.spikes.channel = networkData.rawMap.spikes.channel(matchingChannelIndices);
+                networkData.rawMap.spikes.frameno = networkData.rawMap.spikes.frameno(matchingChannelIndices);
+                networkData.rawMap.spikes.amplitude = networkData.rawMap.spikes.amplitude(matchingChannelIndices);
+                
+                %updating the networkData.fileObj
+                networkData.fileObj.map = networkData.rawMap.map;
+                networkData.fileObj.spikes = networkData.rawMap.spikes;
+                
+                
+                %updating networkData.processsedMap
+                matchingIndices =ismember(networkData.processedMap.electrode,electrodesInterest);
+                networkData.processedMap.electrode = networkData.processedMap.electrode(matchingIndices);
+                networkData.processedMap.xpos = networkData.processedMap.xpos(matchingIndices);
+                networkData.processedMap.ypos = networkData.processedMap.ypos(matchingIndices);
+                networkData.processedMap.recordingIndex = ones(length(networkData.processedMap.electrode),1);
+                networkData.processedMap.nonRoutedElec= (0:26399)';
+                indicesToRemove = ismember(networkData.processedMap.nonRoutedElec, networkData.processedMap.electrode);
+                networkData.processedMap.nonRoutedElec(indicesToRemove)=[];
+            end
+
+            
+        end
+
         
         %% Loop through different parameters.
         avg_opt_title = parameter;
