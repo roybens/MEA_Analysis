@@ -1,5 +1,0 @@
-CHD8
-06/22/2023
-/mnt/disk15tb/jonathan/CHD8/
-/home/mmp/Documents/CHD8_Notes.xlsx
-/home/mmp/Documents/CHD8_output/
