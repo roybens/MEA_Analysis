@@ -1,8 +1,4 @@
-Python/kilosort*
-Python/*.json
-Python/*.gz
-Python/*.txt
-Python/*.npz
-Python/maxlab
-Python/waveforms*
-Python/__pycache__
+**.asv
+**.txt
+
+
