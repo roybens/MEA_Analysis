@@ -288,7 +288,7 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='neg')
         #Step 1: keep only units that are in good_units 
         unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
-        #waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
+        waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
         
         end = timer()
         print("Removing redundant items takes", end - start)
@@ -325,7 +325,6 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         logging.info(f"Error in {rec_name} processing. Continuing to the next block")
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
-        e = "The sorting failed."
         return e
     #helper.dumpdicttofile(failed_sorting_rec,'./failed_recording_sorting')
 
