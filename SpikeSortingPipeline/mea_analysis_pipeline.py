@@ -17,12 +17,13 @@ import multiprocessing
 import os
 from datetime import datetime
 import logging
+import re
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
 
-job_kwargs = dict(n_jobs=-1, chunk_duration="1s", progress_bar=True)
+job_kwargs = dict(n_jobs=4, chunk_duration="1s", progress_bar=False)
 
 
 def save_to_zarr(filepath,op_folder):
@@ -121,7 +122,7 @@ def get_quality_metrics(waveforms):
     # This is because the noise levels are 0.0
     # Similar issue with https://github.com/SpikeInterface/spikeinterface/issues/1467 
     # Best solution proposed was to stick with applying a gain to the entire recording before all preprocessing
-    sp.compute_spike_amplitudes(waveforms)
+    sp.compute_spike_amplitudes(waveforms,**job_kwargs)
     metrics = qm.compute_quality_metrics(waveforms, metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
                                                        'isi_violation', 'amplitude_cutoff','amplitude_median'], **job_kwargs)
 
@@ -131,6 +132,13 @@ def remove_violated_units(metrics):
 
     """
     Removing based on Refractory violations, Firing_rate , snr_ratio
+    amplitude_cutoff_thresh = 0.1
+    isi_violations_ratio_thresh = 1
+    presence_ratio_thresh = 0.9
+    firing_rate = 0.1
+    num_spikes = 200
+
+    Returns an updated metrics dataframe
     
     """
     amplitude_cutoff_thresh = 0.1
@@ -140,15 +148,14 @@ def remove_violated_units(metrics):
     num_spikes = 200
     our_query = f"(num_spikes > {num_spikes})&(amplitude_cutoff < {amplitude_cutoff_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) & (presence_ratio > {presence_ratio_thresh}) & (firing_rate > {firing_rate})"
 
-    keep_units = metrics.query(our_query)
+    metrics = metrics.query(our_query)
 
-    keep_unit_ids = keep_units.index.values
+    return metrics
+
+  
 
 
-    return keep_unit_ids
-
-
-def remove_similar_templates(waveforms):
+def remove_similar_templates(waveforms,sim_score =0.7):
 
     matrix = sp.compute_template_similarity(waveforms,load_if_exists=True)
     metrics = qm.compute_quality_metrics(waveforms,load_if_exists=True)
@@ -156,7 +163,7 @@ def remove_similar_templates(waveforms):
     n = matrix.shape[0]
 
     # Find indices where values are greater than 0.5 and not on the diagonal
-    indices = [(i,j) for i in range(1,n) for j in range(i-1) if matrix[i,j]>0.7]
+    indices = [(i,j) for i in range(1,n) for j in range(i-1) if matrix[i,j]>sim_score]
 
     removables =[]
     # Print the indices
@@ -243,6 +250,7 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
     
     #check if sorting_folder exists and empty
     if helper.isexists_folder_not_empty(sorting_folder):
+        print("clearing soring folder")
         helper.empty_directory(sorting_folder)
     
     recording,rec_name = get_data_maxwell(file_path,recnumber)
@@ -257,7 +265,8 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
     
     current_directory = os.getcwd()
     try:
-    
+        pattern = r"/(\d+)/data.raw.h5"
+        run_id = int(re.search(pattern, file_path).group(1))
         dir_name = sorting_folder+'/block_'+rec_name
         os.mkdir(dir_name,0o777)
         os.chdir(dir_name)
@@ -267,28 +276,40 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         sortingKS3 = sortingKS3.remove_empty_units()
         sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk)
         waveform_folder =dir_name+'/waveforms_'+ rec_name
+        logging.info("Extracting waveforms")
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
         end = timer()
         logging.debug("Sort and extract waveforms takes", end - start)
         
         start = timer()
         
-        qual_metrics = get_quality_metrics(waveforms)
+        qual_metrics = get_quality_metrics(waveforms)  
         
-        non_violated_units = remove_violated_units(qual_metrics)
-        
+        update_qual_metrics = remove_violated_units(qual_metrics)
+        non_violated_units  = update_qual_metrics.index.values
         #check for template similarity.
         redundant_units = remove_similar_templates(waveforms)
-        logging.info(f"redundant-units : {redundant_units}")
+        logging.info(f"redundant-units : {redundant_units}")                                                #todo: need to extract metrics here.
         non_violated_units = [item for item in non_violated_units if item not in redundant_units]
+        
+        for unit in redundant_units:  ##to do : logic need to be verified,
+            try:
+                update_qual_metrics = update_qual_metrics.drop(unit)
+            except Exception as e:
+                continue
+        template_metrics = sp.compute_template_metrics(waveforms)
+        template_metrics = template_metrics.loc[update_qual_metrics.index.values]
+   
+        update_qual_metrics.to_excel(f"/home/mmp/disktb/mmpatil/MEA_Analysis/Python/sorted_unit_metrics/quality_metrics_{run_id}.xlsx")
+        template_metrics.to_excel(f"/home/mmp/disktb/mmpatil/MEA_Analysis/Python/sorted_unit_metrics/template_metrics_{run_id}.xlsx")
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
         # extremum_channel_dict = 
         # ToDo Until the peak matching routine is implemented. We use this.
-        unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='neg')
+        unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='both')
         #Step 1: keep only units that are in good_units 
         unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
-        waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
+        #waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
         
         end = timer()
         print("Removing redundant items takes", end - start)
@@ -319,13 +340,14 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
             electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
-        return electrodes
+        return electrodes, len(update_qual_metrics)
     except Exception as e:
         logging.info(e)
         logging.info(f"Error in {rec_name} processing. Continuing to the next block")
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
-        return e
+        e = "The sorting failed."
+        return e,e
     #helper.dumpdicttofile(failed_sorting_rec,'./failed_recording_sorting')
 
 

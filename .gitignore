@@ -1,4 +1,8 @@
 **.asv
 **.txt
 **__pycache__**
+SpikeSortingPipeline/path/
+SpikeSortingPipeline/sorting_intermediate/
+
+
 
