@@ -15,9 +15,11 @@ from pathlib import Path
 from timeit import default_timer as timer
 import multiprocessing
 import os
+import sys
 from datetime import datetime
 import logging
 import re
+import pickle
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -245,12 +247,12 @@ def get_data_maxwell(file_path,rec_num):
 
 
 
-def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",clear_temp_files=True):
+def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sorting_Intermediate_files",clear_temp_files=True):
     
     
     #check if sorting_folder exists and empty
     if helper.isexists_folder_not_empty(sorting_folder):
-        print("clearing soring folder")
+        print("clearing sorying folder")
         helper.empty_directory(sorting_folder)
     
     recording,rec_name = get_data_maxwell(file_path,recnumber)
@@ -267,8 +269,16 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
     try:
         pattern = r"/(\d+)/data.raw.h5"
         run_id = int(re.search(pattern, file_path).group(1))
-        dir_name = sorting_folder+'/block_'+rec_name
-        os.mkdir(dir_name,0o777)
+        file_pattern = os.path.dirname(file_path)
+
+        # Split the pattern into parts using '/' as the separator
+        parts = file_pattern.split('/')
+
+        # Extract the desired pattern
+        desired_pattern = '/'.join(parts[-6:])  # Assuming you want the last 6 parts
+
+        dir_name = sorting_folder
+        #os.mkdir(dir_name,0o777,)
         os.chdir(dir_name)
         kilosort_output_folder = dir_name+'/kilosort2_'+rec_name
         start = timer()
@@ -280,7 +290,7 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
         end = timer()
         logging.debug("Sort and extract waveforms takes", end - start)
-        
+        os.chdir(current_directory)
         start = timer()
         
         qual_metrics = get_quality_metrics(waveforms)  
@@ -289,19 +299,27 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         non_violated_units  = update_qual_metrics.index.values
         #check for template similarity.
         redundant_units = remove_similar_templates(waveforms)
-        logging.info(f"redundant-units : {redundant_units}")                                                #todo: need to extract metrics here.
+        logging.info(f"redundant-units : {redundant_units}")    
+        end = timer()
+        logging.debug("Removing redundant items takes", end - start)                                            #todo: need to extract metrics here.
         non_violated_units = [item for item in non_violated_units if item not in redundant_units]
+        waveform_good = waveforms.select_units(non_violated_units,new_folder="../AnalyzedData/"+desired_pattern+"/waveforms_good")
+
+        template_metrics = sp.compute_template_metrics(waveform_good)
+        #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
+        qual_metrics = get_quality_metrics(waveform_good)  
         
-        for unit in redundant_units:  ##to do : logic need to be verified,
-            try:
-                update_qual_metrics = update_qual_metrics.drop(unit)
-            except Exception as e:
-                continue
-        template_metrics = sp.compute_template_metrics(waveforms)
-        template_metrics = template_metrics.loc[update_qual_metrics.index.values]
-   
-        update_qual_metrics.to_excel(f"/home/mmp/disktb/mmpatil/MEA_Analysis/Python/sorted_unit_metrics/quality_metrics_{run_id}.xlsx")
-        template_metrics.to_excel(f"/home/mmp/disktb/mmpatil/MEA_Analysis/Python/sorted_unit_metrics/template_metrics_{run_id}.xlsx")
+        template_metrics.to_excel(f"../AnalyzedData/{desired_pattern}/template_metrics.xlsx")
+        locations = sp.compute_unit_locations(waveform_good)
+        qual_metrics['location_X'] = locations[:,0]
+        qual_metrics['location_Y'] = locations[:,1]
+        qual_metrics.to_excel(f"../AnalyzedData/{desired_pattern}/quality_metrics.xlsx")
+        ax = plt.subplot(111)
+
+        sw.plot_probe_map(recording_chunk,ax=ax,with_channel_ids=False)
+        for x,y in locations:
+            ax.scatter(x,y, s=1)
+        plt.savefig(f"../AnalyzedData/{desired_pattern}/locations.pdf")
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
         # extremum_channel_dict = 
@@ -311,25 +329,18 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
         #waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
         
-        end = timer()
-        print("Removing redundant items takes", end - start)
-
+        #get the spike trains
+        os.makedirs(f"../AnalyzedData/{desired_pattern}/Spike_trains/",mode=0o777, exist_ok=True)
+        for idx, unit_id in enumerate(non_violated_units):
+            #print(unit_id)
+            spike_train = sortingKS3.get_unit_spike_train(unit_id,start_frame=0*fs,end_frame=time_end*fs)
+            #print(spike_train)
+            if len(spike_train) > 0:
+                spike_times = spike_train / float(fs)
+                pickle_filename = f"../AnalyzedData/{desired_pattern}/Spike_trains/{idx}.pkl"
+                with open(pickle_filename, 'wb') as pickle_file:
+                    pickle.dump(spike_times, pickle_file)
         channel_location_dict = get_channel_locations_mapping(recording_chunk)
-        # New dictionary with combined information
-        # new_dict = {}
-
-        # # Iterate over each template in the template_channel_dict dictionary
-        # for template, channel in unit_extremum_channel.items():
-
-        #     # If this channel is not already in the new dictionary, add it
-        #     if template not in new_dict:
-        #         new_dict[template] = {}
-
-        #     # Add an entry for this template and its corresponding location to the new dictionary
-        #     new_dict[template][channel] = [int(channel_location_dict[channel][0]/17.5),int(channel_location_dict[channel][1]/17.5)]
-        
-
-        os.chdir(current_directory)
         # file_name = '/mnt/disk15tb/mmpatil/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
         # helper.dumpdicttofile(new_dict,file_name)
         electrodes = []
@@ -338,6 +349,8 @@ def process_block(recnumber,file_path,time_in_s, sorting_folder = "./sorting",cl
         for template, channel in unit_extremum_channel.items():
             # Add an entry for this template and its corresponding location to the new dictionary
             electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
+        electrode_data = {'electrodes':electrodes}
+        helper.dumpdicttofile(electrode_data,"../AnalyzedData/"+desired_pattern+"/associated_electrodes.json")
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
         return electrodes, len(update_qual_metrics)
@@ -379,4 +392,47 @@ def routine_parallel(file_path,number_of_configurations,time_in_s):
 
 if __name__ =="__main__" :
 
-    routine_sequential()  #arguments
+    """
+    This direct main function run would be silent run..on server.
+
+    """
+ 
+    # Check if the correct number of command-line arguments is provided
+    if len(sys.argv) != 2:
+        logger.info("Usage: python script.py <file_or_folder_path>")
+        sys.exit(1)
+
+    # Get the user-provided path from the command-line argument
+    path = sys.argv[1]
+
+    # Check if the path exists
+    if not os.path.exists(path):
+        logger.info(f"The specified path '{path}' does not exist.")
+        sys.exit(1)
+
+    # Check if the path is a file
+    if os.path.isfile(path):
+        logger.debug(f"'{path}' is a file.")
+        # Perform actions for a file here
+        process_block(path)
+
+
+    # Check if the path is a folder
+    elif os.path.isdir(path):
+        logger.debug(f"'{path}' is a folder.")
+        # Perform actions for a folder here
+        file_name_pattern = "data.raw.h5"
+        subfolder_name = "Network"
+        result = helper.find_files_with_subfolder(path, file_name_pattern, subfolder_name)
+        for path in result:   ##TO DO: check if the run number is in ref file.
+            try:
+                _ = process_block(path)    
+            except Exception as e:
+                logger.info(e)
+                
+    # If it's neither a file nor a folder, display an error message
+    else:
+        logger.info(f"'{path}' is neither a file nor a folder.")
+        sys.exit(1)
+    # You can add your code to perform specific actions for files and folders here
+    

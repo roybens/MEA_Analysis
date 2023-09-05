@@ -2,7 +2,7 @@
 **.txt
 **__pycache__**
 SpikeSortingPipeline/path/
-SpikeSortingPipeline/sorting_intermediate/
+SpikeSortingPipeline/sorting_intermediate/*
 
 
 
