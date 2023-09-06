@@ -290,7 +290,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
         end = timer()
         logging.debug("Sort and extract waveforms takes", end - start)
-        os.chdir(current_directory)
+        
         start = timer()
         
         qual_metrics = get_quality_metrics(waveforms)  
@@ -303,23 +303,25 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         end = timer()
         logging.debug("Removing redundant items takes", end - start)                                            #todo: need to extract metrics here.
         non_violated_units = [item for item in non_violated_units if item not in redundant_units]
-        waveform_good = waveforms.select_units(non_violated_units,new_folder="../AnalyzedData/"+desired_pattern+"/waveforms_good")
-
-        template_metrics = sp.compute_template_metrics(waveform_good)
-        #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
-        qual_metrics = get_quality_metrics(waveform_good)  
         
-        template_metrics.to_excel(f"../AnalyzedData/{desired_pattern}/template_metrics.xlsx")
+        waveform_good = waveforms.select_units(non_violated_units,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
+
+        template_metrics = sp.compute_template_metrics(waveforms)
+        #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
+        qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
+                                                       'isi_violation', 'amplitude_cutoff','amplitude_median'])  ## to do : have to deal with NAN values
+        
+        template_metrics.to_excel(f"{current_directory}/../AnalyzedData/{desired_pattern}/template_metrics.xlsx")
         locations = sp.compute_unit_locations(waveform_good)
         qual_metrics['location_X'] = locations[:,0]
         qual_metrics['location_Y'] = locations[:,1]
-        qual_metrics.to_excel(f"../AnalyzedData/{desired_pattern}/quality_metrics.xlsx")
+        qual_metrics.to_excel(f"{current_directory}/../AnalyzedData/{desired_pattern}/quality_metrics.xlsx")
         ax = plt.subplot(111)
 
         sw.plot_probe_map(recording_chunk,ax=ax,with_channel_ids=False)
         for x,y in locations:
             ax.scatter(x,y, s=1)
-        plt.savefig(f"../AnalyzedData/{desired_pattern}/locations.pdf")
+        plt.savefig(f"{current_directory}/../AnalyzedData/{desired_pattern}/locations.pdf")
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
         # extremum_channel_dict = 
@@ -330,14 +332,14 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         #waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
         
         #get the spike trains
-        os.makedirs(f"../AnalyzedData/{desired_pattern}/Spike_trains/",mode=0o777, exist_ok=True)
+        os.makedirs(f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/",mode=0o777, exist_ok=True)
         for idx, unit_id in enumerate(non_violated_units):
             #print(unit_id)
             spike_train = sortingKS3.get_unit_spike_train(unit_id,start_frame=0*fs,end_frame=time_end*fs)
             #print(spike_train)
             if len(spike_train) > 0:
                 spike_times = spike_train / float(fs)
-                pickle_filename = f"../AnalyzedData/{desired_pattern}/Spike_trains/{idx}.pkl"
+                pickle_filename = f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/{idx}.pkl"
                 with open(pickle_filename, 'wb') as pickle_file:
                     pickle.dump(spike_times, pickle_file)
         channel_location_dict = get_channel_locations_mapping(recording_chunk)
@@ -350,7 +352,8 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
             # Add an entry for this template and its corresponding location to the new dictionary
             electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
         electrode_data = {'electrodes':electrodes}
-        helper.dumpdicttofile(electrode_data,"../AnalyzedData/"+desired_pattern+"/associated_electrodes.json")
+        helper.dumpdicttofile(electrode_data,f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json")
+        os.chdir(current_directory)
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
         return electrodes, len(update_qual_metrics)
