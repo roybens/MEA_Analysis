@@ -20,6 +20,7 @@ from datetime import datetime
 import logging
 import re
 import pickle
+import scipy.io as sio
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -339,9 +340,10 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
             #print(spike_train)
             if len(spike_train) > 0:
                 spike_times = spike_train / float(fs)
-                pickle_filename = f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/{idx}.pkl"
-                with open(pickle_filename, 'wb') as pickle_file:
-                    pickle.dump(spike_times, pickle_file)
+                mat_filename = f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/{unit_id}.mat"
+                sio.savemat(mat_filename,{'spike_times':spike_times,'units':[unit_id]*len(spike_times)})
+        
+        
         channel_location_dict = get_channel_locations_mapping(recording_chunk)
         # file_name = '/mnt/disk15tb/mmpatil/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
         # helper.dumpdicttofile(new_dict,file_name)
@@ -352,7 +354,8 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
             # Add an entry for this template and its corresponding location to the new dictionary
             electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
         electrode_data = {'electrodes':electrodes}
-        helper.dumpdicttofile(electrode_data,f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json")
+        #helper.dumpdicttofile(electrode_data,f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json")
+        sio.savemat(f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json",electrode_data)
         os.chdir(current_directory)
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
