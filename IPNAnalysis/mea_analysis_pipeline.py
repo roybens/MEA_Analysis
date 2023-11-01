@@ -21,12 +21,25 @@ import logging
 import re
 import pickle
 import scipy.io as sio
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+
+#os.environ['HDF5_PLUGIN_PATH']='/home/mmp/Documents/Maxlab/so/'
+# Configure the logger
+# Manually clear the log file
+with open('./application.log', 'w'):
+    pass
+logging.basicConfig(
+    filename='./application.log',  # Log file name
+    level=logging.INFO,  # Log level
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
+    datefmt='%Y-%m-%d %H:%M:%S' # Timestamp format
+)
+
+logger = logging.getLogger("mea_pipeline")
 
 
 
-job_kwargs = dict(n_jobs=4, chunk_duration="1s", progress_bar=False)
+
+job_kwargs = dict(n_jobs=32, chunk_duration="1s", progress_bar=False)
 
 
 def save_to_zarr(filepath,op_folder):
@@ -50,6 +63,8 @@ def export_to_phy_datatype(we):
 
     from spikeinterface.exporters import export_to_phy
     export_to_phy(we,output_folder='/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/phy_folder',**job_kwargs)
+
+
 
 def get_channel_recording_stats(recording):
     
@@ -95,10 +110,10 @@ def run_kilosort(recording,output_folder):
    
     default_KS2_params = ss.get_default_sorter_params('kilosort2')
     default_KS2_params['keep_good_only'] = True
-    default_KS2_params['detect_threshold'] = 12
-    default_KS2_params['projection_threshold']=[18, 10]
-    default_KS2_params['preclust_threshold'] = 14
-    run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "kilosort2-maxwellcomplib:latest",verbose=True, **default_KS2_params)
+    # default_KS2_params['detect_threshold'] = 12
+    # default_KS2_params['projection_threshold']=[18, 10]
+    # default_KS2_params['preclust_threshold'] = 14
+    run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params)
     sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
     return sorting_KS3
 
@@ -180,10 +195,11 @@ def remove_similar_templates(waveforms,sim_score =0.7):
         removables.append(smaller_index)
     return removables
 
-def analyse_waveforms_sigui(waveforms) :
+def analyse_waveforms_sigui(waveforms_folder) :
     import spikeinterface_gui
+    waveforms = si.load_waveforms(waveforms_folder)
     # This creates a Qt app
-    waveforms.run_extract_waveforms(**job_kwargs)
+   # waveforms.run_extract_waveforms(**job_kwargs)
     app = spikeinterface_gui.mkQApp() 
 
     # create the mainwindow and show
@@ -253,7 +269,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
     
     #check if sorting_folder exists and empty
     if helper.isexists_folder_not_empty(sorting_folder):
-        print("clearing sorying folder")
+        logging.info("clearing sorting folder")
         helper.empty_directory(sorting_folder)
     
     recording,rec_name = get_data_maxwell(file_path,recnumber)
@@ -307,7 +323,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         
         waveform_good = waveforms.select_units(non_violated_units,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
 
-        template_metrics = sp.compute_template_metrics(waveforms)
+        template_metrics = sp.compute_template_metrics(waveform_good)
         #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
         qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
                                                        'isi_violation', 'amplitude_cutoff','amplitude_median'])  ## to do : have to deal with NAN values
@@ -323,6 +339,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         for x,y in locations:
             ax.scatter(x,y, s=1)
         plt.savefig(f"{current_directory}/../AnalyzedData/{desired_pattern}/locations.pdf")
+        plt.clf()
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
         # extremum_channel_dict = 
@@ -355,7 +372,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
             electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
         electrode_data = {'electrodes':electrodes}
         #helper.dumpdicttofile(electrode_data,f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json")
-        sio.savemat(f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json",electrode_data)
+        sio.savemat(f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.mat",electrode_data)
         os.chdir(current_directory)
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
@@ -420,21 +437,36 @@ if __name__ =="__main__" :
     if os.path.isfile(path):
         logger.debug(f"'{path}' is a file.")
         # Perform actions for a file here
-        process_block(path)
+        process_block(path,clear_temp_files=False)
 
 
     # Check if the path is a folder
     elif os.path.isdir(path):
+        
         logger.debug(f"'{path}' is a folder.")
         # Perform actions for a folder here
         file_name_pattern = "data.raw.h5"
         subfolder_name = "Network"
         result = helper.find_files_with_subfolder(path, file_name_pattern, subfolder_name)
+        import pandas as pd
+        data_f = '/mnt/disk15tb/paula/Main_DA_Projects/Ref_Files/CHD8_2_data/CHD82_ref.xlsx'
+        data_df = pd.read_excel(data_f)
+        network_today_runs = data_df[data_df['Assay'].str.lower().isin(['network today', 'network today/best'])]
+
+        # Extract the 'Run #' values from the filtered DataFrame
+        network_today_run_numbers = network_today_runs['Run #'].to_list()
         for path in result:   ##TO DO: check if the run number is in ref file.
             try:
-                _ = process_block(path)    
+                parts = path.split("/")
+                run_id = int(parts[-2])
+                if run_id in network_today_run_numbers:
+                    _ = process_block(path) 
+                else:
+                    logger.info(f"{run_id} not a network assay")   
+                    continue
             except Exception as e:
                 logger.info(e)
+                continue
                 
     # If it's neither a file nor a folder, display an error message
     else:

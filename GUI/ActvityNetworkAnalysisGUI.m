@@ -86,90 +86,10 @@ function mainFunction
     excludeRunIDsEdit = uieditfield(fig, 'Position', [180, 50, 170, 25]);
 
     % Create a button for plotting graph
-    plotActButton = uibutton(fig, 'Text', 'Plot Act Graphs', 'Position', [360, 50, 100, 30], 'ButtonPushedFcn', @plotActButtonCallback);
+    plotActButton = uibutton(fig, 'Text', 'Act settings', 'Position', [360, 50, 100, 30], 'ButtonPushedFcn', @plotActButtonCallback);
     % Create a button for plotting graph
-    plotNetButton = uibutton(fig, 'Text', 'Plot Net Graphs', 'Position', [460, 50, 100, 30], 'ButtonPushedFcn', @plotNetButtonCallback);
-    
-%     % Callback for updating the layout when figure is resized
-%     function updateLayout(~, ~)
-%         % Get the current figure size
-%         figSize = fig.Position(3:4);
-%         
-%         % Calculate the new positions of the UI components based on the figure size
-%         
-%         % Project Name components
-%         projectNameLabel.Position(2) = figSize(2) - 50;
-%         projectNameEdit.Position(2) = figSize(2) - 50;
-%         
-%         % DIV 0 Date components
-%         div0DateLabel.Position(2) = figSize(2) - 90;
-%         div0DateEdit.Position(2) = figSize(2) - 90;
-%         
-%         % Parent Folder Path components
-%         parentFolderLabel.Position(2) = figSize(2) - 130;
-%         parentFolderEdit.Position(2) = figSize(2) - 130;
-%         
-%         % Reference Directory components
-%         refDirLabel.Position(2) = figSize(2) - 170;
-%         refDirEdit.Position(2) = figSize(2) - 170;
-%         
-%         % Output Directory components
-%         opDirLabel.Position(2) = figSize(2) - 210;
-%         opDirEdit.Position(2) = figSize(2) - 210;
-%         
-%         % Process Data button
-%         processButton.Position(2) = figSize(2) - 250;
-%         
-%         % Clear button
-%         clearButton.Position(2) = figSize(2) - 250;
-%         clearButton.Position(1) = 175 + (figSize(1) - 600);
-%         
-%         % Quit button
-%         quitButton.Position(2) = figSize(2) - 250;
-%         quitButton.Position(1) = 300 + (figSize(1) - 600);
-%         
-%         % Gaussian Sigma components
-%         gaussianSigmaLabel.Position(2) = figSize(2) - 50;
-%         gaussianSigmaSlider.Position(2) = figSize(2) - 50;
-%         gaussianSigmaValueLabel.Position(2) = figSize(2) - 50;
-%         
-%         % Bin Size components
-%         binSizeLabel.Position(2) = figSize(2) - 90;
-%         binSizeSlider.Position(2) = figSize(2) - 90;
-%         binSizeValueLabel.Position(2) = figSize(2) - 90;
-%         
-%         % Min Peak Distance components
-%         minPeakDistanceLabel.Position(2) = figSize(2) - 130;
-%         minPeakDistanceSlider.Position(2) = figSize(2) - 130;
-%         minPeakDistanceValueLabel.Position(2) = figSize(2) - 130;
-%         
-%         % Threshold Burst components
-%         thresholdBurstLabel.Position(2) = figSize(2) - 170;
-%         thresholdBurstSlider.Position(2) = figSize(2) - 170;
-%         thresholdBurstValueLabel.Position(2) = figSize(2) - 170;
-%         
-%         % Threshold Start-Stop components
-%         thresholdStartStopLabel.Position(2) = figSize(2) - 210;
-%         thresholdStartStopSlider.Position(2) = figSize(2) - 210;
-%         thresholdStartStopValueLabel.Position(2) = figSize(2) - 210;
-%         
-%         % Assay Types components
-%         assayTypesLabel.Position(2) = figSize(2) - 250;
-%         todayCheckbox.Position(2) = figSize(2) - 250;
-%         lastCheckbox.Position(2) = figSize(2) - 250;
-%         bestCheckbox.Position(2) = figSize(2) - 250;
-%         
-%         % Exclude Chips components
-%         excludeChipsLabel.Position(2) = figSize(2) - 290;
-%         excludeChipsEdit.Position(2) = figSize(2) - 290;
-%         
-%         % Exclude Run IDs components
-%         excludeRunIDsLabel.Position(2) = figSize(2) - 330;
-%         excludeRunIDsEdit.Position(2) = figSize(2) - 330;
-%         
-%         % Plot Graph button
-%         plotButton.Position(2) = figSize(2) - 370;
-%     end
+    plotNetButton = uibutton(fig, 'Text', 'Net settings', 'Position', [460, 50, 100, 30], 'ButtonPushedFcn', @plotNetButtonCallback);
+
     
     % Callback for processing data button
     function processActivityButtonCallback(~, ~)
@@ -401,10 +321,7 @@ function mainFunction
         fileID = fopen(settingsFileName, 'w');
         fprintf(fileID, jsonString);
         fclose(fileID);
-
-         % Call the Python script
-        pythonScript = 'plot_activityprop.py';
-        system(['python3 ', pythonScript]);
+        msgbox('settings saved')
 
 
     end
@@ -416,16 +333,19 @@ function mainFunction
         refDir = refDirEdit.Value;
         opDir = opDirEdit.Value;
         assayTypes = {};
+        % Check the checkboxes and add assay types to the cell array if checked
         if todayCheckbox.Value
-            assayTypes = {assayTypes;'Network Today'};
+            assayTypes{end+1} = 'today';
         end
-        if todayCheckbox.Value
-            assayTypes = {assayTypes;'Network '};
+        
+        if lastCheckbox.Value
+            assayTypes{end+1} = 'last';
         end
-        if todayCheckbox.Value
-            assayTypes = {assayTypes;'Network Today'};
+        
+        if bestCheckbox.Value
+            assayTypes{end+1} = 'best';
         end
-        assayTypes = [todayCheckbox.Value, lastCheckbox.Value, bestCheckbox.Value];
+        %assayTypes = [todayCheckbox.Value, lastCheckbox.Value, bestCheckbox.Value];
         excludeChips = excludeChipsEdit.Value;
         excludeRunIDs = excludeRunIDsEdit.Value;
         % Create a struct to hold the settings
@@ -445,6 +365,7 @@ function mainFunction
         fileID = fopen(settingsFileName, 'w');
         fprintf(fileID, jsonString);
         fclose(fileID);
+        msgbox('Settings saved')
 
     end
 

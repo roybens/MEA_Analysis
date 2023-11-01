@@ -1,8 +1,10 @@
 **.asv
 **.txt
 **__pycache__**
-SpikeSortingPipeline/path/
-SpikeSortingPipeline/sorting_intermediate/*
-
-
-
+IPNAnalysis/AnalyzedData/*
+IPNAnalysis/sorting_intermediate/*
+IPNAnalysis/Electrodes/*
+AnalyzedData/*
+**.mat
+.vscode
+**.pkl

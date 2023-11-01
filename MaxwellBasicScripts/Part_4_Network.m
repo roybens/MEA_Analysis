@@ -2,10 +2,10 @@ clear
 close all
 
 % set paths to the Network recording file
-pathFileNetwork =  '/mnt/disk15tb/jonathan/Syngap3/Syngap3/230109/16657/Network/000178/data.raw.h5';
+pathFileNetwork =  '/mnt/disk15tb/primaryneurondata/M06844/Network/000051/data.raw.h5';
 
 % select which well to analyze (an integer between 1 and 6; leave as 1 for MaxOne data)
-wellID = 1;
+wellID = 2;
 
 % create fileManager object for the Network recording
 networkData = mxw.fileManager(pathFileNetwork,wellID);
@@ -15,6 +15,8 @@ xlabel('X');
 ylabel('Y');
 title('Coordinate Plot');
 grid on;
+
+
 %% Network Activity and Burst Detection
 % Next, we use a function that converts the spike times from frame numbers into 
 % seconds, referenced to the start time of the recording. The spike times from 
@@ -36,6 +38,20 @@ xlim([0 round(max(relativeSpikeTimes.time)/4)])
 ylim([1 max(relativeSpikeTimes.channel)])
 box off;
 
+refDir='/home/mmp/Documents/SPTAN1_MaxTwo.xlsx';
+T = readtable(refDir);
+run_ids = unique(T.(4));
+
+scan_runid = 14;
+idx = T.Run_ == scan_runid;
+
+wellsIDs = T.Wells_Recorded(idx);
+
+wellsIDs = strsplit(wellsIDs{1},',');
+
+wellsIDs = cellfun(@str2double,wellsIDs);
+neuronTypes = [T.(7)];
+neuronSourceType=neuronTypes(i)
 % In a well-interconnected neuronal culture, bursts of activity will often be 
 % visible by eye. In order to detect them automatically and to quantify their 
 % amplitude, we take a three-step approach. First, we bin all the spike times 
@@ -63,16 +79,47 @@ kernel = kernel*binSize;
 firingRate = conv(binnedTimes,kernel,'same');
 firingRate = firingRate/binSize;
 firingRateNorm = firingRate/length(unique(networkData.rawMap.spikes.channel)); 
-save('NetworkAct16795.mat',"firingRateNorm")
+%save('NetworkAct16795.mat',"firingRateNorm")
 % Let's plot the Network Activity below the raster. 
 
 subplot(2,1,2);
 plot(timeVector,firingRateNorm,'Color','#135ba3')
 xlim([0 round(max(relativeSpikeTimes.time)/4)])
+ylim([0 2])
 ylabel('Firing Rate [Hz]')
 xlabel('Time [s]')
 title('Network Activity','fontsize',11)
 hold on;
+thresholdBurst = 1; % in rms of the firing rate
+minPeakDist =3.0;
+rmsFiringRate = mxw.util.rms(firingRateNorm);
+
+[peaks, peakIndices] = findpeaks(firingRateNorm,timeVector,'MinPeakHeight',...
+    thresholdBurst*rmsFiringRate, 'MinPeakDistance', minPeakDist);
+% 
+% [tmpTimes, burstPeakValues] = mxw.util.findPeaks(firingRateNorm,...
+%     'PositiveThreshold', thresholdBurst*rmsFiringRate);
+% burstPeakTimes = timeVector(peakIndices);
+% burstPeakDiffTimes = diff(burstPeakTimes);
+% burstPeakDiffAmpValues =  diff(burstPeakValues);
+% indices = find(burstPeakDiff<minPeakDist);
+% for i = 1:length(indices)
+%     idx = indices(i);
+%     if burstPeakDiffAmpValues(i) < 0
+%         
+%     end
+% 
+% end
+% burstPeakValues(indices)=[];
+% burstPeakTimes(indices)=[];
+plot(thresholdBurst*rmsFiringRate*ones(ceil(timeVector(end)),1))
+%plot(burstPeakTimes,burstPeakValues,'or')
+plot(peakIndices,peaks,'or')
+
+saveas(gcf,'~/Documents/Images_25sep/NOrmalNetwork.pdf','pdf')
+
+
+
 
 electrodesInterest = [9703, 13043, 15450, 13186, 13879, 16705, 12284, 9744, 9767, 12357, 15153, 12357, 12357, 8422, 13385, 13254, 13277, 7291, 11634, 5065, 5055, 5292, 19424, 5519, 6337, 8759, 11950, 16913, 8376, 18524, 16785, 16124, 18087, 23103, 8576, 17640, 21399, 688, 24879, 9416, 22207, 24019, 5279, 2637, 11748, 13687, 16435, 1134, 2838, 10051, 19387, 2844, 17369, 22076, 13259, 5261, 24037, 9515, 22938, 26229, 12177, 25991, 20523, 8269, 10406, 25925, 76, 605, 8957, 2380, 4695, 22919, 21601, 8730, 9979, 4580, 10654, 20343, 21288, 20164, 3342, 24681, 18797, 26330, 13339, 25029, 11064, 3907, 12622, 21417, 1467, 21300, 1050, 7846, 20546, 7370, 7370, 19671, 19671, 18159, 26324, 11101, 21865, 2340, 25401, 21004, 6477, 2553, 5404, 24738, 9568, 12001, 769, 14174, 9572, 16613, 7815, 6494, 12666, 9781, 13964, 4728, 5187, 11767, 2730, 4065];
 keepChannels = networkData.rawMap.map.channel(ismember(networkData.rawMap.map.electrode,electrodesInterest));
