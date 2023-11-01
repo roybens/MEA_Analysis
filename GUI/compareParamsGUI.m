@@ -1,8 +1,11 @@
 function mainFunction
     % Create a uifigure window
+    addpath('../../MEA_Analysis/');
+    addpath('../../MxW_Matlab_22.2/');
     fig = uifigure('Name', 'Plot Parameters', 'Position', [100, 100, 700, 400]);
 
     % Create UI components
+  % Create labels and edit fields instead of sliders
     dataDirLabel = uilabel(fig, 'Text', 'Specific DIV Path:', 'Position', [50, 300, 120, 20]);
     dataDirEdit = uieditfield(fig, 'Position', [180, 300, 170, 25]);
 
@@ -13,28 +16,23 @@ function mainFunction
     opDirEdit = uieditfield(fig, 'Position', [180, 200, 170, 25]);
 
     gaussianSigmaLabel = uilabel(fig, 'Text', 'Gaussian Sigma:', 'Position', [400, 300, 100, 20]);
-    gaussianSigmaSlider = uislider(fig, 'Position', [500, 300, 100, 20], 'Limits', [0, 1], 'Value', 0.18, 'ValueChangedFcn', @gaussianSigmaCallback);
-    gaussianSigmaValueLabel = uilabel(fig, 'Text', '0.18', 'Position', [610, 300, 30, 20]);
+    gaussianSigmaEdit = uieditfield(fig, 'numeric', 'Position', [500, 300, 100, 20], 'Value', 0.18);
 
     binSizeLabel = uilabel(fig, 'Text', 'Bin Size:', 'Position', [400, 250, 100, 20]);
-    binSizeSlider = uislider(fig, 'Position', [500, 250, 100, 20], 'Limits', [0, 1], 'Value', 0.3, 'ValueChangedFcn', @binSizeCallback);
-    binSizeValueLabel = uilabel(fig, 'Text', '0.3', 'Position', [610, 250, 30, 20]);
+    binSizeEdit = uieditfield(fig, 'numeric', 'Position', [500, 250, 100, 20], 'Value', 0.3);
 
     minPeakDistanceLabel = uilabel(fig, 'Text', 'Min Peak Distance:', 'Position', [400, 200, 120, 20]);
-    minPeakDistanceSlider = uislider(fig, 'Position', [500, 200, 100, 20], 'Limits', [0, 1], 'Value', 0.025, 'ValueChangedFcn', @minPeakDistanceCallback);
-    minPeakDistanceValueLabel = uilabel(fig, 'Text', '0.025', 'Position', [610, 200, 30, 20]);
+    minPeakDistanceEdit = uieditfield(fig, 'numeric', 'Position', [500, 200, 100, 20], 'Value', 0.025);
 
     thresholdBurstLabel = uilabel(fig, 'Text', 'Threshold Burst:', 'Position', [400, 150, 120, 20]);
-    thresholdBurstSlider = uislider(fig, 'Position', [500, 150, 100, 20], 'Limits', [0, 2], 'Value', 1.2, 'ValueChangedFcn', @thresholdBurstCallback);
-    thresholdBurstValueLabel = uilabel(fig, 'Text', '1.2', 'Position', [610, 150, 30, 20]);
+    thresholdBurstEdit = uieditfield(fig, 'numeric', 'Position', [500, 150, 100, 20], 'Value', 1.2);
 
     thresholdStartStopLabel = uilabel(fig, 'Text', 'Threshold Start/Stop:', 'Position', [400, 100, 120, 20]);
-    thresholdStartStopSlider = uislider(fig, 'Position', [500, 100, 100, 20], 'Limits', [0, 1], 'Value', 0.3, 'ValueChangedFcn', @thresholdStartStopCallback);
-    thresholdStartStopValueLabel = uilabel(fig, 'Text', '0.3', 'Position', [610, 100, 30, 20]);
+    thresholdStartStopEdit = uieditfield(fig, 'numeric', 'Position', [500, 100, 100, 20], 'Value', 0.3);
 
-    processButton = uibutton(fig, 'Text', 'Process Data', 'Position', [50, 150, 100, 30], 'ButtonPushedFcn', @processButtonCallback);
-    clearButton = uibutton(fig, 'Text', 'Clear', 'Position', [175, 150, 100, 30], 'ButtonPushedFcn', @clearButtonCallback);
-    quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [300, 150, 100, 30], 'ButtonPushedFcn', @quitButtonCallback);
+    processButton = uibutton(fig, 'Text', 'Process Data', 'Position', [50, 150, 100, 30],'ButtonPushedFcn',@processButtonCallback);     % Add your callback function
+    clearButton = uibutton(fig, 'Text', 'Clear', 'Position', [175, 150, 100, 30],'ButtonPushedFcn',@clearButtonCallback);  % Add your callback function
+    quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [300, 150, 100, 30],'ButtonPushedFcn',@quitButtonCallback);  % Add your callback function
 
     % Event handler for the process button
     function processButtonCallback(~, ~)
@@ -44,11 +42,11 @@ function mainFunction
         opDir = opDirEdit.Value;
 
         % Get the values from the sliders
-        gaussianSigma = gaussianSigmaSlider.Value;
-        binSize = binSizeSlider.Value;
-        minPeakDistance = minPeakDistanceSlider.Value;
-        thresholdBurst = thresholdBurstSlider.Value;
-        thresholdStartStop = thresholdStartStopSlider.Value;
+        gaussianSigma = gaussianSigmaEdit.Value;
+        binSize = binSizeEdit.Value;
+        minPeakDistance = minPeakDistanceEdit.Value;
+        thresholdBurst = thresholdBurstEdit.Value;
+        thresholdStartStop = thresholdStartStopEdit.Value;
 
         % Validate the fields
         if isempty(dataDirPath) || isempty(refDir) || isempty(opDir)
@@ -96,6 +94,13 @@ function mainFunction
         dataDirEdit.Value = '';
         refDirEdit.Value = '';
         opDirEdit.Value = '';
+        % Reset the numeric fields to default values
+        gaussianSigmaEdit.Value = 0.18;
+        binSizeEdit.Value = 0.3;
+        minPeakDistanceEdit.Value = 0.025;
+        thresholdBurstEdit.Value = 1.2;
+        thresholdStartStopEdit.Value = 0.3;
+
     end
 
     % Event handler for the quit button
@@ -104,33 +109,4 @@ function mainFunction
         close(fig);
     end
 
-    % Callback for Gaussian Sigma slider
-    function gaussianSigmaCallback(~, event)
-        value = event.Value;
-        gaussianSigmaValueLabel.Text = num2str(value);
     end
-
-    % Callback for Bin Size slider
-    function binSizeCallback(~, event)
-        value = event.Value;
-        binSizeValueLabel.Text = num2str(value);
-    end
-
-    % Callback for Min Peak Distance slider
-    function minPeakDistanceCallback(~, event)
-        value = event.Value;
-        minPeakDistanceValueLabel.Text = num2str(value);
-    end
-
-    % Callback for Threshold Burst slider
-    function thresholdBurstCallback(~, event)
-        value = event.Value;
-        thresholdBurstValueLabel.Text = num2str(value);
-    end
-    
-    % Callback for Threshold Start/Stop slider
-    function thresholdStartStopCallback(~, event)
-        value = event.Value;
-        thresholdStartStopValueLabel.Text = num2str(value);
-    end
-end

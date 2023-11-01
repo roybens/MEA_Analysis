@@ -13,23 +13,23 @@ fileDir = [pwd,'/',mfilename];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% settings
 auto_set_path = false; % turn this on to skip setting file paths. this requires all the input files be in the correct paths
-project_name = 'CDKL5';
+project_name = 'KCNT1_2';
 
 % set DIV 0 date
 
-div0 = '03/07/2023'; % format: MM/DD/YYYY
+div0 = '08/08/2023'; % format: MM/DD/YYYY
 
 %%%%% ignore settings below if choose to use auto path setting %%%%%
 
 % manually set path to folder containing subfolders that contain h5 files
 %parentFolderPath = '/mnt/harddrive-2/ADNP/';
-parentFolderPath = '/mnt/harddrive-2/CDKL5_copy/';
+parentFolderPath = '/mnt/disk15tb/primaryneurondata/KCNT1_2/';
 % set path to excel file that has the reference note
 %refDir = '/home/jonathan/Documents/Scripts/Python/ADNP_Notes.xlsx';
-refDir = '/home/mmp/Documents/CDKL5_Notes.xlsx';
+refDir = '/mnt/disk15tb/paula/Main_DA_Projects/Ref_Files/KCNT1_2_data/KCNT1_2_ref.xlsx';
 % set output folder
 %opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/ADNP/';
-opDir = '/home/mmp/Documents/script_output/CDKL5/';
+opDir = '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/kcnt1_2_THIRD/';
 
 % setting ends here
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
