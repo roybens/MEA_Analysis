@@ -6,18 +6,23 @@ from scipy import stats
 import pdb
 # This script reads the compiled csv made by compileNetworkFiles_JL.m and a reference note
 # to plot the wt vs. het burst properties overdays
-
+import matplotlib.font_manager as fm
+import matplotlib
+plt.rc('font', family='arial')
+plt.rcParams.update({'font.size': 12})
+matplotlib.use('cairo')
+font = fm.FontProperties(family = 'arial')
 # setting starts here
 ###############################################################################################################################################
 
 # set data and reference note dir
 #data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/Network_outputs/Compiled_Networks.csv'
-data_f = '/home/mmp/Documents/test_output/Syngap3_withoutss/Network_outputs/Compiled_Networks.csv'
+data_f = '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/kcnt1_2_THIRD/Network_outputs/Compiled_Networks.csv'
+#data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/ActivityScan_outputs/Compiled_ActivityScan.csv'
+reference_f = '/mnt/disk15tb/paula/Main_DA_Projects/Ref_Files/KCNT1_2_data/KCNT1_2_ref.xlsx'
 #reference_f = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx'
-reference_f = '/home/mmp/Documents/Syngap3_Notes.xlsx'
 # set plot saving dir
-#opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
-opDir = '/home/mmp/Documents/test_output/Syngap3_withoutss/'
+opDir = '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/kcnt1_2_THIRD/'
 
 
 # set exclude lists
@@ -174,7 +179,7 @@ def plot_network_graph(working_df,output_type, assay_type):
     for i in range(len(x_wt)):
         wt_scatter = ax.scatter(x_wt[i]+np.zeros(y_wt[i].size), y_wt[i], color='black', label='WT', s=20)
     for i in range(len(x_het)):
-        het_scatter = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='HET', s=20)
+        het_scatter = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='KCNT1', s=20)
     for i in range(len(x_wt)):
         # wt_data = [n for n in y_wt[i] if np.isfinite(n)]
         # het_data = [n for n in y_het[i] if np.isfinite(n)]
@@ -213,8 +218,8 @@ def plot_network_graph(working_df,output_type, assay_type):
     plt.axis([xmin, total_div + 1, ymin, ymax])
 
     #save plot
-    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.pdf', dpi=300)
-
+    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.svg', dpi=300,format='svg')
+    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.pdf', dpi=300,format='pdf')
 #exclude chip ids and runs that are in the exclude list
 exclude_l = []
 for i in df.index:

@@ -30,10 +30,17 @@ function [] = compileNetworkFiles(data)
     end
     
     % make output folder
-    if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/')))
-        mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/'));
+    if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/Plot60s')))
+        mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/Plot60s/'));
     end
-    
+       % make output folder
+    if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/Plot120s')))
+        mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/Plot120s'));
+    end
+       % make output folder
+    if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s')))
+        mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s'));
+    end
 %     %open the log file 
 %     logFile = fopen(append(opDir,'/log_file.txt'),'A');
 % 
@@ -53,8 +60,10 @@ function [] = compileNetworkFiles(data)
     % create table elements
     Run_ID = [];
     DIV = [];
+    Well =[];
+    NeuronType={};
     Time = [];
-    Chip_ID = [];
+    Chip_ID = {};
     IBI = [];
     Burst_Peak = [];
     Number_Bursts = [];
@@ -73,6 +82,7 @@ function [] = compileNetworkFiles(data)
         end
         % Update progress, report current estimate
         d.Value = k/length(theFiles);
+        
         % reset recording info
         scan_runID = nan;
         scan_chipID = nan;
@@ -84,20 +94,41 @@ function [] = compileNetworkFiles(data)
         hd5Date = nan; 
         scan_div = nan;
     
+
+        % extract dir informationfileNames
         baseFileName = theFiles(k).name;%pathFileNetwork
         pathFileNetwork = fullfile(theFiles(k).folder, baseFileName);
-        % extract dir informationfileNames
+        
         fileDirParts = strsplit(pathFileNetwork, filesep); % split dir into elements
         scan_runID = str2double(fileDirParts{end-1}); % extract runID
         scan_runID_text = fileDirParts{end-1};
-        scan_chipID = str2double(fileDirParts{end-3}); % extract chipID
+        scan_chipID = fileDirParts{end-3}; % extract chipID
     
         if ismember(scan_runID,run_ids)
             fprintf(1, 'Now reading %s\n', pathFileNetwork);
             fprintf(logFile, 'Now reading %s\n', pathFileNetwork);
             % create fileManager object for the Network recording
+            
+            idx = T.Run_ == scan_runID;
+
+            wellsIDs = T.Wells_Recorded(idx);
+
+            if ismember(',', wellsIDs{1})
+            wellsIDs = strsplit(wellsIDs{1}, ',');
+            wellsIDs = cellfun(@str2double,wellsIDs);
+            end
+
+            
+            neuronTypes = T.NeuronSource(idx);
+            if ismember(',', neuronTypes{1})
+            neuronTypes = strsplit(neuronTypes{1}, ',');
+            end
+            for z = 1:length(wellsIDs)
+            wellID=wellsIDs(z);
+            fprintf(logFile, 'Processing Well %d\n', wellID);
+            neuronSourceType = neuronTypes(z);
             try
-                networkData = mxw.fileManager(pathFileNetwork);
+                networkData = mxw.fileManager(pathFileNetwork,wellID);
             catch
                 error_l = [error_l string(scan_runID_text)];
                 continue
@@ -177,16 +208,18 @@ function [] = compileNetworkFiles(data)
             % append information to table elements
             Run_ID = [Run_ID scan_runID];
             DIV = [DIV scan_div];
+            Well = [Well wellID];
+            NeuronType{end+1} = neuronSourceType{1};
             Time = [Time hd5Date];
-            Chip_ID = [Chip_ID scan_chipID];
+            Chip_ID{end+1}=scan_chipID;
             IBI = [IBI meanIBI];
             Burst_Peak = [Burst_Peak meanBurstPeak];
             Number_Bursts = [Number_Bursts nBursts];
             Spike_per_Burst = [Spike_per_Burst meanSpikesPerBurst];
-            runIDstemp = run_id_and_type(:,1).Variables;
-            types = run_id_and_type(:,2).Variables; % to do fix columnnames
-            index = find(runIDstemp == scan_runID);
-            targetType = types{index};
+%             runIDstemp = run_id_and_type(:,1).Variables;
+%             types = run_id_and_type(:,2).Variables; % to do fix columnnames
+%             index = find(runIDstemp == scan_runID);
+%             targetType = types{index};
             % plot results
                 figure('Color','w','Position',[0 0 400 800],'Visible','off');
                 subplot(2,1,1);
@@ -202,10 +235,23 @@ function [] = compileNetworkFiles(data)
                 hold on;
                 plot(networkStats.maxAmplitudesTimes,networkStats.maxAmplitudesValues,'or')
                 %xlim([0 round(max(relativeSpikeTimes.time)/4)])
+                xlim([0 60])
+                ylim([0 20])
+                saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot60s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+                
                 xlim([0 120])
                 ylim([0 20])
-                saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',targetType,'.png'))
+                saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot120s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+                
+                %savefig(appen
+                xlim([0 300])
+                ylim([0 20])
+                saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
                 %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.fig'))
+            end
+        end
+        if k==2
+            a=0;
         end
     end
     if d.CancelRequested
@@ -217,6 +263,8 @@ function [] = compileNetworkFiles(data)
     % convert row list to columns
     Run_ID = Run_ID';
     DIV = DIV';
+    Well = Well';
+    NeuronType= NeuronType';
     Time = Time';
     Chip_ID = Chip_ID';
     IBI = IBI';
@@ -224,7 +272,7 @@ function [] = compileNetworkFiles(data)
     Number_Bursts = Number_Bursts';
     Spike_per_Burst = Spike_per_Burst';
     % make table
-    T = table(Run_ID,DIV,Time,Chip_ID,IBI,Burst_Peak,Number_Bursts,Spike_per_Burst);
+    T = table(Run_ID,DIV,Well,NeuronType,Time,Chip_ID,IBI,Burst_Peak,Number_Bursts,Spike_per_Burst);
     T = sortrows(T,"Run_ID","ascend");
     writetable(T, fullfile(opDir,'Network_outputs/Compiled_Networks.csv'));
     

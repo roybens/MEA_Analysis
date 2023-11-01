@@ -2,7 +2,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+from scipy import stats
 
+#plotting options
+
+import matplotlib.font_manager as fm
+import matplotlib
+plt.rc('font', family='arial')
+plt.rcParams.update({'font.size': 12})
+matplotlib.use('cairo')
+font = fm.FontProperties(family = 'arial')
 # This script reads the compiled csv made by compileNetworkFiles_JL.m and a reference note
 # to plot the wt vs. het burst properties overdays
 
@@ -10,12 +19,12 @@ import os
 ###############################################################################################################################################
 
 # set data and reference note dir
-data_f = '/home/mmp/Documents/script_output/CDKL5/ActivityScan_outputs/Compiled_ActivityScan.csv'
+data_f = '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/kcnt1_2_THIRD/ActivityScan_outputs/Compiled_ActivityScan.csv'
 #data_f = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/ActivityScan_outputs/Compiled_ActivityScan.csv'
-reference_f = '/home/mmp/Documents/CDKL5_Notes.xlsx'
+reference_f = '/mnt/disk15tb/paula/Main_DA_Projects/Ref_Files/KCNT1_2_data/KCNT1_2_ref.xlsx'
 #reference_f = '/home/jonathan/Documents/Scripts/Python/CDKL5_Notes.xlsx'
 # set plot saving dir
-opDir = '/home/mmp/Documents/script_output/CDKL5/'
+opDir = '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/kcnt1_2_THIRD/'
 #opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
 
 # set exclude lists
@@ -95,6 +104,19 @@ def plot_network_graph(working_df,output_type, assay_type):
     #data series
     y_wt = wt
     y_het = het
+    p_values=[]
+    mean_wt = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_wt]
+    yerr_wt = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_wt]
+    n_wt = [len(yi) for yi in y_wt]
+    mean_het = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_het]
+    yerr_het = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_het]
+    n_het = [len(yi) for yi in y_het]
+    for i in range(len(mean_wt)):
+
+        t_stat,p_value = stats.ttest_ind_from_stats(mean_wt[i],yerr_wt[i],n_wt[i],
+                                                    
+                                                    mean_het[i],yerr_het[i],n_het[i])
+        p_values.append(p_value)
     #plotting
     fig, ax = plt.subplots()
     #plot WT bar
@@ -119,8 +141,30 @@ def plot_network_graph(working_df,output_type, assay_type):
     for i in range(len(x_wt)):
         wt_scatter = ax.scatter(x_wt[i]+np.zeros(y_wt[i].size), y_wt[i], color='black', label='WT', s=20)
     for i in range(len(x_het)):
-        het_scatter = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='HET', s=20)
+        het_scatter = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='KCNT1', s=20)
+    for i in range(len(x_wt)):
+        # wt_data = [n for n in y_wt[i] if np.isfinite(n)]
+        # het_data = [n for n in y_het[i] if np.isfinite(n)]
+        # t_stat, p_value = stats.ttest_ind(wt_data, het_data)
 
+        maxim = max(np.max(y_wt[i]), np.max(y_het[i]))
+        p_value = p_values[i]
+        if p_value > 0.05:
+            ax.plot([x_wt[i], x_het[i]], [maxim + 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "ns", ha='center', va='bottom', fontsize=10)
+            continue
+        elif p_value <= 0.001 :
+            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "***", ha='center', va='bottom', fontsize=10)
+            continue
+        elif p_value <= 0.01 :
+            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "**", ha='center', va='bottom', fontsize=10)
+            continue
+        elif p_value <= 0.05 :
+            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
+            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "*", ha='center', va='bottom', fontsize=10)
+            continue
     #axis scaling
     xmin = 0
     xmax = (max(df['DIV']) - xmin)*1.25
@@ -135,8 +179,8 @@ def plot_network_graph(working_df,output_type, assay_type):
     plt.axis([xmin, total_div + 1, ymin, ymax])
 
     #save plot
-    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.png', dpi=300)
-
+    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.svg', dpi=300,format='svg')
+    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.pdf', dpi=300,format='pdf')
 #exclude chip ids and runs that are in the exclude list
 exclude_l = []
 for i in df.index:
