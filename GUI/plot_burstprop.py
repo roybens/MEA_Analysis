@@ -1,16 +1,7 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import os
-from scipy import stats
-import json
 
 # This script reads the compiled csv made by compileNetworkFiles_JL.m and a reference note
 # to plot the wt vs. het burst properties overdays
 
-# setting starts here
-###############################################################################################################################################
-
 
 
 import numpy as np
@@ -18,6 +9,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 from scipy import stats
+import pdb
+import json
 # This script reads the compiled csv made by compileNetworkFiles_JL.m and a reference note
 # to plot the wt vs. het burst properties overdays
 
@@ -34,27 +27,37 @@ reference_f = settings_data['refDir']
 
 #opDir = '/home/jonathan/Documents/Scripts/Matlab/scripts_output/CDKL5/'
 
+input_string1 = input("Enter the assay type that need to be plotted")
 # set exclude lists
-if settings_data['excludeChips'] != '':
-    chip_exclude = settings_data['excludeChips']
-else :
-    chip_exclude =[]
-if settings_data['excludeRunIDs']!='':
-    run_exclude = settings_data['excludeRunIDs']
+if not input_string1:
+    print("no  assay value inputted")
+    exit(0)
+elif len(input_string1.split(','))> 1:
+    assay_type_keywords = [x.lower().strip() for x in input_string1.split(',')]
 else:
+    assay_type_keywords=[input_string1.lower().strip()]
+
+input_string2 = input("Enter comma-separated chip ids to exclude (hit enter if none )")
+# set exclude lists
+if not input_string2:
+    chip_exclude =[]
+else :
+    try:
+        chip_exclude =[x for x in input_string2.split(',')]
+        print(f"chips being excluded are {chip_exclude}")
+    except Exception:
+        print("Invalid input")
+input_string3 = input("Enter comma-separated run_ids to exclude (hit enter if none )")
+# set exclude lists
+if not input_string3:
     run_exclude =[]
-#print(chip_exclude)
-#print(run_exclude)
-#if chip_exclude[0] =='':
-    #  chip_exclude = []
-#if run_exclude[0] =='':
-    #  run_exclude =[]
+else :
+    try:
+        chip_exclude =[x for x in input_string3.split(',')]
+        print(f"chips being excluded are {chip_exclude}")
+    except Exception:
+        print("Invalid input")
 
-
-# set the keywords for assay type
-assay_type_keywords = settings_data['assayTypes']
-#print(assay_type_keywords)
-#print(type(assay_type_keywords))
 # setting ends here
 ###############################################################################################################################################
 
@@ -87,16 +90,13 @@ for i in data_df.index:
         genotype = str(temp_df['Neuron Source'].unique()[0])
         genotype_l.append(genotype)
 assay_l = [x.lower() for x in assay_l]
-genotype_l = [x.lower() for x in genotype_l]
 
-df = data_df.assign(Assay=assay_l, Genotype=genotype_l)
+
+df = data_df.assign(Assay=assay_l)
 
 def plot_network_graph(working_df,output_type, assay_type):
-    #extract data based on assay_type
-    #print(working_df)
-    #print(assay_type)
-    df = working_df[working_df['Assay'].str.lower().str.contains(assay_type.lower())]
-    #print(df)
+     #pdb.set_trace()
+    df = working_df[working_df['Assay'].str.lower().str.contains(assay_type.lower())]  ## to do : to see if it really works on;y for network today ..or n , e ,t any character
     #create assay title
     assay_title = 'Network ' + assay_type.title()
     #assay_type = df['Assay'].unique()[0].title()
@@ -109,150 +109,152 @@ def plot_network_graph(working_df,output_type, assay_type):
         title = 'Number Bursts'
     if output_type == 'Spike_per_Burst':
         title = 'Spike per Burst'
-
+    if output_type == 'Active':
+        title = 'Active Electrode %'
     #div array
+  # Find unique values in 'DIV' column
     div = df['DIV'].unique()
     total_div = len(div)
-    #output array
-    wt = []
-    het = []
-    for i in div: #fill data from data frame
-        temp_df = df.loc[(df['DIV'] == i) & (df['Genotype'] == 'wt cortex')]
-        wt.append(np.array(temp_df[output_type]))
-        temp_df = df.loc[(df['DIV'] == i) & (df['Genotype'] == 'het cortex')]
-        het.append(np.array(temp_df[output_type]))
 
-    ##plot
-    # bar width
-    w = total_div/32
-    #create x-coordinates of bars
-    x_day = [] #creat x-axis values
-    for i in range(0,len(div)):
-        x_day.append(int(div[i]))
-    x_wt = []
-    x_het = []   
-    x_d = list(range(1,total_div+1)) #create x-axis bar centers
-    for i in x_d:
-        x_wt.append(i-w*.75)
-        x_het.append(i+w*.75)
-    #data series
-    y_wt = wt
-    y_het = het
-    file_path = title + '_y_wt.txt'
-    y_wt_list = [list(row) for row in y_wt]
+    # Find unique values in 'Genotype' column and count them
+    unique_genotypes = df['NeuronType'].unique()
+    total_genotypes = len(unique_genotypes)
 
-    with open(file_path, 'w') as f:
-        for row in y_wt_list:
-            f.write('\t'.join(map(str, row)) + '\n')
+    # Print the number of unique genotypes
+    print(f"Number of unique Genotypes: {total_genotypes}")
+
+    # Initialize output arrays for each unique genotype
+    output_arrays = {genotype: [] for genotype in unique_genotypes}
+    print(unique_genotypes)
+    # Fill data from data frame
+    for i in div:
+        for genotype in unique_genotypes:
+            temp_df = df.loc[(df['DIV'] == i) & (df['NeuronType'] == genotype)]
+            output_arrays[genotype].append(np.array(temp_df[output_type]))
+
+    # Plotting setup
+    w = total_div/32  # bar width
+
+    # Create x-coordinates of bars
+    x_day = [int(d) for d in div]
+    x_genotype = {genotype: [] for genotype in unique_genotypes}
+    x_d = list(range(1, total_div + 1))
     
-    file_path = title + '_y_het.txt'
+    # Assign x-coordinates for each genotype
+    for i, genotype in enumerate(unique_genotypes):
+        for x in x_d:
+            x_genotype[genotype].append(x + w * (i - len(unique_genotypes) / 2))
 
-    y_het_list = [list(row) for row in y_het]
-
-    with open(file_path, 'w') as f:
-        for row in y_het_list:
-            f.write('\t'.join(map(str, row)) + '\n')
-    #do some ttest
-   
-    #plotting
+    # Initialize plot
     fig, ax = plt.subplots()
-    #plot WT bar
-    mean_wt = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_wt]
-    yerr_wt = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_wt]
-    n_wt = [len(yi) for yi in y_wt]
-    mean_het = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_het]
-    yerr_het = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_het]
-    n_het = [len(yi) for yi in y_het]
-    output_file = title + '_wt_statistics.txt'
-    with open(output_file, 'w') as file:
-        file.write("WT Statistics\n")
-        file.write("Mean: " + ", ".join([str(m) for m in mean_wt]) + "\n")
-        file.write("SEM: " + ", ".join([str(sem) for sem in yerr_wt]) + "\n")
-        file.write("Sample Size (n): " + ", ".join([str(n) for n in n_wt]) + "\n")
-    output_file = title + '_het_statistics.txt'
-    with open(output_file, 'w') as file:
-        file.write("HeT Statistics\n")
-        file.write("Mean: " + ", ".join([str(m) for m in mean_het]) + "\n")
-        file.write("SEM: " + ", ".join([str(sem) for sem in yerr_het]) + "\n")
-        file.write("Sample Size (n): " + ", ".join([str(n) for n in n_het]) + "\n")
-    
-    p_values =[]
+    # Generate a list of distinct colors based on the number of genotypes
+    colors = [plt.colormaps['Set1'](i) for i in np.linspace(0, 1, len(unique_genotypes))]# Using a colormap to generate colors
+    colors2 = [plt.colormaps['Set2'](i) for i in np.linspace(0, 1, len(unique_genotypes))]#
+    # Plot data for each genotype
+    for i,genotype in enumerate(unique_genotypes):
+        y_data = output_arrays[genotype]
 
-    for i in range(len(mean_wt)):
+        # Calculate statistics
+        mean_data = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_data]
+        yerr_data = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_data]
+        n_data = [len(yi) for yi in y_data]
 
-        t_stat,p_value = stats.ttest_ind_from_stats(mean_wt[i],yerr_wt[i],n_wt[i],
-                                                    
-                                                    mean_het[i],yerr_het[i],n_het[i])
-        p_values.append(p_value)
-    
-    ax.bar(x_wt, 
-            height=mean_wt,
-            yerr= yerr_wt,    # error bars
-            capsize=3, # error bar cap width in points
-            width=w,    # bar width
-            color=(0,0,0,0),  # face color transparent
+        # Save statistics to file
+        output_file = f"intermediate_files/{title}_{genotype}_statistics.txt"
+        with open(output_file, 'w') as file:
+            file.write(f"{genotype} Statistics\n")
+            file.write("Mean: " + ", ".join([str(m) for m in mean_data]) + "\n")
+            file.write("SEM: " + ", ".join([str(sem) for sem in yerr_data]) + "\n")
+            file.write("Sample Size (n): " + ", ".join([str(n) for n in n_data]) + "\n")
+
+        # Plot bars
+        ax.bar(x_genotype[genotype],
+            height=mean_data,
+            yerr=yerr_data,
+            capsize=3,
+            width=w,
+            color=colors[i],
             edgecolor='black',
-            ecolor='black')
-    #plot HET bar
-    ax.bar(x_het, 
-            height=mean_het,
-            yerr=yerr_het,    # error bars
-            capsize=3, # error bar cap width in points
-            width=w,    # bar width
-            color=(0,0,0,0),  # face color transparent
-            edgecolor='red',
-            ecolor='red')
-    #plot wt and het scatters
-    for i in range(len(x_wt)):
-        wt_scatter = ax.scatter(x_wt[i]+np.zeros(y_wt[i].size), y_wt[i], color='black', label='WT', s=20)
-    for i in range(len(x_het)):
-        het_scatter = ax.scatter(x_het[i]+np.zeros(y_het[i].size), y_het[i], color='red', label='HET', s=20)
-    for i in range(len(x_wt)):
-        # wt_data = [n for n in y_wt[i] if np.isfinite(n)]
-        # het_data = [n for n in y_het[i] if np.isfinite(n)]
-        # t_stat, p_value = stats.ttest_ind(wt_data, het_data)
+            ecolor='black',label=genotype)
 
-        maxim = max(np.max(y_wt[i]), np.max(y_het[i]))
-        p_value = p_values[i]
-        if p_value > 0.05:
-            ax.plot([x_wt[i], x_het[i]], [maxim + 0.1*maxim] * 2, 'k', linewidth=1.5)
-            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "ns", ha='center', va='bottom', fontsize=10)
-            continue
-        elif p_value <= 0.001 :
-            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
-            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "***", ha='center', va='bottom', fontsize=10)
-            continue
-        elif p_value <= 0.01 :
-            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
-            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "**", ha='center', va='bottom', fontsize=10)
-            continue
-        elif p_value <= 0.05 :
-            ax.plot([x_wt[i], x_het[i]], [maxim+ 0.1*maxim] * 2, 'k', linewidth=1.5)
-            ax.text((x_wt[i] + x_het[i]) / 2, maxim + 0.15*maxim, "*", ha='center', va='bottom', fontsize=10)
-            continue
-    df.replace(np.inf,)
-    #axis scaling
+        # Plot scatter points
+        for j in range(len(x_genotype[genotype])):
+            ax.scatter(x_genotype[genotype][j] + np.zeros(y_data[j].size), y_data[j], s=20,color=colors2[i])
+
+
+     # Function to adjust y-position for significance markers to avoid overlap
+    def adjust_ypos_for_sig_marker(y_pos, y_values, increment):
+        while any([abs(y - y_pos) < increment for y in y_values]):
+            y_pos += increment
+        return y_pos
+
+    # Function to draw lines between bars being compared
+    def draw_comparison_line(ax, x1, x2, y, h, col):
+        ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+
+    # # Calculate maximum y-value for plotting significance
+    # max_y = max([max(data) for data in output_arrays.values() if data.size > 0])
+    # increment = max_y * 0.1  # Increment to adjust y-position for significance markers
+
+    #Perform and plot t-tests between all pairs of genotypes
+    p_values = []
+    for i in range(len(x_d)):
+        maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
+        count = 1
+        for j, genotype1 in enumerate(unique_genotypes):
+            for k, genotype2 in enumerate(unique_genotypes):
+                if j < k:
+                    
+                    mean1, sem1, n1 = mean_data[j], yerr_data[j], n_data[j]
+                    mean2, sem2, n2 = mean_data[k], yerr_data[k], n_data[k]
+                    t_stat, p_value = stats.ttest_ind_from_stats(mean1, sem1, n1, mean2, sem2, n2)
+                    p_values.append(p_value)
+
+                    # Plot significance
+                    #maxim = max(np.max(output_arrays[genotype1][i]), np.max(output_arrays[genotype2][i]))
+                    x1, x2 = x_genotype[genotype1][i], x_genotype[genotype2][i]
+                    ax.plot([x1, x2], [maxim + 0.1*maxim*(count)] * 2, 'k', linewidth=1.5)
+                    sign = "***" if p_value <= 0.001 else "**" if p_value <= 0.01 else "*" if p_value <= 0.05 else "ns"
+                    
+                    ax.text((x1 + x2) / 2, maxim +0.1*maxim*(count), sign, ha='center', va='bottom', fontsize=10)
+                    count = count +1
+
+
+
+    # Axis scaling and labeling
     xmin = 0
     xmax = (max(df['DIV']) - xmin)*1.25
     ymin = 0
-    ymax = (max(df[output_type]) - ymin)*1.25
-    #labelings
-    ax.legend(handles=[wt_scatter,het_scatter])
+    ymax = (max(df[output_type]) - ymin)*1.4
+
     plt.title(assay_title + ' ' + title)
     plt.xlabel('DIV')
     plt.ylabel(title)
     plt.xticks(x_d, x_day)
     plt.axis([xmin, total_div + 1, ymin, ymax])
+    plt.legend(title='type',loc='upper right')
 
-    #save plot
-    plt.savefig(opt_dir + '/' + assay_title + ' ' + title +'.pdf', dpi=300)
+
+    svg_dir = os.path.join(opt_dir, 'svg')
+    jpg_dir = os.path.join(opt_dir, 'jpg')
+
+    # Create the directories if they do not exist
+    os.makedirs(svg_dir, exist_ok=True)
+    os.makedirs(jpg_dir, exist_ok=True)
+
+    # Now, save the figures to the specified format and directory
+    plt.savefig(os.path.join(svg_dir, f"{assay_title} {title}.pdf"), dpi=300, format='svg')
+    plt.savefig(os.path.join(jpg_dir, f"{assay_title} {title}.jpg"), dpi=300, format='jpg')
+    return fig
 
 #exclude chip ids and runs that are in the exclude list
 exclude_l = []
 for i in df.index:
-    if df['Chip_ID'][i] in chip_exclude or df['Run_ID'][i] in run_exclude:
+    if df['ID'][i] in chip_exclude or df['Run_ID'][i] in run_exclude:
         df = df.drop(index = i)
 
+
+#pdb.set_trace()
 #Run grapher
 #assay_types = list(df['Assay'].unique())
 for i in assay_type_keywords:
