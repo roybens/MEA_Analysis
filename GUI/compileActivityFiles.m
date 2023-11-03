@@ -48,7 +48,9 @@ div0_date = datetime(div0, "InputFormat",'MM/dd/yyyy');
 Run_ID = [];
 DIV = [];
 Time = [];
-Chip_ID = [];
+Well =[];
+NeuronType={};
+Chip_ID = {};
 Mean_FiringRate = [];
 Mean_SpikeAmplitude = [];
 error_l = [];
@@ -76,15 +78,35 @@ for k = 1 : length(theFiles)
     fileDirParts = strsplit(pathFileActivityScan, filesep); % split dir into elements
     scan_runID = str2double(fileDirParts{end-0}); % extract runID
     scan_runID_text = fileDirParts{end-0};
-    scan_chipID = str2double(fileDirParts{end-2}); % extract chipID
+    scan_chipID = fileDirParts{end-2}; % extract chipID
     % folderDate = datetime(fileDirParts{end-3},'InputFormat','yyMMdd','Format','MM-dd-yyyy'); % extract date and convert to date object
     
     if ismember(scan_runID,run_ids)
         fprintf(1, 'Now reading %s\n', pathFileActivityScan);
         fprintf(logFile, 'Now reading %s\n', pathFileActivityScan);
         % create fileManager object for the Activity Scan
+            
+            idx = T.Run_ == scan_runID;
+
+        wellsIDs = T.Wells_Recorded(idx);
+
+        if ismember(',', wellsIDs{1})
+        wellsIDs = strsplit(wellsIDs{1}, ',');
+        wellsIDs = cellfun(@str2double,wellsIDs);
+        end
+
+        
+        neuronTypes = T.NeuronSource(idx);
+        if ismember(',', neuronTypes{1})
+        neuronTypes = strsplit(neuronTypes{1}, ',');
+
+        end
+        for z = 1:length(wellsIDs)
+        wellID=wellsIDs(z);
+        fprintf(logFile, 'Processing Well %d\n', wellID);
+        neuronSourceType = neuronTypes(z);
         try
-            wellID = 1; % select which well to analyze
+            %wellID = 1; % select which well to analyze
             %{
             lastwarn('','');
             diceyFunction(mxw.fileManager(pathFileActivityScan,wellID));
@@ -125,8 +147,10 @@ for k = 1 : length(theFiles)
         % append information to table elements
         Run_ID = [Run_ID scan_runID];
         DIV = [DIV scan_div];
+        Well = [Well wellID];
+        NeuronType{end+1} = neuronSourceType{1};
         Time = [Time hd5Date];
-        Chip_ID = [Chip_ID scan_chipID];
+        Chip_ID{end+1}=scan_chipID;
         Mean_FiringRate = [Mean_FiringRate scan_meanFiringRate];
         Mean_SpikeAmplitude = [Mean_SpikeAmplitude scan_meanSpikeAmplitude];
 
@@ -153,7 +177,7 @@ for k = 1 : length(theFiles)
             xlim([0 xmaxActivity])
             ylim([0 max(chActivity)])
             
-            saveas(gcf,append(opDir,'ActivityScan_outputs/Raster/ActivityRaster',scan_runID_text,'.png'))
+            saveas(gcf,append(opDir,'ActivityScan_outputs/Raster/ActivityRaster',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
         catch
             fprintf('Unable to plot raster for run %s/n', scan_runID_text)
             fprintf(logFile,'Unable to plot raster for run %s/n', scan_runID_text);
@@ -194,7 +218,7 @@ for k = 1 : length(theFiles)
             legend(['Mean Firing Rate = ',num2str(mean(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f'),...
                 ' Hz,  sd = ',num2str(std(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f')])
         
-            saveas(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'.png'))
+            saveas(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
         catch
             fprintf('Unable to plot Firing Rate Map for run s%/n',scan_runID_text)
             fprintf(logFile,'Unable to plot Firing Rate Map for run s%/n',scan_runID_text);
@@ -235,7 +259,7 @@ for k = 1 : length(theFiles)
             legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
                 ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
         
-            saveas(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'.png'))
+            saveas(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
         catch
             fprintf('Unable to plot Amplitude Map for run %s/n', scan_runID_text)
             fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
@@ -247,16 +271,19 @@ if d.CancelRequested
     fprintf(logFile,'User Interruption');
     error("User interruption")
 end
+end
 %% construct table
 % convert row list to columns
 Run_ID = Run_ID';
 DIV = DIV';
 Time = Time';
+Well = Well';
+NeuronType= NeuronType';
 Chip_ID = Chip_ID';
 Mean_FiringRate = Mean_FiringRate';
 Mean_SpikeAmplitude = Mean_SpikeAmplitude';
 % make table
-T = table(Run_ID,DIV,Time,Chip_ID,Mean_FiringRate,Mean_SpikeAmplitude);
+T = table(Run_ID,DIV,Time,Chip_ID,Well,NeuronType,Mean_FiringRate,Mean_SpikeAmplitude);
 T = sortrows(T,"Run_ID","ascend");
 writetable(T, fullfile(opDir,'ActivityScan_outputs/Compiled_ActivityScan.csv'));
 

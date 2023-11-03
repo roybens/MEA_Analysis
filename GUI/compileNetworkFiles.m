@@ -253,11 +253,12 @@ function [] = compileNetworkFiles(data)
         if k==2
             a=0;
         end
-    end
+    
     if d.CancelRequested
         d.close()
         fprintf(logFile,'User Interruption')
         error("User interruption")
+    end
     end
     %% construct table
     % convert row list to columns
