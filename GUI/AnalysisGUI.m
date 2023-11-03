@@ -67,9 +67,7 @@ quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [365, buttonY, 80, 25], '
     thresholdBurst = thresholdBurstEdit.Value;
     thresholdStartStop = thresholdStartStopEdit.Value;
     opDir = opDirEdit.Value;
-    assayTypes = [todayCheckbox.Value, lastCheckbox.Value, bestCheckbox.Value];
-    excludeChips = excludeChipsEdit.Value;
-    excludeRunIDs = excludeRunIDsEdit.Value;
+
 
     % Create a struct and store the values
     data = struct();
@@ -83,9 +81,7 @@ quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [365, buttonY, 80, 25], '
     data.thresholdBurst = thresholdBurst;
     data.thresholdStartStop = thresholdStartStop;
     data.opDir = opDir;
-    data.assayTypes = assayTypes;
-    data.excludeChips = excludeChips;
-    data.excludeRunIDs = excludeRunIDs;
+
     data.fig = fig;
     % Log the data into a log file
     logFileName = './network_log_file.txt';
@@ -110,9 +106,7 @@ quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [365, buttonY, 80, 25], '
     fprintf(logFile, 'Threshold Burst: %f\n', data.thresholdBurst);
     fprintf(logFile, 'Threshold Start-Stop: %f\n', data.thresholdStartStop);
     fprintf(logFile, 'Output Directory: %s\n', data.opDir);
-    fprintf(logFile, 'Assay Types: %d %d %d\n', data.assayTypes);
-    fprintf(logFile, 'Exclude Chips: %s\n', data.excludeChips);
-    fprintf(logFile, 'Exclude Run IDs: %s\n', data.excludeRunIDs);
+
 
   
 

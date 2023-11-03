@@ -98,7 +98,7 @@ def plot_network_graph(working_df,output_type, assay_type):
      #pdb.set_trace()
     df = working_df[working_df['Assay'].str.lower().str.contains(assay_type.lower())]  ## to do : to see if it really works on;y for network today ..or n , e ,t any character
     #create assay title
-    assay_title = 'Network ' + assay_type.title()
+    assay_title = assay_type.title()
     #assay_type = df['Assay'].unique()[0].title()
     #define input based on output
     if output_type == 'IBI':
