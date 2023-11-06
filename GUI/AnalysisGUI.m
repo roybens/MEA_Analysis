@@ -46,14 +46,15 @@ buttonY = 50;
 
 processActivity = uibutton(fig, 'Text', 'Process Activity', 'Position', [45, buttonY, 90, 25], 'ButtonPushedFcn', @processActivityButtonCallback);
 processNetwork = uibutton(fig, 'Text', 'Process Network', 'Position', [155, buttonY, 90, 25], 'ButtonPushedFcn', @processNetworkButtonCallback);
-clearButton = uibutton(fig, 'Text', 'Clear', 'Position', [265, buttonY, 80, 25], 'ButtonPushedFcn', @clearButtonCallback);
-quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [365, buttonY, 80, 25], 'ButtonPushedFcn', @quitButtonCallback);
+exploreParams = uibutton(fig,'Text','Explore Params','Position', [265, buttonY, 90, 25], 'ButtonPushedFcn', @exploreParamsButtonCallback);
+clearButton = uibutton(fig, 'Text', 'Clear', 'Position', [365, buttonY, 80, 25], 'ButtonPushedFcn', @clearButtonCallback);
+quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [465, buttonY, 80, 25], 'ButtonPushedFcn', @quitButtonCallback);
 
 
 
     
     % Callback for processing data button
-    function processActivityButtonCallback(~, ~)
+function processActivityButtonCallback(~, ~)
 
     % Get the values from the edit fields
     projectName = projectNameEdit.Value;
@@ -188,6 +189,63 @@ quitButton = uibutton(fig, 'Text', 'Quit', 'Position', [365, buttonY, 80, 25], '
     % Close the log file
     fclose(logFile);
     end
+
+    % Event handler for the process button
+    function exploreParamsButtonCallback(~, ~)
+        % Get the values from the edit fields
+        dataDirPath = parentFolderEdit.Value;
+        refDir = refDirEdit.Value;
+        opDir = opDirEdit.Value;
+
+        % Get the values from the sliders
+        gaussianSigma = gaussianSigmaEdit.Value;
+        binSize = binSizeEdit.Value;
+        minPeakDistance = minPeakDistanceEdit.Value;
+        thresholdBurst = thresholdBurstEdit.Value;
+        thresholdStartStop = thresholdStartStopEdit.Value;
+
+        % Validate the fields
+        if isempty(dataDirPath) || isempty(refDir) || isempty(opDir)
+            disp('Error: Please fill in all the required fields.');
+            return;
+        end
+         % Specify the log file name and open it in append mode
+        logFileName = './explore_parm_log_file.txt';
+        logFile = fopen(logFileName, 'a'); % 'a' for append mode
+    
+        % Check if the file was opened successfully
+        if logFile == -1
+            error('Error opening the log file.');
+        end
+        % Create the data structure
+        data.dataDir = dataDirPath;
+        data.refDir = refDir;
+        data.gaussianSigma = gaussianSigma;
+        data.binSize = binSize;
+        data.minPeakDistance = minPeakDistance;
+        data.thresholdBurst = thresholdBurst;
+        data.thresholdStartStop = thresholdStartStop;
+        data.opDir = opDir;
+        data.fig = fig;
+        data.logFile = logFile;
+        fprintf(logFile, 'data.dataDir = %s\n', data.dataDir);
+        fprintf(logFile, 'data.refDir = %s\n', data.refDir);
+        fprintf(logFile, 'data.gaussianSigma = %f\n', data.gaussianSigma);
+        fprintf(logFile, 'data.binSize = %f\n', data.binSize);
+        fprintf(logFile, 'data.minPeakDistance = %f\n', data.minPeakDistance);
+        fprintf(logFile, 'data.thresholdBurst = %f\n', data.thresholdBurst);
+        fprintf(logFile, 'data.thresholdStartStop = %f\n', data.thresholdStartStop);
+        fprintf(logFile, 'data.opDir = %s\n', data.opDir);
+        
+
+        % Call the processing function
+        plotParametersComparesWrapper(data);
+
+        fclose(logFile);
+    end
+
+
+
     % Callback for clearing input fields button
     function clearButtonCallback(~, ~)
         % Clear the input fields

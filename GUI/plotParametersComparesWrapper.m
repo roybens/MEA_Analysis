@@ -19,7 +19,7 @@ minPeakDistance = data.minPeakDistance;
 thresholdBurst = data.thresholdBurst;
 use_fixed_threshold = false;
 thresholdStartStop = data.thresholdStartStop; 
-
+logFile= data.logFile;
 
 
 
