@@ -54,21 +54,24 @@ end
 
 % extract wt/het ChipIDs from reference sheet
 T = readtable(refDir);
-wt_T = T(contains(T.(7),'wt',IgnoreCase=true),:);
-wt = unique(wt_T.(6)).';
-het_T = T(contains(T.(7),'het',IgnoreCase=true),:);
-het = unique(het_T.(6)).';
+
+%% TO DO : not required right now: add logic later.
+% wt_T = T(contains(T.(7),'wt',IgnoreCase=true),:);
+% wt = unique(wt_T.(6)).';
+% het_T = T(contains(T.(7),'het',IgnoreCase=true),:);
+% het = unique(het_T.(6)).';
+% % double check if wt/het has same ChipIDs
+% if ~isempty(intersect(wt,het))
+%     error('Some chips are labled with more than one genotype. Please double check the reference sheet and make sure the information is correct.')
+% end
 
 % create a list to catch error runIDs
 error_l = [];
 
-% double check if wt/het has same ChipIDs
-if ~isempty(intersect(wt,het))
-    error('Some chips are labled with more than one genotype. Please double check the reference sheet and make sure the information is correct.')
-end
 
 % extract run ids based on the desired assay type
-assay_T = T(contains(T.(3),'network',IgnoreCase=true) & contains(T.(3), args.Assay, IgnoreCase=true),:);
+%to do: check if only for network today/best it needs to be done.
+assay_T = T(contains(T.(3),'network today/best',IgnoreCase=true) & contains(T.(3), args.Assay, IgnoreCase=true),:);
 asssy_runIDs = unique(assay_T.(4)).';
 
 % Get a list of all files in the folder with the desired file name pattern.
@@ -83,10 +86,28 @@ for f = 1 : length(theFiles)
     runID = str2double(fileDirParts{end-1}); % extract runID
     if ismember(runID,asssy_runIDs)
         fprintf(1, 'Now reading %s\n', pathFileNetwork);
-       
+        idx = T.Run_ == runID;
+
+        wellsIDs = T.Wells_Recorded(idx);
+
+        if ismember(',', wellsIDs{1})
+        wellsIDs = strsplit(wellsIDs{1}, ',');
+        wellsIDs = cellfun(@str2double,wellsIDs);
+        end
+
+        
+        neuronTypes = T.NeuronSource(idx);
+        if ismember(',', neuronTypes{1})
+        neuronTypes = strsplit(neuronTypes{1}, ',');
+        end
+        for z = 1:length(wellsIDs)
+        wellID=wellsIDs(z);
+        fprintf(1, 'Processing Well %d\n', wellID);
+        %fprintf(logFile, 'Processing Well %d\n', wellID);
+        neuronSourceType = neuronTypes(z);
         % create fileManager object for the Network recording
         try
-            networkData = mxw.fileManager(pathFileNetwork);
+            networkData = mxw.fileManager(pathFileNetwork,wellID);
         catch
             error_l = [error_l string(runID)];
             continue
@@ -94,7 +115,7 @@ for f = 1 : length(theFiles)
         
         %% Loop through different parameters.
         avg_opt_title = parameter;
-        Averages_opt = [{'ChipID',avg_opt_title,'IBI','Burst Peak','# Bursts','Spikes per Burst'}];
+        Averages_opt = {'ChipID','WellID','NeuronType',avg_opt_title,'IBI','Burst Peak','# Bursts','Spikes per Burst'};
     
         %relativeSpikeTimes_opt = mxw.util.computeRelativeSpikeTimes(networkData);
     
@@ -196,9 +217,9 @@ for f = 1 : length(theFiles)
         %%peaks, Spikes within bursts, # of Bursts etc.)
             
         %chipID =  str2num( regexprep( pathFileNetwork, {'\D*([\d\.]+\d)[^\d]*', '[^\d\.]*'}, {'$1 ', ' '} ) )
-        extractChipID = regexp(pathFileNetwork,'\d{5}\.?','match');
+        extractChipIDWellID = regexp(pathFileNetwork,'\d{5}\.?','match');
         %chipID = regexp(pathFileNetwork,'\d{5}\.?\d*','match')
-        chipID = extractChipID(:,2);
+        chipID = extractChipIDWellID(:,2);
         
         
         chipAverages = [];
@@ -216,13 +237,15 @@ for f = 1 : length(theFiles)
         nBursts = length(networkStats_opt.maxAmplitudesTimes);
         
         chipAverages = [meanSpikesPerBurst, meanIBI, meanBurstPeak, nBursts];
-        Averages_opt = [Averages_opt; {chipID,k,meanIBI_opt, meanBurstPeak_opt, nBursts_opt, meanSpikesPerBurst}];
+        Averages_opt = [Averages_opt; {chipID,wellID,strrep(neuronSourceType{1},' ',''),k,meanIBI_opt, meanBurstPeak_opt, nBursts_opt, meanSpikesPerBurst}];
            
         
         end
-        T = cell2table(Averages_opt(2:end,:),'VariableNames',Averages_opt(1,:));
+        T1 = cell2table(Averages_opt(2:end,:),'VariableNames',Averages_opt(1,:));
         IDstring = string(chipID);
-        writetable(T,opDir + IDstring + '.csv');
+        WellString = string(wellID);
+        writetable(T1,opDir + IDstring +WellString+ '.csv');
+    end
     end
 end
 
@@ -267,10 +290,10 @@ for f = 1 : length(theFiles)
     pathFileNetwork = fullfile(theFiles(f).folder, baseFileName);
     datafile = (pathFileNetwork);
     data = readtable(datafile,'PreserveVariableNames',true);
-    IBI_max = max([IBI_max, max(data.(3))]);
-    BurstPeak_max = max([BurstPeak_max, max(data.(4))]);
-    nBursts_max = max([nBursts_max, max(data.(5))]);
-    spikePerBurst_max = max([spikePerBurst_max, max(data.(6))]);
+    IBI_max = max([IBI_max, max(data.("IBI"))]);
+    BurstPeak_max = max([BurstPeak_max, max(data.("Burst Peak"))]);
+    nBursts_max = max([nBursts_max, max(data.("# Bursts"))]);
+    spikePerBurst_max = max([spikePerBurst_max, max(data.("Spikes per Burst"))]);
 end
 
 for f = 1 : length(theFiles)
@@ -281,24 +304,26 @@ for f = 1 : length(theFiles)
     datafile = (pathFileNetwork);
     data = readtable(datafile,'PreserveVariableNames',true);
     
-    extractChipID = regexp(pathFileNetwork,'\d{5}?','match');
+    extractChipID=data.("ChipID")(1);
+    WellID=data.("WellID")(1);
+    %extractChipID = regexp(pathFileNetwork,'\d{5}?','match');
 
-    idDouble = str2double(extractChipID);
-    if ismember(idDouble,wt)
-        geno = 'WT';
-        genoStr = string(geno);
-    end
-    
-    if ismember(idDouble,het)
-        geno = 'HET';
-        genoStr = string(geno);
-    end    
-
+    %idDouble = str2double(extractChipIDWellID);
+%     if ismember(idDouble,wt)
+%         geno = 'WT';
+%         genoStr = string(geno);
+%     end
+%     
+%     if ismember(idDouble,het)
+%         geno = 'HET';
+%         genoStr = string(geno);
+%     end    
+    genoStr=data.("NeuronType"){1};
     
     fig = figure('color','w','Position',[0 0 1600 800],'Visible','off');
     subplot(2,2,1);
-    plot(data.(2),data.(3));
-    title(string(extractChipID) + ' ' + genoStr + ' IBI')
+    plot(data.(parameter),data.('IBI'));
+    title(string(extractChipID)+' '+string(WellID) + ' ' + genoStr + ' IBI')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
     xticks('auto')
@@ -309,8 +334,8 @@ for f = 1 : length(theFiles)
     grid on
 
     subplot(2,2,2);
-    plot(data.(2),data.(4));
-    title(string(extractChipID) + ' ' + genoStr +' Burst Peak')
+    plot(data.(parameter),data.('Burst Peak'));
+    title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr +' Burst Peak')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
     xticks('auto')
@@ -321,8 +346,8 @@ for f = 1 : length(theFiles)
     grid on
 
     subplot(2,2,3);
-    plot(data.(2),data.(5));
-    title(string(extractChipID) + ' ' + genoStr + ' # of Bursts')
+    plot(data.(parameter),data.('# Bursts'));
+    title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr + ' # of Bursts')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end
     xticks('auto')
@@ -333,8 +358,8 @@ for f = 1 : length(theFiles)
     grid on
 
     subplot(2,2,4);
-    plot(data.(2),data.(6));
-    title(string(extractChipID) + ' ' + genoStr + ' Spikes per Burst')
+    plot(data.(parameter),data.('Spikes per Burst'));
+    title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr + ' Spikes per Burst')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
     xticks('auto')
@@ -349,7 +374,13 @@ for f = 1 : length(theFiles)
 end
 %% Plot all lines on one plot
 fig2 = figure('color','w','Position',[0 0 800 800],'Visible','off');
+% Define a map to hold genoStr-color pairs
+genoColorMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+legendHandlesMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
+% Define a list of colors to use for plots
+colorList = {'k', 'r', 'b', 'c', 'm', 'y', 'g'}; % Add more colors as needed
+colorIndex = 1;
 
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '*.csv'); 
@@ -364,23 +395,33 @@ for k = 1 : length(theFiles)
     datafile = (pathFileNetwork);
     data = readtable(datafile,'PreserveVariableNames',true);
     
-    extractChipID = regexp(pathFileNetwork,'\d{5}?','match');
+    extractChipID=data.("ChipID")(1);
+    WellID=data.("WellID")(1);
+    %extractChipID = regexp(pathFileNetwork,'\d{5}?','match');
 
-    idDouble = str2double(extractChipID);
-    if ismember(idDouble,wt)
-        geno = 'WT';
-        genoStr = string(geno);
-        color = '-k';
+    %idDouble = str2double(extractChipIDWellID);
+%     if ismember(idDouble,wt)
+%         geno = 'WT';
+%         genoStr = string(geno);
+%     end
+%     
+%     if ismember(idDouble,het)
+%         geno = 'HET';
+%         genoStr = string(geno);
+%     end    
+    genoStr=data.("NeuronType"){1};
+    % Check if the genoStr is already in the map
+    if ~isKey(genoColorMap, genoStr)
+        % Assign the next color from colorList to this genoStr
+        genoColorMap(genoStr) = colorList{colorIndex};
+        
+        % Increment the colorIndex, and reset if it exceeds the length of colorList
+        colorIndex = mod(colorIndex, length(colorList)) + 1;
     end
 
-    if ismember(idDouble,het)
-        geno = 'HET';
-        genoStr = string(geno);
-        color = '--r';
-    end    
-    
+    color = genoColorMap(genoStr);
     subplot(3,2,1);
-    plot(data.(2),data.(3),color);
+    plot(data.(parameter),data.("IBI"),color);
     title('IBI')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -393,7 +434,7 @@ for k = 1 : length(theFiles)
     hold on
 
     subplot(3,2,2);
-    plot(data.(2),data.(4),color);
+    plot(data.(parameter),data.("Burst Peak"),color);
     title('Burst Peak')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -407,7 +448,7 @@ for k = 1 : length(theFiles)
     hold on
 
     subplot(3,2,3);
-    plot(data.(2),data.(5),color);
+    plot(data.(parameter),data.("# Bursts"),color);
     title('# of Bursts')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -421,7 +462,7 @@ for k = 1 : length(theFiles)
     hold on
 
     subplot(3,2,4);
-    plot(data.(2),data.(6),color);
+    p=plot(data.(parameter),data.("Spikes per Burst"),color);
     title('Spikes per Burst')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -433,10 +474,15 @@ for k = 1 : length(theFiles)
     
     grid on
     hold on
-    
+    % If this is the first time this genoStr is plotted, add its handle to legendHandles
+    if  ~isKey(legendHandlesMap, genoStr)
+        legendHandlesMap(genoStr) = p; % Store the plot handle for the legend
+    end
 end
 
-
+legendHandles = values(legendHandlesMap, keys(genoColorMap));
+legendLabels = keys(genoColorMap);
+legend([legendHandles{:}], legendLabels);
 exportFile = [opDir 'paramsCompare_singlePlot.pdf']; %folder and filename for raster figures
 exportgraphics(fig2, exportFile ,'Resolution',150)
 
