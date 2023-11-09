@@ -11,11 +11,11 @@ div0DateLabel = uilabel(fig, 'Text', 'DIV 0 Date:', 'Position', [50, 310, 100, 2
 div0DateEdit = uieditfield(fig, 'Position', [150, 310, 200, 25]);
 
 % Create a parent folder path label and edit field
-parentFolderLabel = uilabel(fig, 'Text', 'Parent Folder Path:', 'Position', [50, 270, 120, 20]);
+parentFolderLabel = uilabel(fig, 'Text', 'Data Path:', 'Position', [50, 270, 120, 20]);
 parentFolderEdit = uieditfield(fig, 'Position', [180, 270, 170, 25]);
 
 % Create a reference directory label and edit field
-refDirLabel = uilabel(fig, 'Text', 'Reference Directory:', 'Position', [50, 230, 120, 20]);
+refDirLabel = uilabel(fig, 'Text', 'Reference File:', 'Position', [50, 230, 120, 20]);
 refDirEdit = uieditfield(fig, 'Position', [180, 230, 170, 25]);
 
 % Create an output directory label and edit field
@@ -27,16 +27,16 @@ columnX = 400;
 spacingY = 40;
 
 gaussianSigmaLabel = uilabel(fig, 'Text', 'Gaussian Sigma:', 'Position', [columnX, 300, 100, 20]);
-gaussianSigmaEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300, 100, 20], 'Value', 0.18);
+gaussianSigmaEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300, 100, 20], 'Value', 0.14);
 
 binSizeLabel = uilabel(fig, 'Text', 'Bin Size:', 'Position', [columnX, 300 - spacingY, 100, 20]);
-binSizeEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300 - spacingY, 100, 20], 'Value', 0.3);
+binSizeEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300 - spacingY, 100, 20], 'Value', 0.1);
 
 minPeakDistanceLabel = uilabel(fig, 'Text', 'Min Peak Distance:', 'Position', [columnX, 300 - 2 * spacingY, 120, 20]);
-minPeakDistanceEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 300 - 2 * spacingY, 100, 20], 'Value', 0.025);
+minPeakDistanceEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 300 - 2 * spacingY, 100, 20], 'Value', 1.0);
 
 thresholdBurstLabel = uilabel(fig, 'Text', 'Threshold Burst:', 'Position', [columnX, 300 - 3 * spacingY, 120, 20]);
-thresholdBurstEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 300 - 3 * spacingY, 100, 20], 'Value', 1.2);
+thresholdBurstEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 300 - 3 * spacingY, 100, 20], 'Value', 1.0);
 
 thresholdStartStopLabel = uilabel(fig, 'Text', 'Threshold Start/Stop:', 'Position', [columnX, 300 - 4 * spacingY, 120, 20]);
 thresholdStartStopEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 300 - 4 * spacingY, 100, 20], 'Value', 0.3);
