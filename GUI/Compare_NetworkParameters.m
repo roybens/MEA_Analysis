@@ -89,17 +89,21 @@ for f = 1 : length(theFiles)
         idx = T.Run_ == runID;
 
         wellsIDs = T.Wells_Recorded(idx);
-
+        if iscell(wellsIDs)
         if ismember(',', wellsIDs{1})
         wellsIDs = strsplit(wellsIDs{1}, ',');
         wellsIDs = cellfun(@str2double,wellsIDs);
+        else
+            error('wellsIDs are not comma separated correclty');
         end
-
-        
+        end
+     
         neuronTypes = T.NeuronSource(idx);
+        
         if ismember(',', neuronTypes{1})
         neuronTypes = strsplit(neuronTypes{1}, ',');
         end
+        
         for z = 1:length(wellsIDs)
         wellID=wellsIDs(z);
         fprintf(1, 'Processing Well %d\n', wellID);

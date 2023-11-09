@@ -4,6 +4,7 @@
 IPNAnalysis/AnalyzedData/*
 IPNAnalysis/sorting_intermediate/*
 IPNAnalysis/Sorting_Intermediate_files/*
+IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
 **.mat

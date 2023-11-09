@@ -112,12 +112,14 @@ function [] = compileNetworkFiles(data)
             idx = T.Run_ == scan_runID;
 
             wellsIDs = T.Wells_Recorded(idx);
-
+            if iscell(wellsIDs)
             if ismember(',', wellsIDs{1})
             wellsIDs = strsplit(wellsIDs{1}, ',');
             wellsIDs = cellfun(@str2double,wellsIDs);
+            else
+                error('wellsIDs are not comma separated correclty');
             end
-
+            end
             
             neuronTypes = T.NeuronSource(idx);
             if ismember(',', neuronTypes{1})
@@ -226,7 +228,7 @@ function [] = compileNetworkFiles(data)
                 mxw.plot.rasterPlot(networkData,'Figure',false);
                 box off;
                 %xlim([0 round(max(relativeSpikeTimes.time)/4)])
-                xlim([0 120])
+                xlim([0 60])
                 ylim([1 max(relativeSpikeTimes.channel)])
                 
                 subplot(2,1,2);
@@ -238,12 +240,19 @@ function [] = compileNetworkFiles(data)
                 xlim([0 60])
                 ylim([0 20])
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot60s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
-                
+                subplot(2,1,1);
+                xlim([0 120])
+                ylim([0 20])
+                subplot(2,1,2);
                 xlim([0 120])
                 ylim([0 20])
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot120s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
                 
                 %savefig(appen
+                subplot(2,1,1);
+                xlim([0 300])
+                ylim([0 20])
+                subplot(2,1,2);
                 xlim([0 300])
                 ylim([0 20])
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))

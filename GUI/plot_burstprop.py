@@ -11,6 +11,7 @@ import os
 from scipy import stats
 import pdb
 import json
+from math import sqrt
 # This script reads the compiled csv made by compileNetworkFiles_JL.m and a reference note
 # to plot the wt vs. het burst properties overdays
 
@@ -93,6 +94,17 @@ assay_l = [x.lower() for x in assay_l]
 
 
 df = data_df.assign(Assay=assay_l)
+print(df.columns)
+
+     # Function to adjust y-position for significance markers to avoid overlap
+def adjust_ypos_for_sig_marker(y_pos, y_values, increment):
+        while any([abs(y - y_pos) < increment for y in y_values]):
+            y_pos += increment
+        return y_pos
+
+# Function to draw lines between bars being compared
+def draw_comparison_line(ax, x1, x2, y, h, col):
+    ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
 
 def plot_network_graph(working_df,output_type, assay_type):
      #pdb.set_trace()
@@ -151,21 +163,27 @@ def plot_network_graph(working_df,output_type, assay_type):
     colors = [plt.colormaps['Set1'](i) for i in np.linspace(0, 1, len(unique_genotypes))]# Using a colormap to generate colors
     colors2 = [plt.colormaps['Set2'](i) for i in np.linspace(0, 1, len(unique_genotypes))]#
     # Plot data for each genotype
+    mean_data_all ={}
+    yerr_data_all = {}
+    n_data_all={}
     for i,genotype in enumerate(unique_genotypes):
         y_data = output_arrays[genotype]
-
+        #print("type: ",type(genotype))
         # Calculate statistics
         mean_data = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_data]
         yerr_data = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_data]
         n_data = [len(yi) for yi in y_data]
-
+         # Store statistics in dictionaries
+        mean_data_all[genotype] = mean_data
+        yerr_data_all[genotype] = yerr_data
+        n_data_all[genotype] = n_data
         # Save statistics to file
         output_file = f"intermediate_files/{title}_{genotype}_statistics.txt"
         with open(output_file, 'w') as file:
             file.write(f"{genotype} Statistics\n")
             file.write("Mean: " + ", ".join([str(m) for m in mean_data]) + "\n")
             file.write("SEM: " + ", ".join([str(sem) for sem in yerr_data]) + "\n")
-            file.write("Sample Size (n): " + ", ".join([str(n) for n in n_data]) + "\n")
+            file.write("Sample Size (n): " + ", ".join([str(n_data)]) + "\n")
 
         # Plot bars
         ax.bar(x_genotype[genotype],
@@ -182,33 +200,36 @@ def plot_network_graph(working_df,output_type, assay_type):
             ax.scatter(x_genotype[genotype][j] + np.zeros(y_data[j].size), y_data[j], s=20,color=colors2[i])
 
 
-     # Function to adjust y-position for significance markers to avoid overlap
-    def adjust_ypos_for_sig_marker(y_pos, y_values, increment):
-        while any([abs(y - y_pos) < increment for y in y_values]):
-            y_pos += increment
-        return y_pos
-
-    # Function to draw lines between bars being compared
-    def draw_comparison_line(ax, x1, x2, y, h, col):
-        ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
 
     # # Calculate maximum y-value for plotting significance
     # max_y = max([max(data) for data in output_arrays.values() if data.size > 0])
     # increment = max_y * 0.1  # Increment to adjust y-position for significance markers
 
     #Perform and plot t-tests between all pairs of genotypes
-    p_values = []
+    
     for i in range(len(x_d)):
         maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
         count = 1
+        p_values = []
         for j, genotype1 in enumerate(unique_genotypes):
             for k, genotype2 in enumerate(unique_genotypes):
                 if j < k:
-                    
-                    mean1, sem1, n1 = mean_data[j], yerr_data[j], n_data[j]
-                    mean2, sem2, n2 = mean_data[k], yerr_data[k], n_data[k]
-                    t_stat, p_value = stats.ttest_ind_from_stats(mean1, sem1, n1, mean2, sem2, n2)
-                    p_values.append(p_value)
+                    #pdb.set_trace()
+                    #print("mean_data_all",mean_data_all[genotype1])
+                    #print("type:",type(genotype1))
+                    mean1, sem1, n1 = mean_data_all[genotype1][i], yerr_data_all[genotype1][i], n_data_all[genotype1][i]
+                    mean2, sem2, n2 = mean_data_all[genotype2][i], yerr_data_all[genotype2][i], n_data_all[genotype2][i]
+                    #t_stat, p_value = stats.ttest_ind_from_stats(mean1, sem1, n1, mean2, sem2, n2)
+                    sed = sqrt(sem1**2.0 + sem2**2.0)
+                    t_stat = (mean1 - mean2) / sed
+                    # degrees of freedom
+                    degreef = n1+n2 - 2
+                    alpha=0.05
+                    # calculate the critical value
+                    cv = stats.t.ppf(1.0 - alpha, degreef)
+                    # calculate the p-value
+                    p_value = (1.0 - stats.t.cdf(abs(t_stat), degreef)) * 2.0
+                    p_values.append([mean1,sem1,mean2,sem2,p_value])
 
                     # Plot significance
                     #maxim = max(np.max(output_arrays[genotype1][i]), np.max(output_arrays[genotype2][i]))
@@ -218,7 +239,9 @@ def plot_network_graph(working_df,output_type, assay_type):
                     
                     ax.text((x1 + x2) / 2, maxim +0.1*maxim*(count), sign, ha='center', va='bottom', fontsize=10)
                     count = count +1
-
+    
+                    with open(output_file, 'a') as file:
+                                file.write(f"P values:{p_values} \n")
 
 
     # Axis scaling and labeling
@@ -250,7 +273,7 @@ def plot_network_graph(working_df,output_type, assay_type):
 #exclude chip ids and runs that are in the exclude list
 exclude_l = []
 for i in df.index:
-    if df['ID'][i] in chip_exclude or df['Run_ID'][i] in run_exclude:
+    if df['Chip_ID'][i] in chip_exclude or df['Run_ID'][i] in run_exclude:
         df = df.drop(index = i)
 
 
