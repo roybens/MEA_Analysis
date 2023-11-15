@@ -10,6 +10,7 @@ import spikeinterface.widgets as sw
 import spikeinterface.postprocessing as sp
 import spikeinterface.preprocessing as spre
 import spikeinterface.qualitymetrics as qm
+from spikeinterface.sorters import run_sorter_local
 import helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
@@ -21,7 +22,11 @@ import logging
 import re
 import pickle
 import scipy.io as sio
-
+import argparse
+import pandas as pd
+from spikeinterface.curation import CurationSorting
+import pdb
+from collections import defaultdict
 #os.environ['HDF5_PLUGIN_PATH']='/home/mmp/Documents/Maxlab/so/'
 # Configure the logger
 # Manually clear the log file
@@ -29,12 +34,13 @@ with open('./application.log', 'w'):
     pass
 logging.basicConfig(
     filename='./application.log',  # Log file name
-    level=logging.INFO,  # Log level
+    level=logging.DEBUG,  # Log level
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
     datefmt='%Y-%m-%d %H:%M:%S' # Timestamp format
 )
 
 logger = logging.getLogger("mea_pipeline")
+
 
 
 
@@ -113,7 +119,8 @@ def run_kilosort(recording,output_folder):
     # default_KS2_params['detect_threshold'] = 12
     # default_KS2_params['projection_threshold']=[18, 10]
     # default_KS2_params['preclust_threshold'] = 14
-    run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params)
+    run_sorter=run_sorter_local("kilosort2",recording, output_folder=output_folder, delete_output_folder=False,verbose=True,with_output=True,**default_KS2_params)
+    #run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params)
     sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
     return sorting_KS3
 
@@ -169,6 +176,56 @@ def remove_violated_units(metrics):
     metrics = metrics.query(our_query)
 
     return metrics
+def find_connected_components(pairs):
+    # Create a graph using a dictionary
+    graph = defaultdict(list)
+    
+    # Populate the graph with edges
+    for x, y in pairs:
+        graph[x].append(y)
+        graph[y].append(x)  # Assuming undirected graph for transitive relationships
+
+    # Function to perform DFS and find connected components
+    def dfs(node, visited, component):
+        visited.add(node)
+        component.append(node)
+        for neighbour in graph[node]:
+            if neighbour not in visited:
+                dfs(neighbour, visited, component)
+
+    # List to store all components
+    components = []
+    visited = set()
+
+    # Iterate through all nodes in the graph
+    for node in graph:
+        if node not in visited:
+            component = []
+            dfs(node, visited, component)
+            components.append(component)
+
+    return components
+
+def merge_similar_templates(sorting,waveforms,sim_score =0.7):
+
+    matrix = sp.compute_template_similarity(waveforms,load_if_exists=True)
+    metrics = qm.compute_quality_metrics(waveforms,load_if_exists=True)
+    temp_metrics = sp.compute_template_metrics(waveforms,load_if_exists=True)
+    n = matrix.shape[0]
+
+    # Find indices where values are greater than 0.5 and not on the diagonal
+    indices = [(i,j) for i in range(1,n) for j in range(i-1) if matrix[i,j]>sim_score]
+
+    pairs = []
+    # Print the indices
+    for ind in indices:
+        logging.debug(f"{temp_metrics.index[ind[0]],temp_metrics.index[ind[1]]}")
+        pairs.append((temp_metrics.index[ind[0]],temp_metrics.index[ind[1]]))
+    connected_components = find_connected_components(pairs)
+    cs = CurationSorting(sorting)
+    for elements in connected_components:
+        cs.merge(elements)
+    return cs.sorting
 
   
 
@@ -282,7 +339,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
     recording_chunk = recording.frame_slice(start_frame= int(time_start*fs),end_frame=int(time_end*fs))
     recording_chunk = preprocess(recording_chunk)
     
-    current_directory = os.getcwd()
+    current_directory =  os.path.dirname(os.path.abspath(__file__))
     try:
         pattern = r"/(\d+)/data.raw.h5"
         run_id = int(re.search(pattern, file_path).group(1))
@@ -297,16 +354,17 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         dir_name = sorting_folder
         #os.mkdir(dir_name,0o777,)
         os.chdir(dir_name)
-        kilosort_output_folder = dir_name+'/kilosort2_'+rec_name
+        kilosort_output_folder = f"{current_directory}/../AnalyzedData/{desired_pattern}/kilosort2_{rec_name}"
         start = timer()
         sortingKS3 = run_kilosort(recording_chunk,output_folder=kilosort_output_folder)
+        logging.debug("Sorting complete")
         sortingKS3 = sortingKS3.remove_empty_units()
         sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk)
         waveform_folder =dir_name+'/waveforms_'+ rec_name
         logging.info("Extracting waveforms")
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
         end = timer()
-        logging.debug("Sort and extract waveforms takes", end - start)
+        logging.debug(f"Sort and extract waveforms takes: { end - start}")
         
         start = timer()
         
@@ -315,14 +373,17 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         update_qual_metrics = remove_violated_units(qual_metrics)
         non_violated_units  = update_qual_metrics.index.values
         #check for template similarity.
-        redundant_units = remove_similar_templates(waveforms)
-        logging.info(f"redundant-units : {redundant_units}")    
+        curation_sortin_obj = merge_similar_templates(sortingKS3,waveforms)
+        curation_sortin_obj.save(folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/sorting")
+        curatedmerged = curation_sortin_obj.get_unit_ids()
         end = timer()
-        logging.debug("Removing redundant items takes", end - start)                                            #todo: need to extract metrics here.
-        non_violated_units = [item for item in non_violated_units if item not in redundant_units]
+         #todo: need to extract metrics here.
+        logging.debug(f"Removing redundant items takes{end - start}")                                            #todo: need to extract metrics here.
+        non_violated_units_new = [item for item in curatedmerged if item not in non_violated_units]
         
-        waveform_good = waveforms.select_units(non_violated_units,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
-
+        
+        waveforms= extract_waveforms(recording_chunk,curation_sortin_obj,folder = waveform_folder)
+        waveform_good = waveforms.select_units(non_violated_units_new,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
         template_metrics = sp.compute_template_metrics(waveform_good)
         #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
         qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
@@ -413,21 +474,35 @@ def routine_parallel(file_path,number_of_configurations,time_in_s):
 
 
 
-if __name__ =="__main__" :
+def main():
 
     """
     This direct main function run would be silent run..on server.
 
     """
- 
+    
+    parser = argparse.ArgumentParser(description="Process inpout filepaths")
     # Check if the correct number of command-line arguments is provided
-    if len(sys.argv) != 2:
-        logger.info("Usage: python script.py <file_or_folder_path>")
+   
+     # Positional argument (mandatory)
+    parser.add_argument('file_dir_path', type=str, help='Path to the file or directory', nargs='?')
+
+    parser.add_argument('-r', '--reference', type=str, help='Path to the reference file (optional)')
+
+    parser.add_argument('-t','--type',nargs='+',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
+   
+
+
+    args = parser.parse_args()
+
+    # Check if the mandatory file path/dir path is provided
+    if args.file_dir_path is None:
+        logger.info("Usage: python script.py <file_or_folder_path> ")
         sys.exit(1)
 
     # Get the user-provided path from the command-line argument
-    path = sys.argv[1]
-
+    path = args.file_dir_path
+    
     # Check if the path exists
     if not os.path.exists(path):
         logger.info(f"The specified path '{path}' does not exist.")
@@ -448,10 +523,16 @@ if __name__ =="__main__" :
         file_name_pattern = "data.raw.h5"
         subfolder_name = "Network"
         result = helper.find_files_with_subfolder(path, file_name_pattern, subfolder_name)
-        import pandas as pd
-        data_f = '/mnt/disk15tb/paula/Main_DA_Projects/Ref_Files/CHD8_2_data/CHD82_ref.xlsx'
+        
+        if args.reference:
+            
+            data_f = args.reference
+        else:
+            logger.error("Reference file not provided")
+            sys.exit(1)
+        array_types = args.type
         data_df = pd.read_excel(data_f)
-        network_today_runs = data_df[data_df['Assay'].str.lower().isin(['network today', 'network today/best'])]
+        network_today_runs = data_df[data_df['Assay'].str.lower().isin(array_types)]
 
         # Extract the 'Run #' values from the filtered DataFrame
         network_today_run_numbers = network_today_runs['Run #'].to_list()
@@ -474,3 +555,5 @@ if __name__ =="__main__" :
         sys.exit(1)
     # You can add your code to perform specific actions for files and folders here
     
+if __name__ =="__main__" :
+    main()

@@ -10,3 +10,4 @@ AnalyzedData/*
 **.mat
 .vscode
 **.pkl
+slurm*.out
