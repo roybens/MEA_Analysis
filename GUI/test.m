@@ -18,7 +18,7 @@ for f = 1 : length(theFiles)
     spikePerBurst_max = max([spikePerBurst_max, max(data.("Spikes per Burst"))]);
 end
 
-fig2 =figure('color','w','Position',[0 0 800 800],'Visible','off');
+fig2 =figure('color','w','Position',[0 0 800 800],'Visible','on');
 % Define a map to hold genoStr-color pairs
 genoColorMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 legendHandlesMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
