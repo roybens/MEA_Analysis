@@ -37,21 +37,33 @@ elif len(input_string1.split(','))> 1:
     assay_type_keywords = [x.lower().strip() for x in input_string1.split(',')]
 else:
     assay_type_keywords=[input_string1.lower().strip()]
+# Initialize lists for chip and well exclusions
+chip_exclude = []
+well_exclude = []
 
-input_string2 = input("Enter comma-separated chip ids to exclude (hit enter if none )")
-# set exclude lists
-if not input_string2:
-    chip_exclude =[]
-else :
+while True:
+    # Prompt for chip id input
+    input_string2 = input("Enter a chip id to exclude (hit enter to finish): ")
+    
+    # Break the loop if the input is empty, indicating completion
+    if not input_string2:
+        break
+
     try:
-        chip_exclude =[x for x in input_string2.split(',')]
-        well_exclude=[]
-        print(f"chips being excluded are {chip_exclude}")
-        for chip in chip_exclude:
-            well =input(f"input well id of {chip}")
-            well_exclude.append(int(well))
-    except Exception:
-        print("Invalid input")
+        # Add the entered chip id to the exclusion list
+        chip_exclude.append(input_string2)
+        print(f"Chip being excluded: {input_string2}")
+
+        # Request corresponding well id for the entered chip id
+        well_input = input(f"Input well id for chip {input_string2}: ")
+        
+        # Validate and add the well id to the exclusion list
+        well_exclude.append(int(well_input))
+    except ValueError:
+        print("Invalid input for well id. Please enter a numerical value.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 
 
 input_string3 = input("Enter comma-separated run_ids to exclude (hit enter if none )")
@@ -65,7 +77,7 @@ else :
     except Exception:
         print("Invalid input")
 
-input_string4 = input("Enter comma-separated [chip id,wellid] track them (hit enter if none )")
+input_string4 = input("Enter  chip id+wellid track them (hit enter if none )")
 # set exclude lists
 if not input_string4:
     track_chips =[]
@@ -133,6 +145,9 @@ def plot_network_graph(working_df,output_type, assay_type):
     if output_type == 'IBI':
         title = 'IBI'
     if output_type == 'Burst_Peak':
+
+
+
         title = 'Burst Peak'
     if output_type == 'Number_Bursts':
         title = 'Number Bursts'
@@ -182,7 +197,7 @@ def plot_network_graph(working_df,output_type, assay_type):
     # Generate a list of distinct colors based on the number of genotypes
     colors = [plt.colormaps['Set1'](i) for i in np.linspace(0, 1, len(unique_genotypes))]# Using a colormap to generate colors
     colors2 = [plt.colormaps['Set2'](i) for i in np.linspace(0, 1, len(unique_genotypes))]#
-    marker_shapes = ['s', '^', 'v', 'D', '+', 'x', '*', 'H', '8']
+    marker_shapes = ['^', 's', 'v', 'D', '+', 'x', '*', 'H', '8']
     marker_chips={chip:marker_shapes[idx] for idx, chip in enumerate(track_chips)}
     # Plot data for each genotype
     mean_data_all ={}
@@ -268,7 +283,7 @@ def plot_network_graph(working_df,output_type, assay_type):
                     alpha=0.05
                     # calculate the critical value
                     cv = stats.t.ppf(1.0 - alpha, degreef)
-                    # calculate the p-value
+                    # calculate the p-vallue
                     p_value = (1.0 - stats.t.cdf(abs(t_stat), degreef)) * 2.0
                     p_values.append([mean1,sem1,mean2,sem2,p_value])
 
@@ -314,17 +329,19 @@ def plot_network_graph(working_df,output_type, assay_type):
 #exclude chip ids and runs that are in the exclude list
 exclude_l = []
 # Filter rows based on chip_exclude and well_exclude
-pdb.set_trace()
+#pdb.set_trace()
 # Creating a dictionary for easier exclusion lookup
 exclude_dict = dict(zip(chip_exclude, well_exclude))
 
-# Using list comprehension for filtering
-mask = [(row.Chip_ID in exclude_dict) and (row.Well == exclude_dict[row.Chip_ID]) for index, row in df.iterrows()]
 
-df = df[~pd.Series(mask)]
+if exclude_dict:
+    # Using list comprehension for filtering
+    mask = [(row.Chip_ID in exclude_dict) and (row.Well == exclude_dict[row.Chip_ID]) for index, row in df.iterrows()]
+
+    df = df[~pd.Series(mask)]
 
 
-# Filter rows based on run_exclude
+    # Filter rows based on run_exclude
 df = df[~df['Run_ID'].isin(run_exclude)]
 
 
