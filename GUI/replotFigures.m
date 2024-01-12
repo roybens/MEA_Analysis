@@ -1,12 +1,12 @@
 close all;
 clear all;
 
-figDirectory= '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/CHD8_2_seventhtrial/Network_outputs/Raster_BurstActivity/PlotFigsMatlabFormat/'
+figDirectory= '/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/SPTAN1_2_T2/Network_outputs/Raster_BurstActivity/300s';
 
-opDirectory='/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/CHD8_2_seventhtrial/Network_outputs/Raster_BurstActivity/new/'
+opDirectory='/mnt/disk15tb/paula/Main_DA_Projects/data_analysis_output/SPTAN1_2_T2/Network_outputs/Raster_BurstActivity/new/'
 
 ymin = 0;
-ymax= 25;
+ymax= 20;
 newYLim = [ymin, ymax]; % Replace with your desired y-axis limits
 
 % Create the destination directory if it doesn't exist

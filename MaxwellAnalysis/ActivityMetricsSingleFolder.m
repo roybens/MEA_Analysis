@@ -1,31 +1,38 @@
-% This script goes through the h5 files in a parent folder,
-% plot the Rasters, FiringRate Maps, and, Amplitude Maps
-% and compile a csv with the mean Firing Rate and Amplitude over days
+clear
+close all
+
+dataDir = '/mnt/disk20tb/Organoids/Maxone/CDKL5_Organoids_T2_12012023/';
 
 
-function [] = compileActivityFiles(data)
+opDir = '/home/mmp/Documents/script_output/CDKL5_ORGANOIDS_T2/';
+
+project_name = 'organoid';
+
+% set DIV 0 date
+
+%div0 = '06/02/2023'; % format: MM/DD/YYYY
+div0 = '11/24/2023';
+
+% set Gaussian kernel standard deviation [s] (smoothing window)
+gaussianSigma = 0.16; %0.18
+% set histogram bin size [s]
+binSize = 0.02;
+% set minimum peak distance [s]
+minPeakDistance = 1.0;
+% set burst detection threshold [rms / fixed]
+thresholdBurst =1.0; %1.2
+% set fixed threshold;
+use_fixed_threshold = false;
+% Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
+thresholdStartStop = 0.4; %0.3
+
+% Set Threshold function for later use
+threshold_fn = 'Threshold';
+if use_fixed_threshold
+    threshold_fn = 'FixedThreshold';
+end
 
 
-mfilename('fullpath')
-fileDir = [pwd,'/',mfilename];
-
-
-
-
-%ui components.
-fig =data.fig;
-d = uiprogressdlg(fig,'Title','Compiling files',...
-    'Message','Start','Cancelable','on');
-drawnow
-logFile = data.logFile;
-% Unpack the data structure
-
-div0 = data.div0Date;
-parentFolderPath = data.parentFolderPath;
-refDir = data.refDir;
-opDir = data.opDir;
-
-    
 % make output folder
 if not(isfolder(append(opDir,'ActivityScan_outputs/Raster/')))
     mkdir(append(opDir,'ActivityScan_outputs/Raster/'));
@@ -37,9 +44,6 @@ if not(isfolder(append(opDir,'ActivityScan_outputs/FiringRateMap/')))
     mkdir(append(opDir,'ActivityScan_outputs/FiringRateMap/'));
 end
 
-% extract runID info from reference excel sheet
-T = readtable(refDir);
-run_ids = unique(T.(4));
 
 % defines
 % convert div 0 to date datatype
@@ -48,23 +52,17 @@ div0_date = datetime(div0, "InputFormat",'MM/dd/yyyy');
 Run_ID = [];
 DIV = [];
 Time = [];
-Well =[];
-NeuronType={};
-Chip_ID = {};
+Chip_ID = [];
 Mean_FiringRate = [];
 Mean_SpikeAmplitude = [];
 error_l = [];
 
-%% iterate through ActivityScans
-% get a list of all files in the folder with the desired file name pattern.
-filePattern = fullfile(parentFolderPath, '**/ActivityScan/**/*raw.h5'); 
+% Get a list of all files in the folder with the desired file name pattern.
+filePattern = fullfile(dataDir, '**/ActivityScan/**/*raw.h5'); 
 theFiles = dir(filePattern);
-for k = 1 : length(theFiles)
-    % Check for Cancel button press
-    if d.CancelRequested
-        break
-    end
 
+
+for k = 1 : length(theFiles)
     % reset recording info
     scan_runID = nan;
     scan_chipID = nan;
@@ -78,35 +76,14 @@ for k = 1 : length(theFiles)
     fileDirParts = strsplit(pathFileActivityScan, filesep); % split dir into elements
     scan_runID = str2double(fileDirParts{end-0}); % extract runID
     scan_runID_text = fileDirParts{end-0};
-    scan_chipID = fileDirParts{end-2}; % extract chipID
+    scan_chipID = str2double(fileDirParts{end-2}); % extract chipID
     % folderDate = datetime(fileDirParts{end-3},'InputFormat','yyMMdd','Format','MM-dd-yyyy'); % extract date and convert to date object
     
-    if ismember(scan_runID,run_ids)
-        fprintf(1, 'Now reading %s\n', pathFileActivityScan);
-        fprintf(logFile, 'Now reading %s\n', pathFileActivityScan);
+    
+         fprintf(1, 'Now reading %s\n', pathFileActivityScan);
         % create fileManager object for the Activity Scan
-            
-            idx = T.Run_ == scan_runID;
-
-        wellsIDs = T.Wells_Recorded(idx);
-
-        if ismember(',', wellsIDs{1})
-        wellsIDs = strsplit(wellsIDs{1}, ',');
-        wellsIDs = cellfun(@str2double,wellsIDs);
-        end
-
-        
-        neuronTypes = T.NeuronSource(idx);
-        if ismember(',', neuronTypes{1})
-        neuronTypes = strsplit(neuronTypes{1}, ',');
-
-        end
-        for z = 1:length(wellsIDs)
-        wellID=wellsIDs(z);
-        fprintf(logFile, 'Processing Well %d\n', wellID);
-        neuronSourceType = neuronTypes(z);
         try
-            %wellID = 1; % select which well to analyze
+            wellID = 1; % select which well to analyze
             %{
             lastwarn('','');
             diceyFunction(mxw.fileManager(pathFileActivityScan,wellID));
@@ -147,10 +124,8 @@ for k = 1 : length(theFiles)
         % append information to table elements
         Run_ID = [Run_ID scan_runID];
         DIV = [DIV scan_div];
-        Well = [Well wellID];
-        NeuronType{end+1} = neuronSourceType{1};
         Time = [Time hd5Date];
-        Chip_ID{end+1}=scan_chipID;
+        Chip_ID = [Chip_ID scan_chipID];
         Mean_FiringRate = [Mean_FiringRate scan_meanFiringRate];
         Mean_SpikeAmplitude = [Mean_SpikeAmplitude scan_meanSpikeAmplitude];
 
@@ -177,10 +152,9 @@ for k = 1 : length(theFiles)
             xlim([0 xmaxActivity])
             ylim([0 max(chActivity)])
             
-            saveas(gcf,append(opDir,'ActivityScan_outputs/Raster/ActivityRaster',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+            saveas(gcf,append(opDir,'ActivityScan_outputs/Raster/ActivityRaster',scan_runID_text,'.png'))
         catch
             fprintf('Unable to plot raster for run %s/n', scan_runID_text)
-            fprintf(logFile,'Unable to plot raster for run %s/n', scan_runID_text);
         end
     
         % II. Spike Rate Activity Map and Distribution
@@ -218,10 +192,9 @@ for k = 1 : length(theFiles)
             legend(['Mean Firing Rate = ',num2str(mean(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f'),...
                 ' Hz,  sd = ',num2str(std(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f')])
         
-            saveas(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+            saveas(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'.png'))
         catch
             fprintf('Unable to plot Firing Rate Map for run s%/n',scan_runID_text)
-            fprintf(logFile,'Unable to plot Firing Rate Map for run s%/n',scan_runID_text);
         end
         
         % III. Spike Amplitude Activity Map and Distribution
@@ -259,41 +232,48 @@ for k = 1 : length(theFiles)
             legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
                 ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
         
-            saveas(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+            saveas(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'.png'))
         catch
             fprintf('Unable to plot Amplitude Map for run %s/n', scan_runID_text)
-            fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
         end
-    end
 end
-if d.CancelRequested
-    d.close()
-    fprintf(logFile,'User Interruption');
-    error("User interruption")
-end
-end
+
+
+
+
 %% construct table
 % convert row list to columns
 Run_ID = Run_ID';
 DIV = DIV';
 Time = Time';
-Well = Well';
-NeuronType= NeuronType';
 Chip_ID = Chip_ID';
 Mean_FiringRate = Mean_FiringRate';
 Mean_SpikeAmplitude = Mean_SpikeAmplitude';
 % make table
-T = table(Run_ID,DIV,Time,Chip_ID,Well,NeuronType,Mean_FiringRate,Mean_SpikeAmplitude);
+T = table(Run_ID,DIV,Time,Chip_ID,Mean_FiringRate,Mean_SpikeAmplitude);
 T = sortrows(T,"Run_ID","ascend");
 writetable(T, fullfile(opDir,'ActivityScan_outputs/Compiled_ActivityScan.csv'));
 
 if ~isempty(error_l)
     error_str = strjoin(error_l,', ');
     fprintf('Unable to read file with runID: %s, file(s) skipped.\n',error_str);
-    fprintf(logFile,'Unable to read file with runID: %s, file(s) skipped.\n',error_str);
-
 end
 
 fprintf('Activity Scan analysis successfully compiled.\n')
-fprintf(logFile,'Activity Scan analysis successfully compiled.\n');
-end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
