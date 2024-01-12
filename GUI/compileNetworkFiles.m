@@ -41,6 +41,10 @@ function [] = compileNetworkFiles(data)
     if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s')))
         mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s'));
     end
+           % make output folder
+    if not(isfolder(append(opDir,'Network_outputs/Raster_BurstActivity/Plot600s')))
+        mkdir(append(opDir,'Network_outputs/Raster_BurstActivity/Plot600s'));
+    end
 %     %open the log file 
 %     logFile = fopen(append(opDir,'/log_file.txt'),'A');
 % 
@@ -117,7 +121,7 @@ function [] = compileNetworkFiles(data)
             wellsIDs = strsplit(wellsIDs{1}, ',');
             wellsIDs = cellfun(@str2double,wellsIDs);
             else
-                error('wellsIDs are not comma separated correclty');
+                error('wellsIDs are not comma separated correctly');
             end
             end
             
@@ -242,7 +246,7 @@ function [] = compileNetworkFiles(data)
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot60s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
                 subplot(2,1,1);
                 xlim([0 120])
-                ylim([0 20])
+                ylim([1 max(relativeSpikeTimes.channel)])
                 subplot(2,1,2);
                 xlim([0 120])
                 ylim([0 20])
@@ -251,11 +255,21 @@ function [] = compileNetworkFiles(data)
                 %savefig(appen
                 subplot(2,1,1);
                 xlim([0 300])
-                ylim([0 20])
+                ylim([0 max(relativeSpikeTimes.channel)])
                 subplot(2,1,2);
                 xlim([0 300])
                 ylim([0 20])
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+                 subplot(2,1,1);
+                  xlim([0 600])
+                  ylim([0 max(relativeSpikeTimes.channel)])
+                  subplot(2,1,2);
+                  xlim([0 600])
+                  ylim([0 20])
+                  saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot600s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
+%                 
+%                 
+                
                 %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.fig'))
             end
         end

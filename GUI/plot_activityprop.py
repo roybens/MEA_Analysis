@@ -66,8 +66,8 @@ if not input_string3:
     run_exclude =[]
 else :
     try:
-        chip_exclude =[x for x in input_string3.split(',')]
-        print(f"chips being excluded are {chip_exclude}")
+        run_exclude =[int(x) for x in input_string3.split(',')]
+        print(f"chips being excluded are {run_exclude}")
     except Exception:
         print("Invalid input")
 
@@ -131,7 +131,7 @@ def plot_network_graph(working_df,output_type, assay_type):
     div = df['DIV'].unique()
     total_div = len(div)
     # Find unique values in 'Genotype' column and count them
-    unique_genotypes = df['NeuronType'].unique()
+    unique_genotypes = df['NeuronType'].str.strip().unique()
     total_genotypes = len(unique_genotypes)
 
     # Print the number of unique genotypes
@@ -146,24 +146,24 @@ def plot_network_graph(working_df,output_type, assay_type):
     # Fill data from data frame
     for i in div:
         for genotype in unique_genotypes:
-            temp_df = df.loc[(df['DIV'] == i) & (df['NeuronType'] == genotype)]
+            temp_df = df.loc[(df['DIV'] == i) & (df['NeuronType'].str.strip() == genotype)]
             output_arrays[genotype].append(np.array(temp_df[output_type]))
             chip_arrays[genotype].append(np.array(temp_df['Chip_ID']))
             well_arrays[genotype].append(np.array(temp_df['Well']))
     ##plot
     # bar width
     w = total_div/32
+    gaplength = 1/(len(unique_genotypes)+2)
     #create x-coordinates of bars
    # Create x-coordinates of bars
     x_day = [int(d) for d in div]
     x_genotype = {genotype: [] for genotype in unique_genotypes}
-    x_d = list(range(1, total_div + 1))
+    x_d = list(range(0, total_div))
     
     # Assign x-coordinates for each genotype
     for i, genotype in enumerate(unique_genotypes):
         for x in x_d:
-            x_genotype[genotype].append(x + w * (i - len(unique_genotypes) / 2))
-
+            x_genotype[genotype].append(x + (gaplength*i+1))
     #plotting
     fig, ax = plt.subplots()
     # Generate a list of distinct colors based on the number of genotypes
@@ -199,14 +199,17 @@ def plot_network_graph(working_df,output_type, assay_type):
             file.write("Sample Size (n): " + ", ".join([str(n_data)]) + "\n")
 
         # Plot bars
+
+        alpha_value = 0.7
         ax.bar(x_genotype[genotype],
             height=mean_data,
             yerr=yerr_data,
             capsize=3,
-            width=w,
+            width=gaplength,
             color=colors[i],
             edgecolor='black',
-            ecolor='black',label=genotype)
+            ecolor='black',alpha=alpha_value,
+            label=genotype)
             # Plot scatter points
         for j in range(len(x_genotype[genotype])):
             #ax.scatter(x_genotype[genotype][j] + np.zeros(y_data[j].size), y_data[j], s=20,color=colors2[i])
@@ -217,19 +220,21 @@ def plot_network_graph(working_df,output_type, assay_type):
             #marker_chips[combined_data[0]] if combined_data[0] in track_chips else 'o'
 
             # Use the marker in the scatter plot
+            jitter_amount=0.08
             for k in range(len(y_data[j])):
                 #pdb.set_trace()
                 ax.scatter(
-                    x_genotype[genotype][j] + np.zeros(1),
+                    x_genotype[genotype][j] +np.random.uniform(-jitter_amount, jitter_amount, 1),
                     y_data[j][k],
-                    s=20,
-                    color=colors2[i] if markers[k]=='o' else 'black',
+                    s=10,
+                    color=colors[i] if markers[k]=='o' else 'black',
                     marker=markers[k]
                         )
    
     #perform ttest
     for i in range(len(x_d)):
-        maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
+        #maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
+        maxim = max(max(array) for genotype_arrays in output_arrays.values() for array in genotype_arrays)
         count = 1
         p_values = []
         for j, genotype1 in enumerate(unique_genotypes):
@@ -255,10 +260,10 @@ def plot_network_graph(working_df,output_type, assay_type):
                     # Plot significance
                     #maxim = max(np.max(output_arrays[genotype1][i]), np.max(output_arrays[genotype2][i]))
                     x1, x2 = x_genotype[genotype1][i], x_genotype[genotype2][i]
-                    ax.plot([x1, x2], [maxim + 0.1*maxim*(count)] * 2, 'k', linewidth=1.5)
+                    ax.plot([x1, x2], [maxim + 0.05*maxim*(count)] * 2, 'k', linewidth=1.5)
                     sign = "***" if p_value <= 0.001 else "**" if p_value <= 0.01 else "*" if p_value <= 0.05 else "ns"
                     
-                    ax.text((x1 + x2) / 2, maxim +0.1*maxim*(count), sign, ha='center', va='bottom', fontsize=10)
+                    ax.text((x1 + x2) / 2, maxim +0.05*maxim*(count), sign, ha='center', va='bottom', fontsize=7)
                     count = count +1
     
                     with open(output_file, 'a') as file:
@@ -273,9 +278,9 @@ def plot_network_graph(working_df,output_type, assay_type):
     plt.title(assay_title + ' ' + title)
     plt.xlabel('DIV')
     plt.ylabel(title)
-    plt.xticks(x_d, x_day)
+    plt.xticks(list(map(lambda x: x + 1+(2*gaplength), x_d)), x_day)
     plt.axis([xmin, total_div + 1, ymin, ymax])
-    plt.legend(title='type',loc='upper right')
+    plt.legend(title='type',loc='upper right', bbox_to_anchor=(1.1, 1.05))
 
 
     svg_dir = os.path.join(opt_dir, 'svg')

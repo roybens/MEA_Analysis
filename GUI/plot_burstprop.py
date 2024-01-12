@@ -64,19 +64,20 @@ while True:
     except Exception as e:
         print(f"An error occurred: {e}")
 
-
-
 input_string3 = input("Enter comma-separated run_ids to exclude (hit enter if none )")
 # set exclude lists
 if not input_string3:
     run_exclude =[]
 else :
     try:
-        chip_exclude =[x for x in input_string3.split(',')]
-        print(f"chips being excluded are {chip_exclude}")
+        run_exclude =[int(x) for x in input_string3.split(',')]
+        print(f"run ids being excluded are {run_exclude}")
     except Exception:
         print("Invalid input")
-
+#TEMPORARYCHANGEPAULA12042023       
+#run_exclude = ['000053','000054','000057','000056']
+#TEMPORARYCHANGEPAULA12042023        
+ 
 input_string4 = input("Enter  chip id+wellid track them (hit enter if none )")
 # set exclude lists
 if not input_string4:
@@ -104,8 +105,8 @@ ref_df = pd.read_excel(reference_f)
 data_df = data_df.sort_values(by=['Run_ID'],ascending=True,ignore_index=True)
 ref_df = ref_df.sort_values(by=['Run #'],ascending=True,ignore_index=True)
 
-#To do : need to check why NAN
-#data_df = data_df['DataFrame Column'].fillna(0)
+#To do : need to check why NAN occurs
+
 data_df = data_df.replace(np.NaN,0.0)
 print(data_df)
 
@@ -161,7 +162,7 @@ def plot_network_graph(working_df,output_type, assay_type):
     total_div = len(div)
 
     # Find unique values in 'Genotype' column and count them
-    unique_genotypes = df['NeuronType'].unique()
+    unique_genotypes = df['NeuronType'].str.strip().unique()
     total_genotypes = len(unique_genotypes)
 
     # Print the number of unique genotypes
@@ -175,23 +176,26 @@ def plot_network_graph(working_df,output_type, assay_type):
     # Fill data from data frame
     for i in div:
         for genotype in unique_genotypes:
-            temp_df = df.loc[(df['DIV'] == i) & (df['NeuronType'] == genotype)]
+            temp_df = df.loc[(df['DIV'] == i) & (df['NeuronType'].str.strip() == genotype)]
             output_arrays[genotype].append(np.array(temp_df[output_type]))
             chip_arrays[genotype].append(np.array(temp_df['Chip_ID']))
             well_arrays[genotype].append(np.array(temp_df['Well']))
     # Plotting setup
+    #pdb.set_trace()
     w = total_div/32  # bar width
-
+    gaplength = 1/(len(unique_genotypes)+2)
     # Create x-coordinates of bars
     x_day = [int(d) for d in div]
     x_genotype = {genotype: [] for genotype in unique_genotypes}
-    x_d = list(range(1, total_div + 1))
-    
+    x_d = list(range(0, total_div))
+
     # Assign x-coordinates for each genotype
     for i, genotype in enumerate(unique_genotypes):
         for x in x_d:
-            x_genotype[genotype].append(x + w * (i - len(unique_genotypes) / 2))
-
+            
+            x_genotype[genotype].append(x + (gaplength*i+1))
+	
+   
     # Initialize plot
     fig, ax = plt.subplots()
     # Generate a list of distinct colors based on the number of genotypes
@@ -203,7 +207,10 @@ def plot_network_graph(working_df,output_type, assay_type):
     mean_data_all ={}
     yerr_data_all = {}
     n_data_all={}
+    #breakpoint()
+    #pdb.set_trace()
     for i,genotype in enumerate(unique_genotypes):
+        #breakpoint()
         y_data = output_arrays[genotype]
         chipy_data = chip_arrays[genotype]
         welly_data = well_arrays[genotype]
@@ -212,7 +219,7 @@ def plot_network_graph(working_df,output_type, assay_type):
         mean_data = [np.mean([n for n in yi if np.isfinite(n)]) for yi in y_data]
         yerr_data = [np.std([n for n in yi if np.isfinite(n)], ddof=1)/np.sqrt(np.size(yi)) for yi in y_data]
         n_data = [len(yi) for yi in y_data]
-         # Store statistics in dictionaries
+        # Store statistics in dictionaries
         mean_data_all[genotype] = mean_data
         yerr_data_all[genotype] = yerr_data
         n_data_all[genotype] = n_data
@@ -223,36 +230,41 @@ def plot_network_graph(working_df,output_type, assay_type):
             file.write("Mean: " + ", ".join([str(m) for m in mean_data]) + "\n")
             file.write("SEM: " + ", ".join([str(sem) for sem in yerr_data]) + "\n")
             file.write("Sample Size (n): " + ", ".join([str(n_data)]) + "\n")
-
+			
         # Plot bars
+        #transparency value 
+        alpha_value = 0.7
         ax.bar(x_genotype[genotype],
             height=mean_data,
             yerr=yerr_data,
             capsize=3,
-            width=w,
+            width=gaplength,
             color=colors[i],
             edgecolor='black',
-            ecolor='black',label=genotype)
+            ecolor='black',
+            alpha=alpha_value,label=genotype)
         #pdb.set_trace()
         # Plot scatter points
+        #breakpoint()
         for j in range(len(x_genotype[genotype])):
             #pdb.set_trace()
             # ax.scatter(x_genotype[genotype][j] + np.zeros(y_data[j].size), y_data[j], s=20,color=colors2[i],marker=marker_chips[chipy_data[j]+str(welly_data[j])] if chipy_data[j]+str(welly_data[j]) in track_chips else 'o')
 # Concatenate corresponding elements from chipy_data[j] and welly_data[j]
-            combined_data = [chip + str(well) for chip, well in zip(chipy_data[j], welly_data[j])]
+            combined_data = [str(chip) + str(well) for chip, well in zip(chipy_data[j], welly_data[j])]
 
             # Check if the concatenated string is in track_chips, and set the marker accordingly
             markers = [marker_chips.get(chipwell, 'o') for chipwell in combined_data]
             #marker_chips[combined_data[0]] if combined_data[0] in track_chips else 'o'
 
             # Use the marker in the scatter plot
+            jitter_amount=0.08
             for k in range(len(y_data[j])):
                 #pdb.set_trace()
                 ax.scatter(
-                    x_genotype[genotype][j] + np.zeros(1),
+                    x_genotype[genotype][j] + np.random.uniform(-jitter_amount, jitter_amount, 1),
                     y_data[j][k],
-                    s=20,
-                    color=colors2[i] if markers[k]=='o' else 'black',
+                    s=7,
+                    color=colors[i] if markers[k]=='o' else 'black',
                     marker=markers[k]
                         )
 
@@ -261,10 +273,11 @@ def plot_network_graph(working_df,output_type, assay_type):
     # max_y = max([max(data) for data in output_arrays.values() if data.size > 0])
     # increment = max_y * 0.1  # Increment to adjust y-position for significance markers
 
-    #Perform and plot t-tests between all pairs of genotypes
-    
+    #Perform and plot t-tests between all pairs of genotype
+    #pdb.set_trace()
     for i in range(len(x_d)):
-        maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
+        #maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
+        maxim = max(max(array) for genotype_arrays in output_arrays.values() for array in genotype_arrays)
         count = 1
         p_values = []
         for j, genotype1 in enumerate(unique_genotypes):
@@ -290,10 +303,10 @@ def plot_network_graph(working_df,output_type, assay_type):
                     # Plot significance
                     #maxim = max(np.max(output_arrays[genotype1][i]), np.max(output_arrays[genotype2][i]))
                     x1, x2 = x_genotype[genotype1][i], x_genotype[genotype2][i]
-                    ax.plot([x1, x2], [maxim + 0.1*maxim*(count)] * 2, 'k', linewidth=1.5)
+                    ax.plot([x1, x2], [maxim + 0.05*maxim*(count)] * 2, 'k', linewidth=1.5)
                     sign = "***" if p_value <= 0.001 else "**" if p_value <= 0.01 else "*" if p_value <= 0.05 else "ns"
                     
-                    ax.text((x1 + x2) / 2, maxim +0.1*maxim*(count), sign, ha='center', va='bottom', fontsize=10)
+                    ax.text((x1 + x2) / 2, maxim +0.05*maxim*(count), sign, ha='center', va='bottom', fontsize=7)
                     count = count +1
     
                     with open(output_file, 'a') as file:
@@ -305,13 +318,17 @@ def plot_network_graph(working_df,output_type, assay_type):
     xmax = (max(df['DIV']) - xmin)*1.25
     ymin = 0
     ymax = (max(df[output_type]) - ymin)*1.4
-
+    #pdb.set_trace()
     plt.title(assay_title + ' ' + title)
     plt.xlabel('DIV')
     plt.ylabel(title)
-    plt.xticks(x_d, x_day)
+    plt.xticks(list(map(lambda x: x + 1+(2*gaplength), x_d)), x_day)
+    #ax.set_xticks(x_ticks)
+
+	# Set the corresponding DIV labels for each tick position
+    #ax.set_xticklabels(div)
     plt.axis([xmin, total_div + 1, ymin, ymax])
-    plt.legend(title='type',loc='upper right')
+    plt.legend(title='type',loc='upper right', fontsize='small', handlelength=2, handletextpad=2, handleheight=2,bbox_to_anchor=(1.13, 1))
 
 
     svg_dir = os.path.join(opt_dir, 'svg')
@@ -330,9 +347,9 @@ def plot_network_graph(working_df,output_type, assay_type):
 exclude_l = []
 # Filter rows based on chip_exclude and well_exclude
 #pdb.set_trace()
-# Creating a dictionary for easier exclusion lookup
-exclude_dict = dict(zip(chip_exclude, well_exclude))
+# Creating a dictionary for easier exclusion lookupfirefox
 
+exclude_dict = dict(zip(chip_exclude, well_exclude))
 
 if exclude_dict:
     # Using list comprehension for filtering
@@ -342,6 +359,7 @@ if exclude_dict:
 
 
     # Filter rows based on run_exclude
+
 df = df[~df['Run_ID'].isin(run_exclude)]
 
 
