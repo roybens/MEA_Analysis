@@ -356,10 +356,12 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         os.chdir(dir_name)
         kilosort_output_folder = f"{current_directory}/../AnalyzedData/{desired_pattern}/kilosort2_{rec_name}"
         start = timer()
-        sortingKS3 = run_kilosort(recording_chunk,output_folder=kilosort_output_folder)
+        sortingKS3 = run_kilosort(recording_chunk,output_folder='./Kilosort_tmp')
         logging.debug("Sorting complete")
         sortingKS3 = sortingKS3.remove_empty_units()
-        sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk)
+        sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk) #Sometimes KS returns spikes outside the number of samples. < https://github.com/SpikeInterface/spikeinterface/pull/1378>
+        
+        sortingKS3= sortingKS3.save(folder = kilosort_output_folder)
         waveform_folder =dir_name+'/waveforms_'+ rec_name
         logging.info("Extracting waveforms")
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)

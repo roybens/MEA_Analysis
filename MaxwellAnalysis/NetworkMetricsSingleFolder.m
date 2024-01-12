@@ -1,17 +1,17 @@
 clear
 close all
 
-dataDir = '/mnt/harddrive-2/Organoids_Mandeep_Fink_Lab/Cdkl5_Organoids_Mano0855-D/';
+dataDir = '/mnt/disk20tb/Organoids/Maxone/CDKL5_Organoids_T2_12012023/';
 
 
-opDir = '/home/mmp/Documents/script_output/organoids_acrossdays2/';
+opDir = '/home/mmp/Documents/script_output/CDKL5_ORGANOIDS_T2/';
 
 project_name = 'organoid';
 
 % set DIV 0 date
 
 %div0 = '06/02/2023'; % format: MM/DD/YYYY
-div0 = '06/23/2023';
+div0 = '11/24/2023';
 
 % set Gaussian kernel standard deviation [s] (smoothing window)
 gaussianSigma = 0.16; %0.18
@@ -20,7 +20,7 @@ binSize = 0.02;
 % set minimum peak distance [s]
 minPeakDistance = 1.0;
 % set burst detection threshold [rms / fixed]
-thresholdBurst =1.5; %1.2
+thresholdBurst =1.0; %1.2
 % set fixed threshold;
 use_fixed_threshold = false;
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
@@ -191,7 +191,7 @@ for k = 1 : length(theFiles)
             mxw.plot.rasterPlot(networkData,'Figure',false);
             box off;
             %xlim([0 round(max(relativeSpikeTimes.time)/4)])
-            xlim([0 80])
+            xlim([0 120])
             ylim([1 max(relativeSpikeTimes.channel)])
             
             subplot(2,1,2);
@@ -200,7 +200,7 @@ for k = 1 : length(theFiles)
             hold on;
             plot(networkStats.maxAmplitudesTimes,networkStats.maxAmplitudesValues,'or')
             %xlim([0 round(max(relativeSpikeTimes.time)/4)])
-            xlim([0 80])
+            xlim([0 120])
             ylim([0 12])
             saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',int2str(scan_runID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_','.pdf'))
             %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.fig'))
