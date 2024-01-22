@@ -271,6 +271,7 @@ class axon_trace_objects:
         3. Grouping based on cosine similarity.
         """
         self = self._collect_units_by_extremum_and_proximity()
+        
         #under construction
         #self = self._cross_correlation_grouping()
         #self = self._cosine_similarity_grouping()
@@ -347,7 +348,7 @@ class axon_trace_objects:
         distance_matrix = {k1: {k2: np.linalg.norm(np.array(k1) - np.array(k2)) for k2 in units_by_extremum_np.keys()} for k1 in units_by_extremum_np.keys()}
 
         # Create a new distance matrix with distances <= 60 microns (60 is arbitrary)
-        euclidian_distance_val = 120
+        #euclidian_distance_val = 120
         euclidian_distance_val = 0 #Use this value to turn off euclidian distance filter
         distance_matrix = {k1: {k2: v for k2, v in k1_dict.items() if v <= euclidian_distance_val} for k1, k1_dict in distance_matrix.items()}
    

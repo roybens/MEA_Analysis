@@ -40,7 +40,11 @@ def main(debug_mode, selected_folders=None):
     grouped_dirs_maxtwo = group_and_validate_directories(cont_maxtwo_dirs)
     
     #if not empty, run mea_analysis_pipeline_aw on each pair of activity and network scans
-    if grouped_dirs_maxone:
+    
+    #MaxOne Pipeline
+    #Turn this off for now, since it's not working yet.
+    run_maxone_analysis = False
+    if grouped_dirs_maxone and run_maxone_analysis:
         print("Running MEA Analysis Pipeline on MaxOne data...")
         for key, dirs in grouped_dirs_maxone.items():
             # Now 'key' is the dictionary key and 'dirs' is the list of directories
@@ -55,7 +59,6 @@ def main(debug_mode, selected_folders=None):
                 channel_locations = {}
                 waveforms = {}
                 if scan_type in ["ActivityScan", "AxonTracking", "Network"]:
-                #if scan_type == "AxonTracking":
                     for j in range(recording_count):
                         print(f"\t\trecording {j}...")
                         recnumber = j
@@ -68,17 +71,17 @@ def main(debug_mode, selected_folders=None):
                 else:
                     print("Error: scan type not recognized.")
                     #return
+    
+    #MaxTwo Pipeline:
     if grouped_dirs_maxtwo:
         print("Running MEA Analysis Pipeline on MaxTwo data...")
         for key, dirs in grouped_dirs_maxtwo.items():
             # Now 'key' is the dictionary key and 'dirs' is the list of directories
-            # You can process each group of directories here
+            # process each group of directories here
             for dir in dirs:
                 print(f"\tAnalyzing MEA, chip_id: {key[0]}, record date: {key[1]}")
                 print(f"\tfile_path: [{dir}]")                
                 scan_type = get_scan_type(dir)
-                # if scan_type == "Network":
-                #     pass
                 wells_per_chip, recordings_per_well, _ = count_recordings_and_wells(dir, scan_type)
                 chip_id = get_chip_id(dir)
                 date = re.search(r'\d{6}', dir).group(0)
@@ -89,7 +92,7 @@ def main(debug_mode, selected_folders=None):
                     print(f"\t\t{well_name}...")
                     #debug
                     if well_name != "well000":
-                        break
+                        continue
                     #debug                    
                     channel_locations[well_name] = {}
                     waveforms[well_name] = {}
@@ -100,71 +103,31 @@ def main(debug_mode, selected_folders=None):
                             recnumber = j
                             rec_name = 'rec' + str(recnumber).zfill(4)
                             file_path = dir
-                            #debug
-                            if scan_type == "Network":
-                                pass
-                            if recnumber > 0:
-                                pass
-                            #debug
                             recording_dir[well_name] = temp_mea_analysis_pipeline(recnumber,scan_type, chip_id, date, file_path, clear_temp_files=False, well_number=well_number)                       
                     else:
                         print("Error: scan type not recognized.")
-                        #return
             for well_name in recordings_per_well.keys():
                 #debug
                 if well_name != "well000":
-                    #pass
-                    break
+                    continue
                 #debug                
                 axon_trace_precursors = axon_trace_objects(recording_dir[well_name], dirs)
-                reconstruct_axon_trace_objects(axon_trace_precursors)           
-        
-            
+                reconstruct_axon_trace_objects(axon_trace_precursors)       
     print("done.")
-    #Temporary MEA Analysis Pipeline, send spikesorting, waveforms, and templates to temp files
-    #temp_mea_analysis_pipeline(cont_maxone_dirs)
-    #temp_mea_analysis_pipeline(cont_maxtwo_dirs)
     
 if __name__ == "__main__":
     debug_mode = True
-    #Make sure that pipeline can handle expected cases, MaxOne and MaxTwo 
-    # selected_folders = ["/mnt/disk20tb/PrimaryNeuronData/Maxtwo/FolicAcid/FolicAcid/230921/M05506", 
-    #                     "/mnt/harddrive-2/ADNP/ADNP/230510/16821"]
-    #                     #"/mnt/disk20tb/PrimaryNeuronData/Maxtwo/FolicAcid/FolicAcid/231002"]
-    
-    #selected_folders = ["/mnt/disk20tb/PrimaryNeuronData/Maxtwo/FolicAcid"]
-
-    selected_folders = [
-        #"/mnt/ben-shalom_nas/irc/media/harddrive8tb/Adam/MEA_AxonTraceDevScans/230828/16862",
-        #"/mnt/disk20tb/PrimaryNeuronData/Maxtwo/FolicAcid/FolicAcid/",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/",
-        #"/mnt/disk20tb/PrimaryNeuronData/Maxtwo/FolicAcid/FolicAcid/230928/M05506"
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/ActivityScan/000001",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000002",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000003",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000004",
-        # #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/ActivityScan/000005",
-        # "/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000006",
-        # #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000007",
-        # "/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000008",
-
-        #tests 1-5
-        # "/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/ActivityScan/000009",
-        # "/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000010",
-        
-        # #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000011",
-        # #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000012",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/ActivityScan/000013",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000014",
-        # #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000015",
-        #"/mnt/disk15tb/adam/axon_recon_pipeline/data/MEA_dev_Data/Tests_Adam/231218/M06844/Network/000016",
-
-        #test 6
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240104/M06844/ActivityScan/000017",
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240104/M06844/AxonTracking/000020",
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240104/M06844/Network/000018",
+    #testing Full Activity Scan and Network Scan...
+    selected_folders_test1 = [        
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/ActivityScan",
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/Network",
+        ]
+    #...vs. Axon Tracking Scan Alone
+    selected_folders_test2 = [  
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/AxonTracking",
         ]  
     if debug_mode:
-        main(debug_mode, selected_folders=selected_folders)
+        main(debug_mode, selected_folders=selected_folders_test1)
+        main(debug_mode, selected_folders=selected_folders_test2)
     else:
         main(debug_mode)
