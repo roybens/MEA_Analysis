@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from probeinterface import plotting as plotting_probe
+import json
 
 
 #Define Algorithm Params
@@ -338,12 +339,28 @@ def reconstruct_axon_trace_objects(axon_trace_precursors):
         # Merge the templates and channel locations for the current unit
         #debug
         new_templates = units_to_be_merged[key]['sparse_unit_templates']
-        new_channel_locations = units_to_be_merged[key]['sparse_channel_locations']
-        
+        new_channel_locations = units_to_be_merged[key]['sparse_channel_locations']        
         old_channels = units_to_be_merged[key]['channel_locations']
         old_templates = units_to_be_merged[key]['templates']
         #debug
-        
+
+        ## Create a dictionary to hold all the data
+        data = {
+            'new_templates': new_templates,
+            'new_channel_locations': new_channel_locations,
+            'old_channels': old_channels,
+            'old_templates': old_templates
+        }
+
+        # Define the path to the JSON file
+        json_file_path = plot_dir / 'data.json'
+
+        # Write the data to the JSON file
+        with open(json_file_path, 'w') as json_file:
+            json.dump(data, json_file)
+
+        print(f'Data saved to {json_file_path}')
+                
         #Build MEA_channel_locations
         # Iterate over the old_channels dictionary
         # Iterate over the old_channels dictionary

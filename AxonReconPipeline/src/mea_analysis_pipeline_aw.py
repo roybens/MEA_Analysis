@@ -29,9 +29,9 @@ logger.setLevel(logging.INFO)
 job_kwargs = dict(n_jobs=4, chunk_duration="1s", progress_bar=True)
 #Set the job_kwargs for the extract_waveforms function
 #for block-wise axon track test
-job_kwargs_we = dict(n_jobs=4, chunk_duration="1s", progress_bar=True, method = "radius", radius_um = 300)
+#job_kwargs_we = dict(n_jobs=4, chunk_duration="1s", progress_bar=True, method = "radius", radius_um = 300)
 #for full axon track test
-#job_kwargs = dict(n_jobs=4, chunk_duration="1s", progress_bar=True, method = "radius", radius_um = 2000)
+job_kwargs_we = dict(n_jobs=4, chunk_duration="1s", progress_bar=True, method = "radius", radius_um = 2000)
 #note: default method is "radius" and default radius_um is 100S
 
 
