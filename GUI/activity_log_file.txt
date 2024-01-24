@@ -1544,3 +1544,21 @@ Processing Well 6
 Now reading /mnt/disk20tb/PrimaryNeuronData/Maxtwo/SPTAN1_2/SPTAN1_2/230928/M06804/Network/000080/data.raw.h5
 Processing Well 2
 Processing Well 3
+Timestamp: 18-Jan-2024 17:21:26
+Processing NetworkProject Name: ADNP3
+DIV 0 Date: 11/7/2023
+Parent Folder Path: /mnt/disk20tb/PrimaryNeuronData/Maxtwo/ADNP_3/ADNP_3/231114/M07429/
+Reference Directory: /mnt/disk15tb/paula/Main_DA_Projects/Ref_Files/ADNP_3_data/andp_3_ref.xlsx
+Gaussian Sigma: 0.160000
+Bin Size: 0.400000
+Min Peak Distance: 1.000000
+Threshold Burst: 1.000000
+Threshold Start-Stop: 0.400000
+Output Directory: /home/mmp/Documents/ADNP3_DIV7/
+Now reading /mnt/disk20tb/PrimaryNeuronData/Maxtwo/ADNP_3/ADNP_3/231114/M07429/Network/000004/data.raw.h5
+Processing Well 1
+Processing Well 2
+Processing Well 3
+Processing Well 4
+Processing Well 5
+Network analysis successfully compiled.

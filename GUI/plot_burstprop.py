@@ -146,9 +146,6 @@ def plot_network_graph(working_df,output_type, assay_type):
     if output_type == 'IBI':
         title = 'IBI'
     if output_type == 'Burst_Peak':
-
-
-
         title = 'Burst Peak'
     if output_type == 'Number_Bursts':
         title = 'Number Bursts'
@@ -224,13 +221,15 @@ def plot_network_graph(working_df,output_type, assay_type):
         yerr_data_all[genotype] = yerr_data
         n_data_all[genotype] = n_data
         # Save statistics to file
-        output_file = f"intermediate_files/{title}_{genotype}_statistics.txt"
+        
+        """
         with open(output_file, 'w') as file:
             file.write(f"{genotype} Statistics\n")
             file.write("Mean: " + ", ".join([str(m) for m in mean_data]) + "\n")
             file.write("SEM: " + ", ".join([str(sem) for sem in yerr_data]) + "\n")
-            file.write("Sample Size (n): " + ", ".join([str(n_data)]) + "\n")
-			
+            file.write("Sample Size (n): " + ", ".join([str(n_data)]) + "\n")	
+            	
+        """
         # Plot bars
         #transparency value 
         alpha_value = 0.7
@@ -275,6 +274,7 @@ def plot_network_graph(working_df,output_type, assay_type):
 
     #Perform and plot t-tests between all pairs of genotype
     #pdb.set_trace()
+    output_file = f"intermediate_files/{title}_{genotype}_statistics.txt"
     for i in range(len(x_d)):
         #maxim = max([max( output_arrays[genotype][i] )for genotype in unique_genotypes])
         maxim = max(max(array) for genotype_arrays in output_arrays.values() for array in genotype_arrays)
@@ -299,7 +299,8 @@ def plot_network_graph(working_df,output_type, assay_type):
                     # calculate the p-vallue
                     p_value = (1.0 - stats.t.cdf(abs(t_stat), degreef)) * 2.0
                     p_values.append([mean1,sem1,mean2,sem2,p_value])
-
+			
+                    #breakpoint()
                     # Plot significance
                     #maxim = max(np.max(output_arrays[genotype1][i]), np.max(output_arrays[genotype2][i]))
                     x1, x2 = x_genotype[genotype1][i], x_genotype[genotype2][i]
@@ -313,6 +314,8 @@ def plot_network_graph(working_df,output_type, assay_type):
                                 file.write(f"P values:{p_values} \n")
 
 
+    
+    #breakpoint()
     # Axis scaling and labeling
     xmin = 0
     xmax = (max(df['DIV']) - xmin)*1.25
