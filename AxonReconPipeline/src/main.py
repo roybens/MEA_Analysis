@@ -7,7 +7,7 @@ import re
 from file_selector import main as file_selector_main
 from extract_raw_assay_data import main as extract_raw_assay_data_main
 from test_continuity import main as test_continuity_main
-from mea_analysis_pipeline_aw import process_block as temp_mea_analysis_pipeline
+import process_mea_data
 from group_dirs import main as group_and_validate_directories
 from test_continuity import get_scan_type
 from test_continuity import get_chip_id
@@ -64,7 +64,7 @@ def main(debug_mode, selected_folders=None):
                         recnumber = j
                         rec_name = 'rec' + str(recnumber).zfill(4)
                         file_path = dir
-                        waveforms[rec_name], channel_locations[rec_name], recording_dir = temp_mea_analysis_pipeline(recnumber, scan_type, chip_id, date, file_path, clear_temp_files=False)
+                        waveforms[rec_name], channel_locations[rec_name], recording_dir = process_mea_data(recnumber, scan_type, chip_id, date, file_path, clear_temp_files=False)
                     #axon_trace_precursors = axon_trace_objects(recording_dir, channel_locations)
                     #reconstruct_axon_trace_objects(axon_trace_precursors)
                     print()
@@ -103,7 +103,7 @@ def main(debug_mode, selected_folders=None):
                             recnumber = j
                             rec_name = 'rec' + str(recnumber).zfill(4)
                             file_path = dir
-                            recording_dir[well_name] = temp_mea_analysis_pipeline(recnumber,scan_type, chip_id, date, file_path, clear_temp_files=False, well_number=well_number)                       
+                            recording_dir[well_name] = process_mea_data(recnumber,scan_type, chip_id, date, file_path, clear_temp_files=False, well_number=well_number)                       
                     else:
                         print("Error: scan type not recognized.")
             for well_name in recordings_per_well.keys():
@@ -119,15 +119,15 @@ if __name__ == "__main__":
     debug_mode = True
     #testing Full Activity Scan and Network Scan...
     selected_folders_test1 = [        
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/ActivityScan",
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/Network",
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/ActivityScan/000023",
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/Network/000024",
         ]
     #...vs. Axon Tracking Scan Alone
     selected_folders_test2 = [  
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/AxonTracking",
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/AxonTracking/000026",
         ]  
     if debug_mode:
         main(debug_mode, selected_folders=selected_folders_test1)
-        main(debug_mode, selected_folders=selected_folders_test2)
+        #main(debug_mode, selected_folders=selected_folders_test2)
     else:
         main(debug_mode)
