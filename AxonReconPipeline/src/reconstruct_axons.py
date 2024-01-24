@@ -356,8 +356,15 @@ def reconstruct_axon_trace_objects(axon_trace_precursors):
         json_file_path = plot_dir / 'data.json'
 
         # Write the data to the JSON file
+        class NumpyEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                return json.JSONEncoder.default(self, obj)
+
+        # Write the data to the JSON file
         with open(json_file_path, 'w') as json_file:
-            json.dump(data, json_file)
+            json.dump(data, json_file, cls=NumpyEncoder)
 
         print(f'Data saved to {json_file_path}')
                 

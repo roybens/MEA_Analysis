@@ -412,6 +412,21 @@ def process_block(recnumber, scan_type, chip_id, date, file_path, sorting_folder
     # Get the recording data from the Maxwell file
     recording, rec_name, well_name = get_data_maxwell(file_path, recnumber, well_num=well_number)
 
+    # import json
+    # # Define a JSON encoder for numpy arrays
+    # class NumpyEncoder(json.JSONEncoder):
+    #     def default(self, obj):
+    #         if isinstance(obj, np.ndarray):
+    #             return obj.tolist()
+    #         return json.JSONEncoder.default(self, obj)
+
+    # # Define the path to the JSON file
+    # json_file_path = f"{sorting_folder}{chip_id}_{date}_Max2_{well_name}/recordings_{rec_name}.json"
+
+    # # Write the recording data to the JSON file
+    # with open(json_file_path, 'w') as json_file:
+    #     json.dump(recording, json_file, cls=NumpyEncoder)
+
     # Log the name of the recording being processed
     logging.info(f"Processing recording: {rec_name}")
 
