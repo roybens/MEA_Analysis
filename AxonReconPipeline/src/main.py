@@ -7,7 +7,7 @@ import re
 from file_selector import main as file_selector_main
 from extract_raw_assay_data import main as extract_raw_assay_data_main
 from test_continuity import main as test_continuity_main
-import process_mea_data
+from process_mea_data import main as process_mea_data
 from group_dirs import main as group_and_validate_directories
 from test_continuity import get_scan_type
 from test_continuity import get_chip_id
@@ -74,7 +74,7 @@ def main(debug_mode, selected_folders=None):
     
     #MaxTwo Pipeline:
     if grouped_dirs_maxtwo:
-        print("Running MEA Analysis Pipeline on MaxTwo data...")
+        print("Processing MEAData Collected on MaxTwo...")
         for key, dirs in grouped_dirs_maxtwo.items():
             # Now 'key' is the dictionary key and 'dirs' is the list of directories
             # process each group of directories here
@@ -83,13 +83,14 @@ def main(debug_mode, selected_folders=None):
                 print(f"\tfile_path: [{dir}]")                
                 scan_type = get_scan_type(dir)
                 wells_per_chip, recordings_per_well, _ = count_recordings_and_wells(dir, scan_type)
-                chip_id = get_chip_id(dir)
-                date = re.search(r'\d{6}', dir).group(0)
+                # chip_id = get_chip_id(dir)
+                # date = re.search(r'\d{6}', dir).group(0)
                 channel_locations = {}
                 waveforms = {}
-                recording_dir = {}
+                # recording_dir = {}
+                
                 for well_name in recordings_per_well.keys():
-                    print(f"\t\t{well_name}...")
+                    print(f"\t{well_name}...")
                     #debug
                     if well_name != "well000":
                         continue
@@ -97,13 +98,22 @@ def main(debug_mode, selected_folders=None):
                     channel_locations[well_name] = {}
                     waveforms[well_name] = {}
                     well_number = int(well_name[4:])  # Extract the well number from the well name
+                    
+                    #collect recordings for downstream cocatenation
+                    #recording_to_be_concatenated = {}
                     if scan_type in ["ActivityScan", "AxonTracking", "Network"]:
-                        for j in range(recordings_per_well[well_name]):                            
-                            print(f"\t\t\trecording {j}...")
-                            recnumber = j
-                            rec_name = 'rec' + str(recnumber).zfill(4)
-                            file_path = dir
-                            recording_dir[well_name] = process_mea_data(recnumber,scan_type, chip_id, date, file_path, clear_temp_files=False, well_number=well_number)                       
+                        h5_file_path = dir
+                        #for j in range(recordings_per_well[well_name]):                            
+                            # print(f"\t\t\trecording {j}...")
+                            # recnumber = j
+                            # rec_name = 'rec' + str(recnumber).zfill(4)
+                            # h5_file_path = dir
+                            # #collect recordings for downstream cocatenation
+
+                            # #recording_dir[well_name] = process_mea_data(recnumber,scan_type, chip_id, date, file_path, clear_temp_files=False, well_number=well_number)                       
+                        #Pre-process MEA data for axon reconstruction
+                        #This pipeline requires two input, the h5 file path and the MaxWEll Biosystems Device ID
+                        process_mea_data(h5_file_path, MaxWell_ID=2)
                     else:
                         print("Error: scan type not recognized.")
             for well_name in recordings_per_well.keys():
