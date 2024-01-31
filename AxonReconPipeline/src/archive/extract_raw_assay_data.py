@@ -2,46 +2,6 @@ import os
 import re
 from datetime import datetime
 
-# def find_chip_ids(directories):
-#     include_dirs = []
-#     exclude_dirs = []
-
-#     def process_chip_dir(chip_dir):
-#         # Check if the ActivityScan and Network directories exist
-#         activity_scan_dir = os.path.join(chip_dir, "ActivityScan")
-#         network_dir = os.path.join(chip_dir, "Network")
-#         if os.path.exists(activity_scan_dir) and os.path.exists(network_dir):
-#             # Include this directory
-#             for run_dir in os.listdir(activity_scan_dir):
-#                 for file in os.listdir(os.path.join(activity_scan_dir, run_dir)):
-#                     if os.path.splitext(file)[1] == ".h5":
-#                         include_dirs.append(os.path.join(activity_scan_dir, run_dir, file))
-#             for run_dir in os.listdir(network_dir):
-#                 for file in os.listdir(os.path.join(network_dir, run_dir)):
-#                     if os.path.splitext(file)[1] == ".h5":
-#                         include_dirs.append(os.path.join(network_dir, run_dir, file))
-#         else:
-#             # Exclude this directory
-#             exclude_dirs.append(chip_dir)
-
-#     for directory in directories:
-#         # Check if the directory name matches the format MXXXXX or XXXXX
-#         if re.match(r'M?\d{5}$', os.path.basename(directory)):
-#             process_chip_dir(directory)
-#         # Check if the directory name matches the format YYMMDD
-#         elif re.match(r'\d{6}', os.path.basename(directory)):
-#             # List the contents of the directory
-#             for name in os.listdir(directory):
-#                 # Check if the name matches the format MXXXXX or XXXXX
-#                 if re.match(r'M?\d{5}', name):
-#                     chip_dir = os.path.join(directory, name)
-#                     process_chip_dir(chip_dir)
-#         else:
-#             exclude_dirs.append(directory)
-#             continue
-
-#     return include_dirs, exclude_dirs
-
 def find_chip_ids(directories):
     include_dirs = []
     exclude_dirs = []
@@ -116,9 +76,6 @@ def find_chip_ids(directories):
         # Check if the directory name matches the format MXXXXX or XXXXX
         elif re.match(r'M?\d{5}$', dir_name):
             chip_dirs.append(directory)
-        # # Check if the directory name matches the format of a runID (6 digit numbers)
-        # elif re.match(r'\d{6}$', dir_name):
-        #     runID_dirs.append(directory)
 
         for root, dirs, files in os.walk(directory):
             for dir in dirs:
@@ -140,16 +97,7 @@ def find_chip_ids(directories):
                 # Check if the directory name matches the format MXXXXX or XXXXX
                 elif re.match(r'M?\d{5}$', dir):
                     chip_dirs.append(os.path.join(root, dir))
-                # # Check if the directory name matches the format of a runID (6 digit numbers)
-                # elif re.match(r'\d{6}$', dir):
-                #     runID_dirs.append(os.path.join(root, dir))
-
-    #date_dirs = set(date_dirs)
-    #chip_dirs = set(chip_dirs)
-    
-    # for date_dir in date_dirs:
-    #     #if date_dir.startswith(chip_dir):
-    #     get_h5_paths(date_dir)
+                    
     for chip_dir in chip_dirs:
         #if chip_dir.startswith(date_dir):
         process_chip_dir(chip_dir)
