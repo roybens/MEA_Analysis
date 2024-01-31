@@ -68,19 +68,19 @@ def select_folders():
     return root.selected_directories
 
 # This function prints the selected directories and returns them as a JSON string
-def main(selected_folders, debug_mode = False):    
+def main(pre_selected_folders = None, debug_mode = False):    
     if debug_mode:
+        debug_folders = pre_selected_folders
         print("\n\033[1;33m*** DEBUG MODE ENABLED in file_selector.py ***\033[0m") 
-        print(f"\nFolders selected for analysis:")
-        for folder in selected_folders:
+        for folder in debug_folders:
             print(folder)
-        return selected_folders
+        selected_folders = debug_folders
     else:
-        selected_folders = select_folders()
-        print(f"\nFolders selected for analysis:")
+        selected_folders = select_folders()        
         for folder in selected_folders:
             print(folder)
-        return selected_folders
+    print(f"\nFolders selected for analysis:")
+    return selected_folders
 
 # If this script is run directly, call the main function
 if __name__ == "__main__":
