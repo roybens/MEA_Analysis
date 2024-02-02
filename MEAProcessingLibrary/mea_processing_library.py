@@ -4,6 +4,14 @@ import os
 import glob
 import shutil
 import json
+import re
+import numpy as np
+from multiprocessing import Pool, Manager
+from tqdm import tqdm
+import filecmp
+
+#Currently not used, may be useful for optimization
+from memory_profiler import profile
 
 #spikeinterface imports
 import spikeinterface
@@ -34,7 +42,7 @@ logger.addHandler(stream_handler)
 
 # Create formatters and add it to handlers
 #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s')
 stream_handler.setFormatter(formatter)
 
 def extract_raw_h5_filepaths(directories):
@@ -518,26 +526,134 @@ def extract_waveforms(recording,sorting,folder, load_if_exists = False, n_jobs =
     waveforms = si.extract_waveforms(recording,sorting,folder=folder,overwrite=True, load_if_exists=load_if_exists, sparse = sparse, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
     return waveforms
 
+#This function supports generate_waveform_extractor_unit_by_unit
+def copy_and_compare_files(args):
+    old_name, new_name, file_pattern, unit_id, unit_folder, waveforms_folder, overwrite, log_messages = args
+    do_very_shallow = True
+    do_shallow = False
+    do_deep = False
+    if os.path.exists(new_name) and overwrite == False:
+        try:                     
 
-def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 4, sparse = True, load_if_exists = False):
+            #Very Shallow comparison
+            # Compare file sizes
+            if do_very_shallow:
+                old_size = os.path.getsize(old_name)
+                new_size = os.path.getsize(new_name)
+                if old_size == new_size and do_shallow == False and do_deep == False:
+                    log_messages.append(f"{new_name} already exists - skipping based on file size")
+                    return
+                elif old_size != new_size:
+                    raise Exception(f"File sizes do not match for {old_name} and {new_name} based on file size alone")
+                
+            # Shallow comparisons
+            #use filecmp.cmp to compare files, shallow = True                
+            if do_shallow:
+                #logger.debug(f"Shallow comparison of {old_name} and {new_name}")  
+                cmp = filecmp.cmp(old_name, new_name, shallow=True)
+                if cmp and do_deep == False and do_very_shallow == True:
+                    log_messages.append(f"{new_name} already exists - skipping based on shallow comparison and file size")
+                    return
+                if cmp and do_deep == False and do_very_shallow == False:
+                    log_messages.append(f"{new_name} already exists - skipping based on shallow comparison alone")
+                    return
+                elif not cmp:
+                    raise Exception(f"Files do not match for {old_name} and {new_name} based on shallow comparison")
+            
+            #Actually, if full comparisons are needed, may as well just copy and overwrite the file, leaving this off for now
+            # Full comparisons if all else fails.
+            # Load the files as numpy arrays
+            if do_deep:
+                old_array = np.load(old_name)
+                new_array = np.load(new_name)
+                
+                # Check if the shapes of the arrays are the same
+                if old_array.shape != new_array.shape:
+                    raise Exception(f"Shapes do not match for {old_name} and {new_name} based on deep comparison")
+                
+                # Check if the contents of the arrays are the same
+                if np.array_equal(old_array, new_array):
+                    log_messages.append(f"{new_name} already exists - skipping based on full comparison")
+                    return
+                else:
+                    raise Exception(f"Contents do not match for {old_name} and {new_name} based on deep comparison")
+        except:
+            pass
+    shutil.copy(old_name, new_name)
+    #logger.info(f"{file_pattern[:-5]} for unit {unit_id} copied from {unit_folder} to {waveforms_folder}")
+    log_messages.append(f"{file_pattern[:-5]} for unit {unit_id} copied from {unit_folder} to {waveforms_folder}")
+
+#@profile
+def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 4, units_per_extraction = 20, sparse = True, fresh_extractor = False, load_if_exists = False, job_kwargs = None):
+
+    """
+    This function generates a waveform extractor by processing units of data in chunks. 
+
+    Parameters:
+    recording: The recording from which to extract waveforms.
+    sorting: The sorting of the recording.
+    folder: The directory where the extracted waveforms will be stored.
+    n_jobs: The number of jobs to run in parallel.
+    units_per_extraction: The number of units to extract at a time.
+    sparse: A boolean indicating whether to use sparse extraction.
+    fresh_extractor: A boolean indicating whether to generate a new waveform extractor.
+    load_if_exists: A boolean indicating whether to load the waveform extractor if it already exists.
+    job_kwargs: Additional keyword arguments for the job.
+
+    The function operates as follows:
+
+    - If `load_if_exists` is `True`, it attempts to load an existing waveform extractor from the specified folder. If successful, it returns the extractor immediately.
+    - If `fresh_extractor` is `True` or the specified folder does not exist, a new waveform extractor is generated from the full recording and sorting.
+    - The function then processes units of data in chunks, defined by `units_per_extraction`, and extracts waveforms for these units.
+    - Extracted waveforms from all unit folders are merged into a single folder.
+    - The function verifies that the waveforms and sampled index files are contiguous. If they are not, it raises an exception.
+    - The function attempts to load the full waveform extractor. If it fails to load, it raises an exception.
+    - Temporary unit folders are deleted.
+    - The waveform extractor is returned.
+    """
     
-    def flex_load_waveforms(unit_ids, folder, tot_num_units):        
+    def try_load_waveform_extractor(folder, sorting):       
 
-        def check_extraction_status(unit_range_folder, unit_waveforms):
-            extraction_info_file = unit_range_folder + "/extraction_info.json"
-            # Check if the extraction info file exists
-            if os.path.exists(extraction_info_file):
-                with open(extraction_info_file, "r") as json_file:
-                    extraction_info = json.load(json_file)
-                    if extraction_info["status"] == "extraction successful":
-                        logger.info(f"Extraction for units {unit_range[0]} to {unit_range[-1]} was successful")
+        try:
+            # Load the waveform extractor
+            #waveform_extractor = spikeinterface.load_extractor(folder)
+            waveform_extractor = si.load_waveforms(folder)
+
+            # Get the unit IDs from the waveform extractor and the sorting
+            we_unit_ids = waveform_extractor.unit_ids
+            sorting_unit_ids = sorting.get_unit_ids()
+
+            # If the number of unit IDs is the same, return
+            if all(a == b for a, b in zip(we_unit_ids, sorting_unit_ids)):
+                logger.info(f"Waveform extractor loaded")
+                return waveform_extractor
+        except:
+            logger.info(f"Waveform extractor not found")
+            return None
+        
+    def check_extraction_status(unit_range_folder, unit_waveforms=None):
+        extraction_info_file = unit_range_folder + "/extraction_info.json"
+        # Check if the extraction info file exists
+        if os.path.exists(extraction_info_file):
+            with open(extraction_info_file, "r") as json_file:
+                extraction_info = json.load(json_file)
+                if extraction_info["status"] == "extraction successful":
+                    match = re.search(r"units?_(\d+)(_to_(\d+))?", unit_range_folder)
+                    if match:
+                        start_unit = match.group(1)
+                        end_unit = match.group(3) if match.group(3) else start_unit
+                        logger.info(f"Previous extraction for units {start_unit} to {end_unit} was successful")
                     else:
-                        raise Exception("Extraction was not successful")
-            else:
-                raise Exception("Extraction info file does not exist")
-            if unit_waveforms.get_num_segments() == 0:
-                raise Exception("Waveforms are empty")
-            return unit_waveforms
+                        logger.warning(f"Could not extract unit range from folder name: {unit_range_folder}")
+                else:
+                    raise Exception("Extraction was not successful")
+        else:
+            raise Exception("Extraction info file does not exist")
+        if unit_waveforms is not None and unit_waveforms.get_num_segments() == 0:
+            raise Exception("Waveforms are empty")
+        return
+    
+    def flex_load_waveforms(unit_ids, folder, tot_num_units):      
         
         unit_id = unit_ids[0]
         while unit_id in unit_ids:
@@ -575,11 +691,17 @@ def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 
         unit_range_folder = folder + f"_unit_by_unit_temp/units_{unit_range[0]}_to_{unit_range[-1]}"
         logger.info(f"Extracting waveforms for units {unit_range[0]} to {unit_range[-1]} to {unit_range_folder}")
         unit_sorting = sorting.select_units(unit_range)
-        unit_waveforms = si.extract_waveforms(recording, unit_sorting, 
-                                              folder=unit_range_folder, overwrite=True, 
-                                              load_if_exists=False, sparse=sparse, 
-                                              ms_before=1., ms_after=2., 
-                                              allow_unfiltered=True, **job_kwargs)        
+        unit_waveforms = si.extract_waveforms(recording, 
+                                              unit_sorting, 
+                                              folder=unit_range_folder,
+                                              precompute_template=None, 
+                                              overwrite=True, 
+                                              load_if_exists=False, 
+                                              sparse=sparse, 
+                                              ms_before=1., 
+                                              ms_after=2., 
+                                              allow_unfiltered=True, 
+                                              **job_kwargs)        
         # Create a JSON file to confirm successful extraction
         extraction_info = {
             "units": unit_range.tolist(),  # convert numpy array to list
@@ -591,112 +713,201 @@ def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 
         logger.info(f"Waveforms extracted")
         return unit_waveforms
         
-    logger.info(f"Extracting waveforms unit by unit:")
-    # Create a WaveformExtractor
-    job_kwargs = dict(n_jobs=n_jobs, chunk_duration="1s", progress_bar=True)
-
-    try:
-        # Load the waveform extractor
-        waveform_extractor = spikeinterface.load_extractor(folder)
-
-        # Get the unit IDs from the waveform extractor and the sorting
-        we_unit_ids = waveform_extractor.get_unit_ids()
-        sorting_unit_ids = sorting.get_unit_ids()
-
-        # If the number of unit IDs is the same, return
-        if len(we_unit_ids) == len(sorting_unit_ids):
-            logger.info(f"Waveform extractor loaded")
-            return waveform_extractor
-    except:
-        logger.info(f"Waveform extractor not found")
-        pass   
-
-    # Extract waveforms for each unit
-    unit_folders = []
-    #Choose the number of units to extract at a time
-    units_per_extraction = n_jobs
-    logger.info(f"Extracting waveforms for up to {units_per_extraction} units at a time")
-    unit_ids = sorting.get_unit_ids()
-    # Process the units in chunks of 10
-    i = 0
-    tot_num_units = len(unit_ids)
-    logger.info(f"Total number of units: {tot_num_units}")
-    while i < tot_num_units:
-        # Select up to 10 units
-        unit_range = unit_ids[i:i+units_per_extraction]           
-        if load_if_exists:
-            try:
-                # Flexibly try to load the waveforms from the folder                
-                unit_waveforms, unit_id = flex_load_waveforms(unit_range, folder, tot_num_units)
-                #update i to the next unit in sequence
-                i = unit_id
-            except:
+    def extract_waveforms_for_unit_ranges_to_temp(sorting, folder, n_jobs, units_per_extraction, load_if_exists, recording, sparse, job_kwargs):
+        
+        #Define default job_kwargs
+        if job_kwargs is None:
+            job_kwargs = dict(
+                n_jobs=n_jobs, 
+                chunk_duration="1s", 
+                progress_bar=True
+                )
+        
+        # Extract waveforms for each unit
+        unit_folders = []        
+        unit_ids = sorting.get_unit_ids()
+        # Process the units in chunks
+        i = 0
+        tot_num_units = len(unit_ids)
+        logger.info(f"Total number of units: {tot_num_units}")
+        while i < tot_num_units:
+            # Select up to units_per_extraction units
+            unit_range = unit_ids[i:i+units_per_extraction]           
+            if load_if_exists:
+                try:
+                    # Flexibly try to load the waveforms from the folder                
+                    unit_waveforms, unit_id = flex_load_waveforms(unit_range, folder, tot_num_units)
+                    #update i to the next unit in sequence
+                    i = unit_id
+                except:
+                    unit_waveforms = extract_waveforms_from_unit_range(unit_range, recording, sorting, folder, sparse, job_kwargs)
+                    i += units_per_extraction
+            else:
                 unit_waveforms = extract_waveforms_from_unit_range(unit_range, recording, sorting, folder, sparse, job_kwargs)
                 i += units_per_extraction
+        return unit_waveforms
+
+    def create_waveform_extractor(recording, sorting, folder):
+        # Remove the folder if it already exists
+        if os.path.exists(folder):
+            shutil.rmtree(folder)
+
+        # Create a WaveformExtractor 
+        waveform_extractor = sc.WaveformExtractor.create(
+            recording, sorting, folder=folder, allow_unfiltered=True
+        )
+
+        # Set the parameters for the waveform extractor
+        waveform_extractor.set_params(
+            ms_before=1.,
+            ms_after=2.,
+        )
+        
+        return
+
+    def merge_waveforms(folder, temp_units_folder, n_jobs, overwrite=True):
+        # Create a waveforms folder at the same level as the unit folders
+        waveforms_folder = os.path.join(folder, "waveforms")
+        if not os.path.exists(waveforms_folder):
+            os.makedirs(waveforms_folder)
+
+        # From all unit_folder in unit_folders, move and merge the waveforms folder with higher waveforms folder we just created
+        unit_folders = [os.path.join(temp_units_folder, name) for name in os.listdir(temp_units_folder) if os.path.isdir(os.path.join(temp_units_folder, name))]
+        #sort the unit_folders
+        unit_folders = sorted(unit_folders, key=lambda name: int(''.join(filter(str.isdigit, name))))
+
+        # Create a manager object
+        manager = Manager()
+
+        # Create a list that all processes can write to
+        log_messages = manager.list()
+        
+        # Create a pool of worker processes
+        logger.info(f"Copying and merging waveforms folders from unit folders to template folder.")
+        n_processes = min(n_jobs, len(unit_folders))
+        n_processes = 1
+        with Pool(processes=n_processes) as pool:
+            # Prepare the arguments for each task
+            tasks = []
+            for unit_folder in unit_folders:
+                unit_waveforms_folder = os.path.join(unit_folder, "waveforms")
+                if os.path.exists(unit_waveforms_folder):
+                    try: 
+                        check_extraction_status(unit_folder)
+                    except: 
+                        logger.error(f"Invalid or incomplete waveforms folder found in {unit_folder} - skipping")
+                        continue
+
+                    # Copy the params.json file if it doesn't exist in the destination folder
+                    if not os.path.exists(os.path.join(folder, "params.json")):
+                        shutil.copy(os.path.join(unit_folder, "params.json"), folder)
+                        logger.info(f"params.json file copied to {folder}")                
+
+                    # Prepare the tasks for the sampled_index_i.npy and waveforms_i.npy files
+                    for file_pattern in ["sampled_index_*.npy", "waveforms_*.npy"]:
+                        for old_name in glob.glob(os.path.join(unit_waveforms_folder, file_pattern)):
+                            # Get the unit ID from the unit folder name
+                            unit_id = os.path.basename(old_name).split('_')[1]
+                            new_name = os.path.join(waveforms_folder, os.path.basename(old_name))
+                            tasks.append((old_name, new_name, file_pattern, unit_id, unit_folder, waveforms_folder, overwrite, log_messages))
+
+            # Perform the tasks in parallel
+            #debug
+            #tasks = tasks[:10]
+            #debug
+            results = []
+            for _ in tqdm(pool.imap_unordered(copy_and_compare_files, tasks), total=len(tasks)):
+                results.append(_)
+
+        # Log all the messages
+        for message in log_messages:
+            logger.info(message)
+
+        logger.info(f"Unit waveforms copied. Full waveform extractor generated.")
+
+    def verify_waveforms_contiguity(sorting, folder):
+        unit_ids = sorting.get_unit_ids()
+        waveforms_folder = os.path.join(folder, "waveforms")
+        if not os.path.exists(waveforms_folder):
+            raise Exception(f"Waveforms folder not found in {folder}, cannot verify contiguity")
+
+        waveforms_files = [os.path.basename(file) for file in glob.glob(waveforms_folder + "/waveforms_*.npy")]
+        sampled_index_files = [os.path.basename(file) for file in glob.glob(waveforms_folder + "/sampled_index_*.npy")]
+        #waveforms_files.sort()
+        #sampled_index_files.sort()
+        if len(waveforms_files) == len(sampled_index_files) == len(unit_ids):
+            missing_waveforms = [i for i in unit_ids if f"waveforms_{i}.npy" not in waveforms_files]
+            missing_sampled_index = [i for i in unit_ids if f"sampled_index_{i}.npy" not in sampled_index_files]
+
+            if not missing_waveforms and not missing_sampled_index:
+                logger.info(f"Waveforms and sampled index files are contiguous.")
+                return True
+            else:
+                if missing_waveforms:
+                    logger.info(f"Missing waveforms files for unit IDs: {missing_waveforms}")
+                if missing_sampled_index:
+                    logger.info(f"Missing sampled index files for unit IDs: {missing_sampled_index}")
+                return False
         else:
-            unit_waveforms = extract_waveforms_from_unit_range(unit_range, recording, sorting, folder, sparse, job_kwargs)
-            i += units_per_extraction
+            logger.error(f"Waveforms and sampled index files are not contiguous.")
+            return False
+
+    #Begin the function
+    logger.info(f"Extracting waveforms unit by unit:")
+    
+    # Check if the waveform extractor already exists
+    logger.info(f"load_if_exists set to {load_if_exists}")
+    if load_if_exists:        
+        logger.info(f"Trying to load waveform extractor from {folder}")
+        # Create a WaveformExtractor
+        waveform_extractor = try_load_waveform_extractor(folder, sorting)
+        if waveform_extractor is None:
+            # Handle the case where the waveform extractor could not be loaded
+            pass
+        else: 
+            return waveform_extractor
+
+    # Extract waveforms for ranges of units
+    # Choose the number of units to extract at a time
+    units_per_extraction = int(units_per_extraction)
+    logger.info(f"Extracting waveforms for up to {units_per_extraction} units at a time")
+    extract_waveforms_for_unit_ranges_to_temp(sorting, folder, n_jobs, units_per_extraction, load_if_exists, recording, sparse, job_kwargs)
         
-    #Generate a waveform extractor from full recording and sorting
-    logger.info(f"Generating new waveform extractor template from full recording and sorting.")
-    # Remove unit folders and all their contents
-    if os.path.exists(folder):
-        shutil.rmtree(folder)
+    #Generate a waveform extractor from full recording and sorting    
+    if fresh_extractor:
+        logger.info(f"fresh_extractor set to {fresh_extractor}, clearing folder {folder} and generating new waveform extractor.")
+        logger.info(f"Generating new waveform extractor template from full recording and sorting.")
+        create_waveform_extractor(recording, sorting, folder)
+    elif os.path.exists(folder) == False:
+        logger.info(f"Generating new waveform extractor template from full recording and sorting.")
+        create_waveform_extractor(recording, sorting, folder)
     
-    # Create a WaveformExtractor 
-    waveform_extractor = sc.WaveformExtractor.create(
-        recording, sorting, folder=folder, allow_unfiltered=True
-    )
-
-    # Set the parameters for the waveform extractor
-    waveform_extractor.set_params(
-        ms_before=1.,
-        ms_after=2.,
-        #allow_unfiltered=True,
-    )
-    
-    #Create a waveforms folder at the same level as the unit folders
-    waveforms_folder = folder + "/waveforms"
-    if not os.path.exists(waveforms_folder):
-        os.makedirs(waveforms_folder)
-
-    logger.info(f"Copying and merging waveforms folders from unit folders to template folder.")
     # from all unit_folder in unit_folders, move and merge the waveforms folder with higher waveforms folder we just created
-    for unit_folder in unit_folders:
-        unit_waveforms_folder = unit_folder + "/waveforms"
-        if os.path.exists(unit_waveforms_folder):
-            # Get the unit ID from the unit folder name
-            unit_id = os.path.basename(unit_folder).split('_')[1]
-
-            # Copy the sampled_index_i.npy and waveforms_i.npy files
-            for old_name in glob.glob(unit_waveforms_folder + "/sampled_index_*.npy"):
-                new_name = os.path.join(waveforms_folder, os.path.basename(old_name))
-                shutil.copy(old_name, new_name)
-
-            for old_name in glob.glob(unit_waveforms_folder + "/waveforms_*.npy"):
-                new_name = os.path.join(waveforms_folder, os.path.basename(old_name))
-                shutil.copy(old_name, new_name)
-        
-        # Copy the params.json file if it doesn't exist in the destination folder
-        if not os.path.exists(folder + "/params.json"):
-            shutil.copy(os.path.join(unit_folder, "params.json"), folder)
-    logger.info(f"Unit waveforms copied. Full waveform extractor generated.")
+    logger.info(f"Copying and merging waveforms folders from unit folders to template folder.")
+    temp_units_folder = folder + f"_unit_by_unit_temp"
+    overwrite = False
+    merge_waveforms(folder, temp_units_folder, n_jobs, overwrite)
+    
+    #verify that waveforms_* and sampled_index_* files are present and contiguous
+    # Create a waveforms folder at the same level as the unit folders
+    logger.info(f"Verifying that waveforms and sampled index files are contiguous.")
+    contiguity_status = verify_waveforms_contiguity(sorting, folder)
+    if not contiguity_status:
+        raise Exception("Waveforms and sampled index files are not contiguous")
+    logger.info(f"Contiguity verified.")
+    
+    #Attempting to load the full waveform extractor
+    logger.info(f"Attempting to load the full waveform extractor.") 
+    # Create a WaveformExtractor
+    waveform_extractor = try_load_waveform_extractor(folder, sorting)
+    if waveform_extractor is None:
+        raise Exception(f"Failed to load waveform extractor from {folder}") 
     
     logger.info(f"Deleting temporary unit folders.")
     # Remove unit folders and all their contents
     temp_units_folder = folder + f"_unit_by_unit_temp"
     shutil.rmtree(temp_units_folder)
     logger.info(f"Temporary unit folder {temp_units_folder} deleted.")
-
-    # Load the waveforms from folder
-    waveform_extractor = si.load_waveforms(folder)
-    
-    #Add processing to mimic typical waveform extraction
-    waveform_extractor.get_all_templates(mode = 'average')
-    #spikeinterface.core.compute_sparsity(waveform_extractor)
-
-    # Save the waveform extractor
-    waveform_extractor.save(folder)
-
+    logger.info(f"Waveform extractor successfully generated in chunks!")
     return waveform_extractor
 

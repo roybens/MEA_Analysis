@@ -30,7 +30,7 @@ logger.addHandler(stream_handler)
 
 # Create formatters and add it to handlers
 #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s')
 stream_handler.setFormatter(formatter)
 
 def process_and_merge_recordings(h5_file_path, stream_count, rec_count, recordings_dir, date, chip_id, scanType, runID, verbose):
