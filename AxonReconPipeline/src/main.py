@@ -37,7 +37,7 @@ logger.addHandler(stream_handler)
 
 # Create formatters and add it to handlers
 #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s')
 stream_handler.setFormatter(formatter)
 
 def clear_terminal():
@@ -121,13 +121,17 @@ def main(debug_mode=False, debug_folders=None):
                 # try: 
                 #     waveforms = si.load_waveforms(relative_path)
                 # except:
-                fresh_extraction = False
-                if fresh_extraction: 
-                    if os.path.exists(relative_path):
-                        helper.empty_directory(relative_path)
-                        os.rmdir(relative_path)
-                waveforms = MPL.generate_waveform_extractor_unit_by_unit(merged_recording,merged_sorting,folder = relative_path, n_jobs = 16, sparse = False, load_if_exists = True)
-                waveforms_by_stream.append(waveforms)
+                tot_units = len(merged_sorting.get_unit_ids())
+                units_per_extraction = tot_units/10
+                we = MPL.generate_waveform_extractor_unit_by_unit(
+                    merged_recording,
+                    merged_sorting,folder = relative_path, 
+                    n_jobs = 8,
+                    units_per_extraction = units_per_extraction, 
+                    sparse = False, 
+                    fresh_extractor = False,
+                    load_if_exists = True)
+                waveforms_by_stream.append(we)
     
     ##4. Extract templates
     #axon_trace_precursors = axon_trace_objects(recording_dir[well_name], dirs)
