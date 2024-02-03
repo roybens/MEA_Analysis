@@ -9,6 +9,8 @@ import numpy as np
 from multiprocessing import Pool, Manager
 from tqdm import tqdm
 import filecmp
+from timeit import default_timer as timer
+import pandas as pd
 
 #Currently not used, may be useful for optimization
 from memory_profiler import profile
@@ -22,6 +24,7 @@ import spikeinterface.sorters as ss
 import spikeinterface.core as sc
 import spikeinterface.postprocessing as sp
 import spikeinterface.preprocessing as spre
+import spikeinterface.qualitymetrics as qm
 
 #Logger Setup
 #Create a logger
@@ -487,7 +490,7 @@ def preprocess_single_recording(recording):
 
 def run_kilosort2_docker_image(recording, chunk_duration, output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=False):
     default_KS2_params = ss.Kilosort2Sorter.default_params()
-    default_KS3_params = ss.Kilosort3Sorter.default_params()
+    #default_KS3_params = ss.Kilosort3Sorter.default_params()
     # Assume `recording` is your original recording
     sampling_rate = recording.get_sampling_frequency()  # Get the sampling rate in Hz
     total_frames = recording.get_num_frames()  # Get the total number of frames
@@ -519,6 +522,48 @@ def run_kilosort2_docker_image(recording, chunk_duration, output_folder, docker_
         #sorting = ss.run_kilosort3(chunk, output_folder=output_folder, docker_image="spikeinterface/kilosort3-compiled-base:latest", verbose=verbose, **default_KS3_params)
     sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
     return sorting
+
+def run_kilosort2_5_docker_image(recording, chunk_duration, output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=False):
+    #This funciton mimics https://github.com/hornauerp/axon_tracking
+    #si.Kilosort2_5Sorter.set_kilosort2_5_path('/home/phornauer/Git/Kilosort_2020b') #Change
+    sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+    sorter_params['n_jobs'] = -1
+    sorter_params['detect_threshold'] = 7
+    sorter_params['minFR'] = 0.01
+    sorter_params['minfr_goodchannels'] = 0.01
+    sorter_params['keep_good_only'] = False
+    sorter_params['do_correction'] = False
+    sampling_rate = recording.get_sampling_frequency()  # Get the sampling rate in Hz
+    total_frames = recording.get_num_frames()  # Get the total number of frames
+
+    # Let's say we want each chunk to be 10 seconds long
+    #chunk_duration = 6  # Duration in seconds
+    chunk_size = int(chunk_duration * sampling_rate)  # Convert duration to number of frames
+
+    # Now you can use `chunk_size` in your loop as before
+    for start_frame in range(0, total_frames, chunk_size):
+        end_frame = min(start_frame + chunk_size, total_frames)
+        chunk = recording.frame_slice(start_frame, end_frame)
+        # Get the number of frames and channels in the chunk
+        num_frames = chunk.get_num_frames()
+        num_channels = chunk.get_num_channels()
+
+        # Calculate the size of the chunk in bytes
+        #size_in_bytes = num_frames * num_channels * 4  # 4 bytes per data point
+
+        # Convert the size to gigabytes
+        #size_in_gigabytes = size_in_bytes / (1024 ** 3)
+
+        # Print the size of the chunk
+        #print(f"Chunk size: {size_in_gigabytes} GB")
+        
+        # Now you can pass `chunk` to `run_sorter` instead of the whole `recording`
+        #sorting = ss.run_kilosort2(chunk, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
+        # Now you can pass `chunk` to `run_sorter` instead of the whole `recording`
+        #sorting = ss.run_kilosort3(chunk, output_folder=output_folder, docker_image="spikeinterface/kilosort3-compiled-base:latest", verbose=verbose, **default_KS3_params)
+    sorting_KS2_5 = ss.run_kilosort2_5(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2_5-compiled-base:latest", verbose=verbose, **sorter_params)
+    #sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
+    return sorting_KS2_5
 
 def extract_waveforms(recording,sorting,folder, load_if_exists = False, n_jobs = 4, sparse = True):
     job_kwargs = dict(n_jobs=n_jobs, chunk_duration="1s", progress_bar=True)
@@ -911,3 +956,139 @@ def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 
     logger.info(f"Waveform extractor successfully generated in chunks!")
     return waveform_extractor
 
+#Waveform post-processing:
+def get_quality_metrics(waveforms): 
+    
+    #Define default job_kwargs
+    job_kwargs = dict(
+        n_jobs=4, 
+        chunk_duration="1s", 
+        progress_bar=True
+        )
+    
+    #TO DO: to fix the SNR showing as INF by looking at the extensions of waveforms
+    # This is because the noise levels are 0.0
+    # Similar issue with https://github.com/SpikeInterface/spikeinterface/issues/1467 
+    # Best solution proposed was to stick with applying a gain to the entire recording before all preprocessing
+    sp.compute_spike_amplitudes(waveforms,**job_kwargs)
+    metrics = qm.compute_quality_metrics(waveforms, metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
+                                                       'isi_violation', 'amplitude_cutoff','amplitude_median'], **job_kwargs)
+
+    return metrics
+
+def remove_similar_templates(waveforms):
+
+    matrix = sp.compute_template_similarity(waveforms,load_if_exists=True)
+    metrics = qm.compute_quality_metrics(waveforms,load_if_exists=True)
+    temp_metrics = sp.compute_template_metrics(waveforms,load_if_exists=True)
+    n = matrix.shape[0]
+
+    # Find indices where values are greater than 0.5 and not on the diagonal
+    indices = [(i,j) for i in range(1,n) for j in range(i-1) if matrix[i,j]>0.7]
+
+    removables =[]
+    # Print the indices
+    for ind in indices:
+        print(temp_metrics.index[ind[0]],temp_metrics.index[ind[1]])
+        if metrics['amplitude_median'].loc[temp_metrics.index[ind[0]]] < metrics['amplitude_median'].loc[temp_metrics.index[ind[1]]]:
+            smaller_index = temp_metrics.index[ind[0]]
+        else:
+            smaller_index = temp_metrics.index[ind[1]]
+
+        removables.append(smaller_index)
+    return removables
+
+def remove_violated_units(metrics):
+
+    """
+    Removing based on Refractory violations, Firing_rate , snr_ratio
+    amplitude_cutoff_thresh = 0.1
+    isi_violations_ratio_thresh = 1
+    presence_ratio_thresh = 0.9
+    firing_rate = 0.1
+    num_spikes = 200
+
+    Returns an updated metrics dataframe
+    
+    """
+    amplitude_cutoff_thresh = 0.1
+    isi_violations_ratio_thresh = 1
+    presence_ratio_thresh = 0.9
+    firing_rate = 0.1
+    num_spikes = 200
+    our_query = f"(num_spikes > {num_spikes})&(amplitude_cutoff < {amplitude_cutoff_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) & (presence_ratio > {presence_ratio_thresh}) & (firing_rate > {firing_rate})"
+
+    metrics = metrics.query(our_query)
+
+    return metrics
+
+
+def postprocess_waveforms(waveforms, folder, get_quality=True, remove_violations=True, remove_similar=True):
+    try: waveforms_good = si.load_waveforms(folder)
+    except:
+        if get_quality:
+            # Start timer for quality metrics
+            start_quality = timer()
+            qual_metrics = get_quality_metrics(waveforms)
+            # End timer for quality metrics
+            end_quality = timer()
+            logger.debug("Quality metrics computation takes", end_quality - start_quality)
+
+        if remove_violations:
+            # Start timer for removing violated units
+            start_violations = timer()
+            update_qual_metrics = remove_violated_units(qual_metrics)
+            non_violated_units  = update_qual_metrics.index.values
+            # End timer for removing violated units
+            end_violations = timer()
+            logger.debug("Removing violated units takes", end_violations - start_violations)
+
+        if remove_similar:
+            # Start timer for removing similar templates
+            start_similar = timer()
+            redundant_units = remove_similar_templates(waveforms)
+            logger.info(f"redundant-units : {redundant_units}")
+            non_violated_units = [item for item in non_violated_units if item not in redundant_units]
+            for unit in redundant_units:
+                try:
+                    update_qual_metrics = update_qual_metrics.drop(unit)
+                except Exception as e:
+                    continue
+            # End timer for removing similar templates
+            end_similar = timer()
+            logger.debug("Removing similar templates takes", end_similar - start_similar)
+
+        # Start timer for computing template metrics
+        start_template = timer()
+        template_metrics = sp.compute_template_metrics(waveforms)
+        template_metrics = template_metrics.loc[update_qual_metrics.index.values]
+        # End timer for computing template metrics
+        end_template = timer()
+        logger.debug("Computing template metrics takes", end_template - start_template)
+
+        # Create a new folder to store good waveforms
+        if os.path.exists(folder):
+            # If the new folder already exists, remove it
+            shutil.rmtree(folder)
+        # Create the directory
+        os.makedirs(folder)        
+        
+        #Export the metrics to the sorted_unit_metrics folder
+        sorted_unit_metrics_folder = folder + "/sorted_unit_metrics"
+        os.makedirs(sorted_unit_metrics_folder)
+        update_qual_metrics.to_excel(f"{sorted_unit_metrics_folder}/quality_metrics.xlsx")
+        template_metrics.to_excel(f"{sorted_unit_metrics_folder}/template_metrics.xlsx")
+
+        # Start the timer to measure the time taken for the following operations
+        start = timer()
+        # Get the extremum channel for each unit. This is the channel where the waveform reaches its minimum or maximum value.
+        unit_extremum_channel = spikeinterface.full.get_template_extremum_channel(waveforms, peak_sign='both')
+        # Filter the unit_extremum_channel dictionary to keep only the units that are in the non_violated_units list
+        unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
+        # Select the good units and save them to the new folder
+        waveforms_good = waveforms.select_units(non_violated_units,new_folder=folder)
+
+        # End the timer and print the time taken for the operations
+        end = timer()
+        print("Removing redundant items takes", end - start)
+    return waveforms_good
