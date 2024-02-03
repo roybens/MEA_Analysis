@@ -6,10 +6,12 @@ import os
 import spikeinterface
 import spikeinterface.extractors as se
 import spikeinterface.sorters as ss
+import spikeinterface.full as si
 
 #local imports
 import mea_processing_library as MPL
 import helper_functions as helper
+import spike_sorting as hp #hornauerp, https://github.com/hornauerp/axon_tracking/blob/main/axon_tracking/spike_sorting.py
 
 #Logger Setup
 #Create a logger
@@ -87,34 +89,68 @@ def sort_recordings(merged_recordings_by_stream, stream_count, rec_count, spikes
         stream_dir = f"Well#{str(stream_num+1)}"
         sortings_to_merge = []
         merged_path = spikesorting_dir + f"/{date}/{chip_id}/{scanType}/{runID}/{stream_dir}/aggregate_sorting"
-        for rec_num in range(rec_count[stream_num]):            
-            rec_dir = f"Rec#{str(rec_num+1)}"
-            relative_path = spikesorting_dir + f"/{date}/{chip_id}/{scanType}/{runID}/{stream_dir}/sorting_{rec_dir}"
-            recording = recs_to_sort_by_stream[stream_num][rec_num]
-            #Check if recording object already exists
-            if os.path.exists(relative_path):
-                logger.info(f"Sorting object already exists for {relative_path}")
+        spike_sort_merged = True
+        if spike_sort_merged:
+            #for rec_num in range(rec_count[stream_num]):            
+                #rec_dir = f"Rec#{str(rec_num+1)}"
+                #relative_path = spikesorting_dir + f"/{date}/{chip_id}/{scanType}/{runID}/{stream_dir}/sorting_{rec_dir}"
+                #merged_recording = recs_to_sort_by_stream[stream_num][rec_num]
+                #Check if recording object already exists
+            if os.path.exists(merged_path):
+                logger.info(f"Sorting object already exists for {merged_path}")
                 try:
-                    logger.info(f"Attempting to load sorting object for {relative_path}")
-                    sorting = ss.Kilosort2Sorter._get_result_from_folder(relative_path+'/sorter_output/')
+                    logger.info(f"Attempting to load sorting object for {merged_path}")
+                    sorting = ss.Kilosort2Sorter._get_result_from_folder(merged_path+'/sorter_output/')
                     sortings_to_merge.append(sorting)
-                    logger.info(f"Sorting object loaded for {relative_path}")
+                    logger.info(f"Sorting object loaded for {merged_path}")
                     continue
                 except:
-                    logger.info(f"Sorting object could not be loaded for {relative_path}, will be re-created")
+                    logger.info(f"Sorting object could not be loaded for {merged_path}, will be re-created")
                     # Check if kilosort_output_folder exists
-                    if os.path.exists(relative_path):
+                    if os.path.exists(merged_path):
                         # Clear the kilosort_output_folder folder
                         print("Clearing kilosort_output_folder folder")
-                        helper.empty_directory(relative_path)                 
+                        helper.empty_directory(merged_path)                 
                         print("Deleting recording folder")
-                        os.rmdir(relative_path)        
-            logger.info(f"Running kilosort2 on {relative_path}")
-            sorting = MPL.run_kilosort2_docker_image(recording, chunk_duration = 60, output_folder=relative_path, verbose=verbose)
-            sortings_to_merge.append(sorting)        
-        #Merge using aggergate method (allowing different channels in each recording)
-        logger.info(f"Merging sorting objects")
-        merged_sorting = MPL.merge_sortings(sortings_to_merge, mode = 'aggregate')        
+                        os.rmdir(merged_path)        
+            logger.info(f"Running kilosort2.5 on {merged_path}")
+            merged_sorting = MPL.run_kilosort2_5_docker_image(merged_recording, 
+                                                              chunk_duration = 60, 
+                                                              output_folder=merged_path, 
+                                                              verbose=verbose)
+            #sortings_to_merge.append(sorting)
+            #Merge using aggergate method (allowing different channels in each recording)
+            logger.info(f"Merging recording sorted")
+            #merged_sorting = MPL.merge_sortings(sortings_to_merge, mode = 'aggregate')   
+        else: 
+            for rec_num in range(rec_count[stream_num]):            
+                rec_dir = f"Rec#{str(rec_num+1)}"
+                relative_path = spikesorting_dir + f"/{date}/{chip_id}/{scanType}/{runID}/{stream_dir}/sorting_{rec_dir}"
+                recording = recs_to_sort_by_stream[stream_num][rec_num]
+                #Check if recording object already exists
+                if os.path.exists(relative_path):
+                    logger.info(f"Sorting object already exists for {relative_path}")
+                    try:
+                        logger.info(f"Attempting to load sorting object for {relative_path}")
+                        sorting = ss.Kilosort2Sorter._get_result_from_folder(relative_path+'/sorter_output/')
+                        sortings_to_merge.append(sorting)
+                        logger.info(f"Sorting object loaded for {relative_path}")
+                        continue
+                    except:
+                        logger.info(f"Sorting object could not be loaded for {relative_path}, will be re-created")
+                        # Check if kilosort_output_folder exists
+                        if os.path.exists(relative_path):
+                            # Clear the kilosort_output_folder folder
+                            print("Clearing kilosort_output_folder folder")
+                            helper.empty_directory(relative_path)                 
+                            print("Deleting recording folder")
+                            os.rmdir(relative_path)        
+                logger.info(f"Running kilosort2 on {relative_path}")
+                sorting = MPL.run_kilosort2_docker_image(recording, chunk_duration = 60, output_folder=relative_path, verbose=verbose)
+                sortings_to_merge.append(sorting)        
+            #Merge using aggergate method (allowing different channels in each recording)
+            logger.info(f"Merging sorting objects")
+            merged_sorting = MPL.merge_sortings(sortings_to_merge, mode = 'aggregate')        
         logger.info(f"Post-sorting processing")        
         merged_sorting = merged_sorting.remove_empty_units()
         merged_sorting = spikeinterface.curation.remove_excess_spikes(merged_sorting, merged_recording)
@@ -125,8 +161,9 @@ def sort_recordings(merged_recordings_by_stream, stream_count, rec_count, spikes
         #logger.info(f"Sorting object does not exist for {relative_path}")
     return sortings_by_stream
 
+
 verbose = True
-def main(h5_file_path, MaxWell_ID):
+def main(h5_file_path, recordings_dir = './AxonReconPipeline/data/temp_data/recordings', spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'):
     
     #Extract recording details from the .h5 file path
     recording_details = MPL.extract_recording_details(h5_file_path)
@@ -137,18 +174,37 @@ def main(h5_file_path, MaxWell_ID):
 
     # 1. Count the number of wells and recordings in the file
     stream_count, rec_count = MPL.count_wells_and_recs(h5_file_path, verbose = verbose)
-
+    
+    #Testing
+    #This funciton mimics https://github.com/hornauerp/axon_tracking
+    #si.Kilosort2_5Sorter.set_kilosort2_5_path('/home/phornauer/Git/Kilosort_2020b') #Change
+    sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+    sorter_params['n_jobs'] = -1
+    sorter_params['detect_threshold'] = 7
+    sorter_params['minFR'] = 0.01
+    sorter_params['minfr_goodchannels'] = 0.01
+    sorter_params['keep_good_only'] = False
+    sorter_params['do_correction'] = False
+    sorting_list = hp.sort_recording_list(h5_file_path,
+                                          #save_path_changes= 5,
+                                          sorter = 'kilosort2_5',
+                                          sorter_params = sorter_params,
+                                           verbose = verbose)
+    
     #2. Collect recording objects in each well. 
     # - Pre-process and quality check each set of recordings. 
     # - Merge them into a single recording object. 
     # - Save pre-processed recording objects.   
     logger.info(f"Collecting, pre-processing, and merging recordings in each well:")
-    # Check if recordings folder exists in ./data/temp_data, if not create it.
-    recordings_dir = './AxonReconPipeline/data/temp_data/recordings'
+    # Check if recordings folder exists in ./data/temp_data, if not create it.    
     if not os.path.exists(recordings_dir):
         os.makedirs(recordings_dir)
     #Process each well
-    recs_to_sort_by_stream, merged_recordings_by_stream  = process_and_merge_recordings(h5_file_path, stream_count, rec_count, recordings_dir, date, chip_id, scanType, runID, verbose)
+    recs_to_sort_by_stream, merged_recordings_by_stream  = process_and_merge_recordings(
+        h5_file_path, 
+        stream_count, 
+        rec_count, 
+        recordings_dir, date, chip_id, scanType, runID, verbose)
    
     #3. Peform spike sorting on each merged recording object.
     # - Save spike sorting objects.
@@ -158,6 +214,11 @@ def main(h5_file_path, MaxWell_ID):
     if not os.path.exists(spikesorting_dir):
         os.makedirs(spikesorting_dir)
     #Process each well
-    sortings_by_stream = sort_recordings(merged_recordings_by_stream, stream_count, rec_count, spikesorting_dir, date, chip_id, scanType, runID, recs_to_sort_by_stream, verbose)
+    sortings_by_stream = sort_recordings(
+        merged_recordings_by_stream, 
+        stream_count, 
+        rec_count, 
+        spikesorting_dir, 
+        date, chip_id, scanType, runID, recs_to_sort_by_stream, verbose)
 
     return merged_recordings_by_stream, sortings_by_stream
