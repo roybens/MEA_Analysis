@@ -114,10 +114,11 @@ def sort_recordings(merged_recordings_by_stream, stream_count, rec_count, spikes
                         print("Deleting recording folder")
                         os.rmdir(merged_path)        
             logger.info(f"Running kilosort2.5 on {merged_path}")
-            merged_sorting = MPL.run_kilosort2_5_docker_image(merged_recording, 
-                                                              chunk_duration = 60, 
-                                                              output_folder=merged_path, 
-                                                              verbose=verbose)
+            merged_sorting = MPL.run_kilosort2_5_docker_image_GPUs(merged_recording, 
+                                                                #chunk_duration = 60, 
+                                                                output_folder=merged_path, 
+                                                                verbose=verbose,
+                                                                num_gpus=2)
             #sortings_to_merge.append(sorting)
             #Merge using aggergate method (allowing different channels in each recording)
             logger.info(f"Merging recording sorted")
@@ -163,7 +164,7 @@ def sort_recordings(merged_recordings_by_stream, stream_count, rec_count, spikes
 
 
 verbose = True
-def main(h5_file_path, recordings_dir = './AxonReconPipeline/data/temp_data/recordings', spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'):
+def main(h5_file_paths, h5_file_path, recordings_dir = './AxonReconPipeline/data/temp_data/recordings', spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'):
     
     #Extract recording details from the .h5 file path
     recording_details = MPL.extract_recording_details(h5_file_path)
@@ -175,22 +176,29 @@ def main(h5_file_path, recordings_dir = './AxonReconPipeline/data/temp_data/reco
     # 1. Count the number of wells and recordings in the file
     stream_count, rec_count = MPL.count_wells_and_recs(h5_file_path, verbose = verbose)
     
-    #Testing
+    #Just Testing Somethings
     #This funciton mimics https://github.com/hornauerp/axon_tracking
     #si.Kilosort2_5Sorter.set_kilosort2_5_path('/home/phornauer/Git/Kilosort_2020b') #Change
-    sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
-    sorter_params['n_jobs'] = -1
-    sorter_params['detect_threshold'] = 7
-    sorter_params['minFR'] = 0.01
-    sorter_params['minfr_goodchannels'] = 0.01
-    sorter_params['keep_good_only'] = False
-    sorter_params['do_correction'] = False
-    sorting_list = hp.sort_recording_list(h5_file_path,
-                                          #save_path_changes= 5,
-                                          sorter = 'kilosort2_5',
-                                          sorter_params = sorter_params,
-                                           verbose = verbose)
-    
+    hornauerp = False
+    if hornauerp:
+        sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+        sorter_params['n_jobs'] = -1
+        sorter_params['detect_threshold'] = 7
+        sorter_params['minFR'] = 0.01
+        sorter_params['minfr_goodchannels'] = 0.01
+        sorter_params['keep_good_only'] = False
+        sorter_params['do_correction'] = False
+        spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'
+        spikesorting_root = spikesorting_dir+f'/{date}/{chip_id}/{scanType}/{runID}'
+        sorting_list = hp.sort_recording_list(h5_file_paths,
+                                            save_root=spikesorting_root,
+                                            #save_path_changes= 5,
+                                            sorter = 'kilosort2_5',
+                                            sorter_params = sorter_params,
+                                                verbose = verbose)
+    else:
+        pass
+        
     #2. Collect recording objects in each well. 
     # - Pre-process and quality check each set of recordings. 
     # - Merge them into a single recording object. 

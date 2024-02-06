@@ -11,6 +11,7 @@ from tqdm import tqdm
 import filecmp
 from timeit import default_timer as timer
 import pandas as pd
+import docker
 
 #Currently not used, may be useful for optimization
 from memory_profiler import profile
@@ -66,8 +67,6 @@ def extract_raw_h5_filepaths(directories):
                 if file == "data.raw.h5":
                     h5_dirs.append(os.path.join(root, file))
     return h5_dirs
-
-import os
 
 def extract_recording_details(h5_dirs):
     """
@@ -158,7 +157,6 @@ def test_continuity(h5_file_path, verbose=False):
         logger.error("Data are not continuous.")
         return False
     #This part of the function might be entirely unnecessary:
-
 
 def count_wells_and_recs(h5_file_path, verbose=False):
     """
@@ -523,7 +521,7 @@ def run_kilosort2_docker_image(recording, chunk_duration, output_folder, docker_
     sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
     return sorting
 
-def run_kilosort2_5_docker_image(recording, chunk_duration, output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=False):
+def run_kilosort2_5_docker_image(recording, output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=False):
     #This funciton mimics https://github.com/hornauerp/axon_tracking
     #si.Kilosort2_5Sorter.set_kilosort2_5_path('/home/phornauer/Git/Kilosort_2020b') #Change
     sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
@@ -536,33 +534,46 @@ def run_kilosort2_5_docker_image(recording, chunk_duration, output_folder, docke
     sampling_rate = recording.get_sampling_frequency()  # Get the sampling rate in Hz
     total_frames = recording.get_num_frames()  # Get the total number of frames
 
-    # Let's say we want each chunk to be 10 seconds long
-    #chunk_duration = 6  # Duration in seconds
-    chunk_size = int(chunk_duration * sampling_rate)  # Convert duration to number of frames
-
-    # Now you can use `chunk_size` in your loop as before
-    for start_frame in range(0, total_frames, chunk_size):
-        end_frame = min(start_frame + chunk_size, total_frames)
-        chunk = recording.frame_slice(start_frame, end_frame)
-        # Get the number of frames and channels in the chunk
-        num_frames = chunk.get_num_frames()
-        num_channels = chunk.get_num_channels()
-
-        # Calculate the size of the chunk in bytes
-        #size_in_bytes = num_frames * num_channels * 4  # 4 bytes per data point
-
-        # Convert the size to gigabytes
-        #size_in_gigabytes = size_in_bytes / (1024 ** 3)
-
-        # Print the size of the chunk
-        #print(f"Chunk size: {size_in_gigabytes} GB")
-        
-        # Now you can pass `chunk` to `run_sorter` instead of the whole `recording`
-        #sorting = ss.run_kilosort2(chunk, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
-        # Now you can pass `chunk` to `run_sorter` instead of the whole `recording`
-        #sorting = ss.run_kilosort3(chunk, output_folder=output_folder, docker_image="spikeinterface/kilosort3-compiled-base:latest", verbose=verbose, **default_KS3_params)
-    sorting_KS2_5 = ss.run_kilosort2_5(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2_5-compiled-base:latest", verbose=verbose, **sorter_params)
+    #if output_folder is exists:
+    if os.path.exists(output_folder):
+        shutil.rmtree(output_folder)
+    
+    sorting_KS2_5 = ss.run_kilosort2_5(recording, 
+                                       output_folder=output_folder, 
+                                       docker_image="spikeinterface/kilosort2_5-compiled-base:latest", 
+                                       verbose=verbose, 
+                                       **sorter_params)
     #sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
+    return sorting_KS2_5
+
+
+def run_kilosort2_5_docker_image_GPUs(recording, output_folder, docker_image="spikeinterface/kilosort2_5-compiled-base:latest", verbose=False, num_gpus=1):
+    # Update sorter parameters as needed
+    sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+    sorter_params['n_jobs'] = -1
+    sorter_params['detect_threshold'] = 7
+    sorter_params['minFR'] = 0.01
+    sorter_params['minfr_goodchannels'] = 0.01
+    sorter_params['keep_good_only'] = False
+    sorter_params['do_correction'] = False
+
+    # Add extra kwargs for GPU allocation
+    extra_kwargs = {
+        'docker_args': {
+            'device_requests': [docker.types.DeviceRequest(count=num_gpus, capabilities=[['gpu']])]
+        }
+    }
+
+    # Run Kilosort2.5
+    sorting_KS2_5 = ss.run_kilosort2_5(
+        recording,
+        output_folder=output_folder,
+        docker_image=docker_image,
+        verbose=verbose,
+        **sorter_params,
+        #**extra_kwargs
+    )
+
     return sorting_KS2_5
 
 def extract_waveforms(recording,sorting,folder, load_if_exists = False, n_jobs = 4, sparse = True):

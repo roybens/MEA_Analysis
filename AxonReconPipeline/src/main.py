@@ -17,6 +17,7 @@ from axon_trace_classes import axon_trace_objects
 from reconstruct_axons import reconstruct_axon_trace_objects
 import mea_processing_library as MPL
 import helper_functions as helper
+import spike_sorting as hp #hornauerp, https://github.com/hornauerp/axon_tracking/blob/main/axon_tracking/spike_sorting.py
 
 #Logger Setup
 #Create a logger
@@ -60,20 +61,72 @@ def exclude_non_continuous_data(informed_h5_dirs):
             print(f"Data for {h5_file_path} is continuous.")
     return continuous_h5_dirs
 
-def generate_merged_recs_and_sorts_by_scan(continuous_h5_dirs, allowed_scan_types=["ActivityScan", "AxonTracking", "Network"], recordings_dir = './AxonReconPipeline/data/temp_data/recordings', spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'):
+def generate_merged_recs_and_sorts_by_scan(continuous_h5_dirs, 
+                                           allowed_scan_types=["ActivityScan", "AxonTracking", "Network"], 
+                                           recordings_dir = './AxonReconPipeline/data/temp_data/recordings', 
+                                           spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'):
     merged_recordings_by_scan = []
     merged_sortings_by_scan = []
+    h5_file_paths = [dir['h5_file_path'] for dir in continuous_h5_dirs.values()]
     for dir in continuous_h5_dirs.values():
         h5_file_path = dir['h5_file_path']
         scan_type = dir['scanType']
         if scan_type in allowed_scan_types:
             logger.info(f"Processing {h5_file_path}...")
-            merged_recordings_by_stream, merged_sorting_by_stream = generate_recording_and_sorting_objects(h5_file_path, recordings_dir = recordings_dir, spikesorting_dir = spikesorting_dir)
+            merged_recordings_by_stream, merged_sorting_by_stream = generate_recording_and_sorting_objects(h5_file_paths, 
+                                                                                                           h5_file_path, 
+                                                                                                           recordings_dir = recordings_dir, 
+                                                                                                           spikesorting_dir = spikesorting_dir)
             merged_recordings_by_scan.append(merged_recordings_by_stream)
             merged_sortings_by_scan.append(merged_sorting_by_stream)
         else:
             logger.error("Error: scan type not recognized.")
     return merged_recordings_by_scan, merged_sortings_by_scan
+
+def extract_sortings_per_stream(
+                continuous_h5_dirs, 
+                allowed_scan_types=[
+                                    #"ActivityScan", 
+                                    "AxonTracking", 
+                                    #"Network"
+                                    ], 
+                recordings_dir = './AxonReconPipeline/data/temp_data/recordings',): 
+    
+    """ Extract sorting objects per stream from sliced and cocatenated recordings (most/all fixed electrodes during axontracking scan)
+    """
+    
+    #merged_recordings_by_scan = []
+    #merged_sortings_by_scan = []
+    h5_file_paths = [dir['h5_file_path'] for dir in continuous_h5_dirs.values() if dir['scanType'] in allowed_scan_types]
+    recording_details = MPL.extract_recording_details(h5_file_paths[0])
+    date = recording_details[0]['date']
+    chip_id = recording_details[0]['chipID']
+    scanType = recording_details[0]['scanType']
+    run_id = recording_details[0]['runID']
+    
+    #Sorter params
+    sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+    sorter_params['n_jobs'] = -1
+    sorter_params['detect_threshold'] = 7
+    sorter_params['minFR'] = 0.01
+    sorter_params['minfr_goodchannels'] = 0.01
+    sorter_params['keep_good_only'] = False
+    sorter_params['do_correction'] = False
+    #
+    verbose = True
+    spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'
+    spikesorting_root = spikesorting_dir+f'/{date}/{chip_id}/{scanType}/{run_id}'
+    merged_sorting_list_by_stream = None
+    
+    h5_file_paths = [dir['h5_file_path'] for dir in continuous_h5_dirs.values() if dir['scanType'] == "AxonTracking"]
+    sorting_list_by_stream = hp.sort_recording_list(h5_file_paths,
+                                                            save_root=spikesorting_root,
+                                                            #save_path_changes= 5,
+                                                            sorter = 'kilosort2_5',
+                                                            sorter_params = sorter_params,
+                                                            verbose = verbose,
+                                                            scan_merge = False) 
+    return sorting_list_by_stream
 
 def extract_waveforms_by_scan(continuous_h5_dirs, merged_recordings_by_scan, merged_sortings_by_scan, waveforms_dir='./AxonReconPipeline/data/temp_data/waveforms'):
     waveforms_by_scan = []
@@ -192,11 +245,20 @@ def main(debug_mode=False, debug_folders=None):
     continuous_h5_dirs = exclude_non_continuous_data(informed_h5_dirs)
     logger.info(f"Continuous data found in {len(continuous_h5_dirs)} files.")
 
-    ##2. Perform spikesorting. Load and merge the recordings as needed from the .h5 files. Generate spike sorting objects and merge as needed: 
+    ##2. Extract sorting objects per stream from sliced and cocatenated recordings (most/all fixed electrodes during axontracking scan)
     logger.info("Loading and merging the recordings as needed from the .h5 files. Generating spike sorting objects and merging as needed.")
-    allowed_scan_types = ["ActivityScan", "AxonTracking", "Network"]
+    allowed_scan_types = [
+        #"ActivityScan", Dense activity scan only needed to define locations of electrodes in network and axon tracking scans
+        "AxonTracking", 
+        #"Network"
+        ]
     logger.info(f"Allowed scan types: {allowed_scan_types}")
     recordings_dir = './AxonReconPipeline/data/temp_data/recordings'
+    sorting_list_by_stream = extract_sortings_per_stream(continuous_h5_dirs, allowed_scan_types, recordings_dir)
+
+
+
+    ##2. Perform spikesorting. Load and merge the recordings as needed from the .h5 files. Generate spike sorting objects and merge as needed: 
     spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'
     merged_recordings_by_scan, merged_sortings_by_scan = generate_merged_recs_and_sorts_by_scan(continuous_h5_dirs, 
                                                                                                 allowed_scan_types, 
@@ -219,7 +281,7 @@ def main(debug_mode=False, debug_folders=None):
 
     
     
-    ##4. Extract templates
+    ##5. Extract templates
     templates_dir='./AxonReconPipeline/data/temp_data/templates'
     templates_by_scan = compute_templates_by_scan(continuous_h5_dirs, 
                                                   we_by_scan, 
@@ -234,8 +296,9 @@ if __name__ == "__main__":
     debug_mode = True
     #testing Full Activity Scan and Network Scan...
     selected_folders_test1 = [        
-        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/ActivityScan/000023",
-        #"/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/Network/000024",
+        #"/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/ActivityScan/000023",
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/Network/000024",
+        "/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/Tests_Adam/Tests_Adam/240118/M06844/AxonTracking/000026",
         #testing continuity test with non-continuous data
         #"/mnt/disk20tb/PrimaryNeuronData/Maxone/SPTAN1_1/230725/16657/ActivityScan",
         ]
