@@ -72,7 +72,7 @@ function [] = compileNetworkFiles(data)
     Burst_Peak = [];
     Number_Bursts = [];
     Spike_per_Burst = [];
-    
+    BurstDuration=[];
     % create a list to catch error runIDs
     error_l = [];
     
@@ -94,6 +94,7 @@ function [] = compileNetworkFiles(data)
         meanBurstPeak = nan;
         nBursts = nan;
         meanSpikesPerBurst = nan;
+        meanBurstDuration =nan;
         spikesPerBurst = nan;
         hd5Date = nan; 
         scan_div = nan;
@@ -153,6 +154,10 @@ function [] = compileNetworkFiles(data)
             % compute Network Activity and detect bursts
             relativeSpikeTimes = mxw.util.computeRelativeSpikeTimes(networkData);
             networkAct = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize,'GaussianSigma', gaussianSigma);
+            
+            %for 600s second manually reducing to 300
+            %networkAct.time = networkAct.time(1:3000);
+            %networkAct.firingRate= networkAct.firingRate(1:3000);
             networkStats = computeNetworkStats_JL(networkAct, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
         
             
@@ -209,6 +214,7 @@ function [] = compileNetworkFiles(data)
                    chWithinBurst = [chWithinBurst ch(idx)'];
                 end
                 meanSpikesPerBurst = mean(spikesPerBurst);
+                meanBurstDuration = mean(abs(edges(:,1) - edges(:,2)));
             end
        
             % append information to table elements
@@ -222,10 +228,12 @@ function [] = compileNetworkFiles(data)
             Burst_Peak = [Burst_Peak meanBurstPeak];
             Number_Bursts = [Number_Bursts nBursts];
             Spike_per_Burst = [Spike_per_Burst meanSpikesPerBurst];
-%             runIDstemp = run_id_and_type(:,1).Variables;
+            BurstDuration = [BurstDuration meanBurstDuration];
+            %             runIDstemp = run_id_and_type(:,1).Variables;
 %             types = run_id_and_type(:,2).Variables; % to do fix columnnames
 %             index = find(runIDstemp == scan_runID);
 %             targetType = types{index};
+                ylimNetwork = 10;
             % plot results
                 figure('Color','w','Position',[0 0 400 800],'Visible','off');
                 subplot(2,1,1);
@@ -242,14 +250,14 @@ function [] = compileNetworkFiles(data)
                 plot(networkStats.maxAmplitudesTimes,networkStats.maxAmplitudesValues,'or')
                 %xlim([0 round(max(relativeSpikeTimes.time)/4)])
                 xlim([0 60])
-                ylim([0 20])
+                ylim([0 ylimNetwork])
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot60s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
                 subplot(2,1,1);
                 xlim([0 120])
                 ylim([1 max(relativeSpikeTimes.channel)])
                 subplot(2,1,2);
                 xlim([0 120])
-                ylim([0 20])
+                ylim([0 ylimNetwork])
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot120s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
                 
                 %savefig(appen
@@ -258,16 +266,27 @@ function [] = compileNetworkFiles(data)
                 ylim([0 max(relativeSpikeTimes.channel)])
                 subplot(2,1,2);
                 xlim([0 300])
-                ylim([0 20])
+                ylim([0 ylimNetwork])
+                 % Assuming you want to display metrics above the raster plot
+                textLocationX = 300; % Adjust as necessary for visibility
+                textLocationYStart = 10; % Start just above the highest channel
+                deltaY = 1; % Vertical spacing between text lines
+                text('Position', [textLocationX textLocationYStart], 'String', sprintf('Mean Burst Duration: %.2f', meanBurstDuration));
+                text('Position', [textLocationX textLocationYStart+deltaY], 'String', sprintf('# Bursts: %d', nBursts));
+                text('Position', [textLocationX textLocationYStart+2*deltaY], 'String', sprintf('mean SpB: %.2f', meanSpikesPerBurst));
+                text('Position', [textLocationX textLocationYStart+3*deltaY], 'String', sprintf('mean IBI: %.2f', meanIBI));
+                text('Position', [textLocationX textLocationYStart+4*deltaY], 'String', sprintf('Mean BP: %.2f', meanBurstPeak));
+
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
-                 subplot(2,1,1);
+                 
+                subplot(2,1,1);
                   xlim([0 600])
                   ylim([0 max(relativeSpikeTimes.channel)])
                   subplot(2,1,2);
                   xlim([0 600])
-                  ylim([0 20])
+                  ylim([0 ylimNetwork])
                   saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot600s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
-%                 
+    %                 
 %                 
                 
                 %savefig(append(opDir,'Network_outputs/Raster_BurstActivity/Raster_BurstActivity',scan_runID_text,'.fig'))
@@ -295,8 +314,9 @@ function [] = compileNetworkFiles(data)
     Burst_Peak = Burst_Peak';
     Number_Bursts = Number_Bursts';
     Spike_per_Burst = Spike_per_Burst';
+    BurstDuration = BurstDuration';
     % make table
-    T = table(Run_ID,DIV,Well,NeuronType,Time,Chip_ID,IBI,Burst_Peak,Number_Bursts,Spike_per_Burst);
+    T = table(Run_ID,DIV,Well,NeuronType,Time,Chip_ID,IBI,Burst_Peak,Number_Bursts,Spike_per_Burst,BurstDuration);
     T = sortrows(T,"Run_ID","ascend");
     writetable(T, fullfile(opDir,'Network_outputs/Compiled_Networks.csv'));
     
