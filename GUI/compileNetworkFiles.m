@@ -148,8 +148,9 @@ function [] = compileNetworkFiles(data)
             catch
                 hd5Date = datetime(hd5_time,'InputFormat', 'dd-MMM-yyyy HH:mm:ss');
             end
-            scan_div = fix(daysact(div0_date , hd5Date));
-        
+            div0_datetime = datetime(div0_date, 'InputFormat', 'yourInputFormatHere');
+            scan_div = days(hd5Date - div0_datetime);
+            scan_div = floor(scan_div);
     
             % compute Network Activity and detect bursts
             relativeSpikeTimes = mxw.util.computeRelativeSpikeTimes(networkData);
@@ -268,15 +269,11 @@ function [] = compileNetworkFiles(data)
                 xlim([0 300])
                 ylim([0 ylimNetwork])
                  % Assuming you want to display metrics above the raster plot
-                textLocationX = 300; % Adjust as necessary for visibility
-                textLocationYStart = 10; % Start just above the highest channel
-                deltaY = 1; % Vertical spacing between text lines
-                text('Position', [textLocationX textLocationYStart], 'String', sprintf('Mean Burst Duration: %.2f', meanBurstDuration));
-                text('Position', [textLocationX textLocationYStart+deltaY], 'String', sprintf('# Bursts: %d', nBursts));
-                text('Position', [textLocationX textLocationYStart+2*deltaY], 'String', sprintf('mean SpB: %.2f', meanSpikesPerBurst));
-                text('Position', [textLocationX textLocationYStart+3*deltaY], 'String', sprintf('mean IBI: %.2f', meanIBI));
-                text('Position', [textLocationX textLocationYStart+4*deltaY], 'String', sprintf('Mean BP: %.2f', meanBurstPeak));
-
+                textString = sprintf('# Bursts: %d | Mean Burst Duration: %.2fs | mean SpB: %.2f | mean IBI: %.2fs | Mean BP: %.2fs', nBursts,meanBurstDuration, meanSpikesPerBurst, meanIBI, meanBurstPeak);
+                
+                % Create one annotation box containing all the text entries
+                % Adjust the position vector [x y width height] as needed
+                annotation('textbox', [0.1, 0.425, 0.9, 0.1], 'String', textString, 'EdgeColor', 'none', 'HorizontalAlignment', 'center');
                 saveas(gcf,append(opDir,'Network_outputs/Raster_BurstActivity/Plot300s/Raster_BurstActivity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
                  
                 subplot(2,1,1);
