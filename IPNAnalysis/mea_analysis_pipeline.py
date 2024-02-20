@@ -11,6 +11,8 @@ import spikeinterface.postprocessing as sp
 import spikeinterface.preprocessing as spre
 import spikeinterface.qualitymetrics as qm
 from spikeinterface.sorters import run_sorter_local
+from spikeinterface.sorters import run_sorter
+from spikeinterface.exporters import export_to_phy
 import helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
@@ -38,7 +40,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
     datefmt='%Y-%m-%d %H:%M:%S' # Timestamp format
 )
-
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logger = logging.getLogger("mea_pipeline")
 
 
@@ -47,7 +49,7 @@ logger = logging.getLogger("mea_pipeline")
 
 job_kwargs = dict(n_jobs=32, chunk_duration="1s", progress_bar=False)
 
-
+#breakpoint()    
 def save_to_zarr(filepath,op_folder):
     """
     saves and compresses the file into the zarr format. 
@@ -113,21 +115,26 @@ def get_waveforms_result(folder,with_recording= True,sorter = None):
     return waveforms
 
 def run_kilosort(recording,output_folder):
-   
+    logging.debug("run_kilosort_output folder:"+output_folder) #rohan made changes here
     default_KS2_params = ss.get_default_sorter_params('kilosort2')
     default_KS2_params['keep_good_only'] = True
     # default_KS2_params['detect_threshold'] = 12
     # default_KS2_params['projection_threshold']=[18, 10]
     # default_KS2_params['preclust_threshold'] = 14
-    run_sorter=run_sorter_local("kilosort2",recording, output_folder=output_folder, delete_output_folder=False,verbose=True,with_output=True,**default_KS2_params)
-    #run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params)
-    sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
-    return sorting_KS3
+    run_sorter=run_sorter_local(sorter_name="kilosort2",recording=recording, output_folder=output_folder, delete_output_folder=False,verbose=True,with_output=True,**default_KS2_params)
+    #sorting=run_sorter(sorter_name="kilosort2",recording=recording,output_folder=output_folder,remove_existing_folder=True, delete_output_folder=False,verbose=True,docker_image="rohanmalige/rohan_si-98:v8",with_output=True, **default_KS2_params)
+    #run_sorter = ss.run_sorter('kilosort2',recording=recording, output_folder=output_folder,docker_image= "rohanmalige/rohan_si-100:v1",verbose=True, **default_KS2_params)
+    #run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params) #depreciation warning 
+    #sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
+    return run_sorter
 
 def extract_waveforms(recording,sorting_KS3,folder):
+   
     folder = Path(folder)
-
-    waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True,**job_kwargs)
+    logging.debug(f"waveforms_folder:{folder}") #rohan made changes here 
+    global_job_kwargs = dict(n_jobs=24) 
+    si.set_global_job_kwargs(**global_job_kwargs)
+    waveforms = si.extract_waveforms(recording=recording,sorting=sorting_KS3,sparse=False,folder=folder,max_spikes_per_unit=500,overwrite=True)
     #waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True, sparse = True, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
     return waveforms
 
@@ -283,7 +290,7 @@ def get_unique_templates_channels(good_units, waveform):
     output_units = [[key for key, value in unit_extremum_channel.items() if value == v] for v in set(unit_extremum_channel.values()) if list(unit_extremum_channel.values()).count(v) > 1]
     print(f"Units that correspond to same electrode: {output_units}")
     #Step 3: get the metrics
-    
+    #missing a step here? - Rohan 
 
     #Step4: select best units with same electrodes ( based on amp values)
     output=[]
@@ -328,11 +335,12 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
     if helper.isexists_folder_not_empty(sorting_folder):
         logging.info("clearing sorting folder")
         helper.empty_directory(sorting_folder)
-    
+    #breakpoint()
     recording,rec_name = get_data_maxwell(file_path,recnumber)
     logging.info(f"Processing recording: {rec_name}")
     fs, num_chan, channel_ids, total_rec_time= get_channel_recording_stats(recording)
-    if total_rec_time < time_in_s:
+    if total_rec_time < time_in_s:  # sometimes the recording are less than 300s
+
         time_in_s = total_rec_time
     time_start = 0
     time_end = time_start+time_in_s
@@ -340,6 +348,7 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
     recording_chunk = preprocess(recording_chunk)
     
     current_directory =  os.path.dirname(os.path.abspath(__file__))
+    logging.debug("current dir:"+current_directory) #chanages made here 
     try:
         pattern = r"/(\d+)/data.raw.h5"
         run_id = int(re.search(pattern, file_path).group(1))
@@ -354,53 +363,64 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         dir_name = sorting_folder
         #os.mkdir(dir_name,0o777,)
         os.chdir(dir_name)
+        logging.debug(f"currentdirectory: {os.getcwd()}") #changes made here 
+        #rohan made changes here 
         kilosort_output_folder = f"{current_directory}/../AnalyzedData/{desired_pattern}/kilosort2_{rec_name}"
+        logging.info("ks folder:"+ kilosort_output_folder) #changes made here 
         start = timer()
         sortingKS3 = run_kilosort(recording_chunk,output_folder='./Kilosort_tmp')
         logging.debug("Sorting complete")
         sortingKS3 = sortingKS3.remove_empty_units()
         sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk) #Sometimes KS returns spikes outside the number of samples. < https://github.com/SpikeInterface/spikeinterface/pull/1378>
         
-        sortingKS3= sortingKS3.save(folder = kilosort_output_folder)
-        waveform_folder =dir_name+'/waveforms_'+ rec_name
+        sortingKS3= sortingKS3.save(folder = kilosort_output_folder, overwrite=True)
+        #rohan made changes
+        waveform_folder =f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_{rec_name}"
+        logging.info(f"waveform folder: {waveform_folder}")
         logging.info("Extracting waveforms")
         waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
         end = timer()
         logging.debug(f"Sort and extract waveforms takes: { end - start}")
         
         start = timer()
-        
+        export_to_phy(waveform_extractor=waveforms, output_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/phy",**job_kwargs)
         qual_metrics = get_quality_metrics(waveforms)  
         
         update_qual_metrics = remove_violated_units(qual_metrics)
         non_violated_units  = update_qual_metrics.index.values
         #check for template similarity.
-        curation_sortin_obj = merge_similar_templates(sortingKS3,waveforms)
-        curation_sortin_obj.save(folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/sorting")
-        curatedmerged = curation_sortin_obj.get_unit_ids()
-        end = timer()
+        # curation_sortin_obj = merge_similar_templates(sortingKS3,waveforms)
+        # #rohan made changes
+        # curation_sortin_obj.save(folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/sorting")
+        # curatedmerged = curation_sortin_obj.get_unit_ids()
+        # end = timer()
          #todo: need to extract metrics here.
         logging.debug(f"Removing redundant items takes{end - start}")                                            #todo: need to extract metrics here.
-        non_violated_units_new = [item for item in curatedmerged if item not in non_violated_units]
+        #non_violated_units_new = [item for item in curatedmerged if item not in non_violated_units]
         
         
-        waveforms= extract_waveforms(recording_chunk,curation_sortin_obj,folder = waveform_folder)
-        waveform_good = waveforms.select_units(non_violated_units_new,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
+       # waveforms= extract_waveforms(recording_chunk,curation_sortin_obj,folder = waveform_folder)
+        #rohan made change
+        waveform_good = waveforms.select_units(non_violated_units,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
+        sp.compute_spike_amplitudes(waveform_good,load_if_exists=True,**job_kwargs)
         template_metrics = sp.compute_template_metrics(waveform_good)
         #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
         qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
                                                        'isi_violation', 'amplitude_cutoff','amplitude_median'])  ## to do : have to deal with NAN values
-        
+        #rohan made change here
         template_metrics.to_excel(f"{current_directory}/../AnalyzedData/{desired_pattern}/template_metrics.xlsx")
         locations = sp.compute_unit_locations(waveform_good)
         qual_metrics['location_X'] = locations[:,0]
         qual_metrics['location_Y'] = locations[:,1]
+        qual_metrics['location_Z'] = locations[:,2]
+        #rohan made change here 
         qual_metrics.to_excel(f"{current_directory}/../AnalyzedData/{desired_pattern}/quality_metrics.xlsx")
         ax = plt.subplot(111)
 
         sw.plot_probe_map(recording_chunk,ax=ax,with_channel_ids=False)
-        for x,y in locations:
+        for x,y,z in locations:  # in new si 1.00 they are returning three points.
             ax.scatter(x,y, s=1)
+        #rohan made changes here
         plt.savefig(f"{current_directory}/../AnalyzedData/{desired_pattern}/locations.pdf")
         plt.clf()
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
@@ -413,13 +433,15 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
         #waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
         
         #get the spike trains
-        os.makedirs(f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/",mode=0o777, exist_ok=True)
+        #rohan made change here
+        os.makedirs(f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/",mode=0o777, exist_ok=True)   #need to think of a better optimize d way to save. compare with export to phy
         for idx, unit_id in enumerate(non_violated_units):
             #print(unit_id)
             spike_train = sortingKS3.get_unit_spike_train(unit_id,start_frame=0*fs,end_frame=time_end*fs)
             #print(spike_train)
             if len(spike_train) > 0:
                 spike_times = spike_train / float(fs)
+                #rohan made change here
                 mat_filename = f"{current_directory}/../AnalyzedData/{desired_pattern}/Spike_trains/{unit_id}.mat"
                 sio.savemat(mat_filename,{'spike_times':spike_times,'units':[unit_id]*len(spike_times)})
         
@@ -435,8 +457,10 @@ def process_block(file_path,time_in_s= 300,recnumber=0, sorting_folder = "./Sort
             electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
         electrode_data = {'electrodes':electrodes}
         #helper.dumpdicttofile(electrode_data,f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json")
+        #rohan made change here
         sio.savemat(f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.mat",electrode_data)
-        os.chdir(current_directory)
+        
+        
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
         return electrodes, len(update_qual_metrics)
@@ -493,7 +517,7 @@ def main():
 
     parser.add_argument('-t','--type',nargs='+',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
    
-
+    
 
     args = parser.parse_args()
 
@@ -509,7 +533,7 @@ def main():
     if not os.path.exists(path):
         logger.info(f"The specified path '{path}' does not exist.")
         sys.exit(1)
-
+    #pdb.set_trace()
     # Check if the path is a file
     if os.path.isfile(path):
         logger.debug(f"'{path}' is a file.")
