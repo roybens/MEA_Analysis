@@ -1,32 +1,90 @@
+# This is an edited version of the template extraction script from the axon_tracking package by Philipp Hornauer.
+# All edits tracked on github repo: roybens/MEA_analysis
+# Source: https://github.com/hornauerp/axon_tracking/blob/main/axon_tracking/
+
 import os, h5py
 import spikeinterface.full as si
 import numpy as np
 import scipy as sp
 import sklearn as sk
 from tqdm import tqdm
+import shutil
+import logging
 
-from axon_tracking import spike_sorting as ss
+#local
+import mea_processing_library as MPL
+from merge_templates import merge_templates
 
-def extract_templates_from_sorting_dict(sorting_dict, qc_params={}, te_params={}):
-    rec_list = list(sorting_dict.keys())
+
+#from axon_tracking import spike_sorting as ss
+import spike_sorting as ss
+
+#Logger Setup
+#Create a logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Create handlers
+stream_handler = logging.StreamHandler()  # logs to console
+#file_handler = logging.FileHandler('file.log')  # logs to a file
+
+# Set level of handlers
+stream_handler.setLevel(logging.DEBUG)
+#file_handler.setLevel(logging.ERROR)
+
+# Add handlers to the logger
+logger.addHandler(stream_handler)
+#logger.addHandler(file_handler)
+
+# Create formatters and add it to handlers
+#formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s')
+stream_handler.setFormatter(formatter)
+
+def extract_templates_from_sorting_dict(sorting_list, h5_file_path, qc_params={}, te_params={}, stream_select = None, just_load_waveforms = False):
+    #rec_list = list(sorting_dict.keys())
+    if isinstance(h5_file_path, str):
+        rec_list = [h5_file_path]    
 
     for rec_path in rec_list:
-        sorting_list = sorting_dict[rec_path]
-        sorting_list.sort()
+        #sorting_list = sorting_dict[rec_path]
+        #sorting_list = sorting_dict
+        #sorting_list.sort()
 
-        for sorting_path in sorting_list:
-            sorting = si.KiloSortSortingExtractor(sorting_path)
+        for sorting in sorting_list:
+        #for sorting_path in sorting_list:
+            #sorting = si.KiloSortSortingExtractor(sorting_path)
+            sorting_path = sorting._kwargs['folder_path']
+            #Temporary debug
+            #if 'Network' in stream_id, replace with 'AxonTracking'
+            if 'Network' in sorting_path:
+                sorting_path = sorting_path.replace('Network', 'AxonTracking')
             stream_id = [p for p in sorting_path.split('/') if p.startswith('well')][0] #Find out which well this belongs to
-            print(stream_id)
+            if stream_select is not None:
+                #stream_select = 3  # for example
+                stream_select_str = f'well{stream_select:03}'
+                #stream_ids = stream_ids[stream_select]
+                if stream_select_str not in stream_id:
+                    continue
+            
+            # print(stream_id)
+            # #debug:
+            # stream_number = int(stream_id[-1])
+            # if stream_number > 0:
+            #     continue
+            # #debug end
+            
             #rec_names, common_el, pos = ss.find_common_electrodes(rec_path, stream_id)
-            multirecording, pos = ss.concatenate_recording_slices(rec_path, stream_id)          
+            multirecording, pos = ss.concatenate_recording_slices(rec_path, stream_id)
+
             #duration = int(h5['assay']['inputs']['record_time'][0].decode('UTF-8')) * n_recs #In case we want to use firing rate as criterion
             cleaned_sorting = select_units(sorting, **qc_params)
             cleaned_sorting = si.remove_excess_spikes(cleaned_sorting, multirecording) #Relevant if last spike time == recording_length
             cleaned_sorting.register_recording(multirecording)
             segment_sorting = si.SplitSegmentSorting(cleaned_sorting, multirecording)
-            extract_all_templates(stream_id, segment_sorting, sorting_path, pos, te_params)
+            extract_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_params, save_root=None, just_load_waveforms = just_load_waveforms)
 
+           
 def get_assay_information(rec_path):
     h5 = h5py.File(rec_path)
     pre, post, well_id = -1, -1, 0
@@ -80,23 +138,52 @@ def select_units(sorting, min_n_spikes=500, exclude_mua=True):
 
 
 
-def extract_waveforms(segment_sorting, stream_id, save_root, n_jobs, overwrite_wf):
-    full_path = segment_sorting._kwargs['recording_list'][0]._parent_recording._kwargs['recording']._kwargs['file_path']
+def extract_waveforms(h5_file_path, segment_sorting, stream_id, save_root, n_jobs, overwrite_wf):
+    try:
+        save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._kwargs['parent_recording']._kwargs['recording']._kwargs['file_path']
+    except:
+        save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._parent_recording._kwargs['folder_path']
+        #segment_sorting._kwargs['recording_list'][0]._kwargs['parent_recording']._kwargs['folder_path']
+        #get parent folder instead of file path
+        save_root = os.path.dirname(save_root)
+        #replace 'recordings' with waveforms
+        save_root = save_root.replace('recordings', 'waveforms')
+    full_path = h5_file_path
     cutout = [x / (segment_sorting.get_sampling_frequency()/1000) for x in get_assay_information(full_path)] #convert cutout to ms
     h5 = h5py.File(full_path)
     rec_names = list(h5['wells'][stream_id].keys())
     
     for sel_idx, rec_name in enumerate(rec_names):
-        wf_path = os.path.join(save_root, 'waveforms', 'seg' + str(sel_idx))
-        if not os.path.exists(wf_path) or overwrite_wf:
-            rec = si.MaxwellRecordingExtractor(full_path,stream_id=stream_id,rec_name=rec_name)
-            chunk_size = np.min([10000, rec.get_num_samples()]) - 100 #Fallback for ultra short recordings (too little activity)
-            rec_centered = si.center(rec, chunk_size=chunk_size)
-            
-            seg_sort = si.SelectSegmentSorting(segment_sorting, sel_idx)
-            seg_sort = si.remove_excess_spikes(seg_sort, rec_centered)
-            seg_sort.register_recording(rec_centered)
-                    
+        wf_path = os.path.join(save_root, 'waveforms', 'seg' + str(sel_idx))        
+        rec = si.MaxwellRecordingExtractor(full_path,stream_id=stream_id,rec_name=rec_name)
+        chunk_size = np.min([10000, rec.get_num_samples()]) - 100 #Fallback for ultra short recordings (too little activity)
+        rec_centered = si.center(rec, chunk_size=chunk_size)            
+        seg_sort = si.SelectSegmentSorting(segment_sorting, sel_idx)
+        seg_sort = si.remove_excess_spikes(seg_sort, rec_centered)
+        seg_sort.register_recording(rec_centered) 
+        #Try loading waveforms, if they don't exist or overwrite_wf is True, extract them
+        if not overwrite_wf:
+            try: 
+                seg_we = si.WaveformExtractor.load(wf_path,
+                                                with_recording=True, 
+                                                sorting = seg_sort)                
+                # seg_we = si.load_waveforms(wf_path,
+                #                            with_recording = True, 
+                #                            sorting = seg_sort)
+                if len(seg_sort.get_unit_ids()) == len(seg_we.unit_ids):
+                    logger.info(f'Waveforms loaded from {wf_path} already exist')
+                    continue
+                    #break
+                else:
+                    raise ValueError('Unit IDs do not match')    
+            except:
+                if os.path.exists(wf_path):
+                    shutil.rmtree(wf_path)
+                pass
+
+        if not os.path.exists(wf_path) or overwrite_wf:                           
+            logger.info(f'Extracting waveforms to {wf_path}')
+            os.makedirs(wf_path, exist_ok=True)
             seg_we = si.WaveformExtractor.create(rec_centered, seg_sort,
                                                  wf_path, 
                                                  allow_unfiltered=True,
@@ -144,32 +231,91 @@ def remove_wf_outliers(aligned_wfs, ref_el, n_jobs, n_neighbors):
     
     return outlier_rm
 
-def combine_templates(stream_id, segment_sorting, sel_unit_id, save_root, peak_cutout=2, align_cutout=True, upsample=2, rm_outliers=True, n_jobs=16, n_neighbors=10, overwrite_wf=False, overwrite_tmp = True):
-    full_path = segment_sorting._kwargs['recording_list'][0]._parent_recording._kwargs['recording']._kwargs['file_path']
-    cutout = get_assay_information(full_path)
-    if align_cutout:
-        wf_length = np.int16((sum(cutout) - 2*peak_cutout) * upsample) #length of waveforms after adjusting for potential peak alignments
-        template_matrix = np.full([wf_length, 26400], np.nan)
-    else:
-        wf_length = np.int16(sum(cutout) * upsample)
-        template_matrix = np.full([wf_length, 26400], np.nan)
+import reconstruct_axons as ra
+def combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, save_root, peak_cutout=2, align_cutout=True, upsample=2, rm_outliers=True, n_jobs=16, n_neighbors=10, overwrite_wf=False, overwrite_tmp = True, just_load_waveforms = False):
+    #full_path = segment_sorting._kwargs['recording_list'][0]._parent_recording._kwargs['recording']._kwargs['file_path']
+    #full_path = segment_sorting._kwargs['recording_or_recording_list'][0]._kwargs['parent_recording']._kwargs['recording']._kwargs['file_path']
+    full_path = h5_file_path
+    # cutout = get_assay_information(full_path)
+    # if align_cutout:
+    #     wf_length = np.int16((sum(cutout) - 2*peak_cutout) * upsample) #length of waveforms after adjusting for potential peak alignments
+    #     template_matrix = np.full([wf_length, 26400], np.nan)
+    # else:
+    #     wf_length = np.int16(sum(cutout) * upsample)
+    #     template_matrix = np.full([wf_length, 26400], np.nan)
         
-    extract_waveforms(segment_sorting, stream_id, save_root, n_jobs, overwrite_wf)
+    if not just_load_waveforms:
+        extract_waveforms(h5_file_path, segment_sorting, stream_id, save_root, n_jobs, overwrite_wf)
 
     h5 = h5py.File(full_path)
     rec_names = list(h5['wells'][stream_id].keys())
-    
-    for sel_idx, rec_name in enumerate(rec_names):
+    #Find a way to average common electrodes
+    # Initialize count_matrix with the same shape as template_matrix, filled with zeros
+    #count_matrix = np.zeros(template_matrix.shape)
+    template_list = []
+    channel_locations_list = []
+    #replace templates for waveforms in save_root
+    if 'templates' in save_root:
+        wf_load_dir = save_root.replace('templates', 'waveforms')
+        
+    # aw = True
+    # if aw:
+    for sel_idx, rec_name in enumerate(rec_names): 
         rec = si.MaxwellRecordingExtractor(full_path,stream_id=stream_id,rec_name=rec_name)
         els = rec.get_property("contact_vector")["electrode"]
         seg_sort = si.SelectSegmentSorting(segment_sorting, sel_idx)
-        seg_we = si.load_waveforms(os.path.join(save_root, 'waveforms', 'seg' + str(sel_idx)), sorting = seg_sort)
-        aligned_wfs = align_waveforms(seg_we, sel_unit_id, cutout, peak_cutout, upsample, align_cutout, rm_outliers, n_jobs, n_neighbors)
-        template_matrix[:,els] = aligned_wfs #find way to average common electrodes 
-        
-    return template_matrix
+        seg_we = si.load_waveforms(os.path.join(wf_load_dir, 'waveforms', 'seg' + str(sel_idx)), sorting = seg_sort)
+        template = seg_we.get_template(sel_unit_id)
+        channel_locations = seg_we.get_channel_locations()
+        # Define the directory and filename
+        dir_path = os.path.join(save_root, 'partial_templates')
+        file_name = f'seg{sel_idx}_unit{sel_unit_id}.npy'
+        channel_loc_file_name = f'seg{sel_idx}_unit{sel_unit_id}_channels.npy'
+        # Create the directory if it doesn't exist
+        os.makedirs(dir_path, exist_ok=True)
+        # Combine the directory and filename to get the full path
+        channel_loc_save_file = os.path.join(dir_path, channel_loc_file_name)
+        template_save_file = os.path.join(dir_path, file_name)    
+        np.save(template_save_file, template)
+        np.save(channel_loc_save_file, channel_locations)
+        logger.info(f'Partial template saved to {template_save_file}')
+        channel_locations_list.append(channel_locations)
+        template_list.append(template)
+    
+    logger.info(f'Merging partial templates')
+    # merged_template, merged_channel_loc = ra.merge_templates(template_list, 
+    #                                                         channel_locations_list, 
+    #                                                         plot_dir = save_root+'/merged_templates')
+    merged_template, merged_channel_loc = merge_templates(template_list, 
+                                                         channel_locations_list, 
+                                                         plot_dir = save_root+'/merged_templates')
+    
+    return merged_template, merged_channel_loc       
+
+    
+    # ph = False
+    # if ph:
+    #     for sel_idx, rec_name in enumerate(rec_names): 
+    #         rec = si.MaxwellRecordingExtractor(full_path,stream_id=stream_id,rec_name=rec_name)
+    #         els = rec.get_property("contact_vector")["electrode"]
+    #         seg_sort = si.SelectSegmentSorting(segment_sorting, sel_idx)
+    #         seg_we = si.load_waveforms(os.path.join(save_root, 'waveforms', 'seg' + str(sel_idx)), sorting = seg_sort)
+    #         aligned_wfs = align_waveforms(seg_we, 
+    #                                     sel_unit_id, 
+    #                                     cutout, 
+    #                                     peak_cutout, 
+    #                                     upsample, 
+    #                                     align_cutout, 
+    #                                     rm_outliers, 
+    #                                     n_jobs, 
+    #                                     n_neighbors)
+    #         template_matrix[:,els] = aligned_wfs #find way to average common electrodes
+    
+    
+    #     return template_matrix
 
 def convert_to_grid(template_matrix, pos):
+
     clean_template = np.delete(template_matrix, np.isnan(pos['x']), axis = 1)
     clean_x = pos['x'][~np.isnan(pos['x'])]
     clean_y = pos['y'][~np.isnan(pos['y'])]
@@ -179,23 +325,45 @@ def convert_to_grid(template_matrix, pos):
     for i in range(len(y_idx)):
         grid[x_idx[i],y_idx[i],:] = clean_template[:,i]
     
+    # clean_template = np.delete(template_matrix, np.isnan(pos['x']), axis = 1)
+    # clean_x = pos['x'][~np.isnan(pos['x'])]
+    # clean_y = pos['y'][~np.isnan(pos['y'])]
+    # x_idx = np.int16(clean_x / 17.5)
+    # y_idx = np.int16(clean_y / 17.5)
+    # grid = np.full([np.max(x_idx) + 1, np.max(y_idx) + 1, clean_template.shape[0]],0).astype('float32')
+    # for i in range(len(y_idx)):
+    #     grid[x_idx[i],y_idx[i],:] = clean_template[:,i]
+    
     return grid
 
-
-def extract_all_templates(stream_id, segment_sorting, save_root, pos, te_params):
+def extract_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_params, save_root=None, just_load_waveforms = False):
     sel_unit_ids = segment_sorting.get_unit_ids()
+    if save_root is None:
+        #save_root = os.path.dirname(full_path) 
+        recording_details = MPL.extract_recording_details(h5_file_path)
+        date = recording_details[0]['date']
+        chip_id = recording_details[0]['chipID']
+        scanType = recording_details[0]['scanType']
+        run_id = recording_details[0]['runID']
+        save_root = f'./AxonReconPipeline/data/temp_data/templates/{date}/{chip_id}/{scanType}/{run_id}/{stream_id}'
+    #template_save_path = os.path.join(save_root, 'waveforms')
+    # if not os.path.exists(waveform_save_path):
+    #     os.makedirs(waveform_save_path)
     template_save_path = os.path.join(save_root, 'templates')
     if not os.path.exists(template_save_path):
         os.makedirs(template_save_path)
         
     for sel_unit_id in tqdm(sel_unit_ids): 
         template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '.npy')
+        channel_loc_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_channels.npy')
         
         if not os.path.isfile(template_save_file) or te_params['overwrite_tmp']:
             try:
-                template_matrix = combine_templates(stream_id, segment_sorting, sel_unit_id, save_root, **te_params)
-                grid = convert_to_grid(template_matrix, pos)
-                np.save(template_save_file, grid)
+                merged_template, merged_channel_loc = combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, save_root, just_load_waveforms = just_load_waveforms, **te_params)
+                #grid = convert_to_grid(template_matrix, pos)
+                np.save(channel_loc_save_file, merged_channel_loc)
+                np.save(template_save_file, merged_template)
+                logger.info(f'Merged template saved to {save_root}/merged_templates')
             except Exception as e:
                 print(f'Unit {sel_unit_id} encountered the following error:\n {e}')
 
