@@ -13,7 +13,9 @@ import logging
 
 #local
 import mea_processing_library as MPL
-from merge_templates import merge_templates
+#from merge_templates import merge_templates
+#from old_merg_func import merge_templates
+from old_merg_func_multi import merge_templates
 
 
 #from axon_tracking import spike_sorting as ss
@@ -244,6 +246,9 @@ def combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, sav
     #     wf_length = np.int16(sum(cutout) * upsample)
     #     template_matrix = np.full([wf_length, 26400], np.nan)
         
+
+        
+    
     if not just_load_waveforms:
         extract_waveforms(h5_file_path, segment_sorting, stream_id, save_root, n_jobs, overwrite_wf)
 
@@ -261,11 +266,17 @@ def combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, sav
     # aw = True
     # if aw:
     for sel_idx, rec_name in enumerate(rec_names): 
-        rec = si.MaxwellRecordingExtractor(full_path,stream_id=stream_id,rec_name=rec_name)
+        try: rec = si.MaxwellRecordingExtractor(full_path,stream_id=stream_id,rec_name=rec_name)
+        except Exception as e: 
+            print(f'Error loading recording {rec_name} in segment {sel_idx}:\n{e}')
+            continue
         els = rec.get_property("contact_vector")["electrode"]
         seg_sort = si.SelectSegmentSorting(segment_sorting, sel_idx)
         seg_we = si.load_waveforms(os.path.join(wf_load_dir, 'waveforms', 'seg' + str(sel_idx)), sorting = seg_sort)
         template = seg_we.get_template(sel_unit_id)
+        if np.isnan(template).all():
+            logger.info(f'Unit {sel_unit_id} in segment {sel_idx} is empty')
+            continue
         channel_locations = seg_we.get_channel_locations()
         # Define the directory and filename
         dir_path = os.path.join(save_root, 'partial_templates')
@@ -275,7 +286,11 @@ def combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, sav
         os.makedirs(dir_path, exist_ok=True)
         # Combine the directory and filename to get the full path
         channel_loc_save_file = os.path.join(dir_path, channel_loc_file_name)
-        template_save_file = os.path.join(dir_path, file_name)    
+        template_save_file = os.path.join(dir_path, file_name)
+        
+        if not np.isnan(template).all() and np.isnan(template).any():
+            logger.info(f'Unit {sel_unit_id} in segment {sel_idx} has NaN values')
+            #template = np.nan_to_num(template)    
         np.save(template_save_file, template)
         np.save(channel_loc_save_file, channel_locations)
         logger.info(f'Partial template saved to {template_save_file}')
@@ -283,14 +298,11 @@ def combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, sav
         template_list.append(template)
     
     logger.info(f'Merging partial templates')
-    # merged_template, merged_channel_loc = ra.merge_templates(template_list, 
-    #                                                         channel_locations_list, 
-    #                                                         plot_dir = save_root+'/merged_templates')
-    merged_template, merged_channel_loc = merge_templates(template_list, 
+    merged_template, merged_channel_loc, merged_template_filled, merged_channel_loc_filled = merge_templates(template_list, 
                                                          channel_locations_list, 
                                                          plot_dir = save_root+'/merged_templates')
     
-    return merged_template, merged_channel_loc       
+    return merged_template, merged_channel_loc, merged_template_filled, merged_channel_loc_filled       
 
     
     # ph = False
@@ -353,16 +365,27 @@ def extract_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_para
     if not os.path.exists(template_save_path):
         os.makedirs(template_save_path)
         
-    for sel_unit_id in tqdm(sel_unit_ids): 
+    for sel_unit_id in tqdm(sel_unit_ids):
+
+    # #     #debug
+    #     if sel_unit_id == 92: 
+    # # ##
+    #         continue
+    # #     #debug
+
         template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '.npy')
         channel_loc_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_channels.npy')
+        template_save_file_fill = os.path.join(template_save_path, str(sel_unit_id) + '_filled.npy')
+        channel_loc_save_file_fill = os.path.join(template_save_path, str(sel_unit_id) + '_channels_filled.npy')
         
         if not os.path.isfile(template_save_file) or te_params['overwrite_tmp']:
             try:
-                merged_template, merged_channel_loc = combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, save_root, just_load_waveforms = just_load_waveforms, **te_params)
+                merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = combine_templates(h5_file_path, stream_id, segment_sorting, sel_unit_id, save_root, just_load_waveforms = just_load_waveforms, **te_params)
                 #grid = convert_to_grid(template_matrix, pos)
                 np.save(channel_loc_save_file, merged_channel_loc)
                 np.save(template_save_file, merged_template)
+                np.save(channel_loc_save_file_fill, merged_channel_locs_filled)
+                np.save(template_save_file_fill, merged_template_filled)
                 logger.info(f'Merged template saved to {save_root}/merged_templates')
             except Exception as e:
                 print(f'Unit {sel_unit_id} encountered the following error:\n {e}')

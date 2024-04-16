@@ -11,7 +11,7 @@ from tqdm import tqdm
 import filecmp
 from timeit import default_timer as timer
 import pandas as pd
-import docker
+#import docker
 
 #Currently not used, may be useful for optimization
 from memory_profiler import profile
@@ -531,6 +531,7 @@ def run_kilosort2_5_docker_image(recording, output_folder, docker_image= "spikei
     sorter_params['minfr_goodchannels'] = 0.01
     sorter_params['keep_good_only'] = False
     sorter_params['do_correction'] = False
+    #sorter_params['use_gpu'] = False
     sampling_rate = recording.get_sampling_frequency()  # Get the sampling rate in Hz
     total_frames = recording.get_num_frames()  # Get the total number of frames
 
@@ -538,11 +539,19 @@ def run_kilosort2_5_docker_image(recording, output_folder, docker_image= "spikei
     if os.path.exists(output_folder):
         shutil.rmtree(output_folder)
     
-    sorting_KS2_5 = ss.run_kilosort2_5(recording, 
-                                       output_folder=output_folder, 
-                                       docker_image="spikeinterface/kilosort2_5-compiled-base:latest", 
-                                       verbose=verbose, 
-                                       **sorter_params)
+    # sorting_KS2_5 = ss.run_kilosort2_5(recording, 
+    #                                    output_folder=output_folder, 
+    #                                    docker_image="spikeinterface/kilosort2_5-compiled-base:latest", 
+    #                                    verbose=verbose,
+    #                                    #use_gpu=False, 
+    #                                    **sorter_params)
+    sorting_KS2_5 = ss.run_sorter(sorter_name = "kilosort2_5",
+                                  recording = recording, 
+                                    output_folder=output_folder, 
+                                    docker_image="spikeinterface/kilosort2_5-compiled-base:latest", 
+                                    verbose=verbose,
+                                    #use_gpu=False, 
+                                    **sorter_params)
     #sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
     return sorting_KS2_5
 
