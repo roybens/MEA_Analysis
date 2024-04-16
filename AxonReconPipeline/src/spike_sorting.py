@@ -183,12 +183,16 @@ def find_common_electrodes(rec_path, stream_id, scan_merge = False):
 
     for i, rec_name in enumerate(rec_names):
         #rec_name = 'rec' + '%0*d' % (4, rec_id)
-        rec = si.MaxwellRecordingExtractor(rec_path, stream_id=stream_id, rec_name=rec_name)
-        rec_el = rec.get_property("contact_vector")["electrode"]
-        if i == 0:
-            common_el = rec_el
-        else:
-            common_el = list(set(common_el).intersection(rec_el))
+        try: 
+            rec = si.MaxwellRecordingExtractor(rec_path, stream_id=stream_id, rec_name=rec_name)
+            rec_el = rec.get_property("contact_vector")["electrode"]
+            if i == 0:
+                common_el = rec_el
+            else:
+                common_el = list(set(common_el).intersection(rec_el))
+        except Exception as e:
+            print(e)
+            continue
             
     return rec_names, common_el
 
@@ -229,29 +233,33 @@ def concatenate_recording_slices(rec_path,
         recording_dir_by_stream = os.path.join(recording_dir_by_stream, stream_id)        
         save_kwargs = dict(n_jobs=4)            
         for rec_name in rec_names:  
-            rec_save_path = recording_dir_by_stream+f'/{rec_name}'
-            rec = si.MaxwellRecordingExtractor(rec_path, stream_id=stream_id, rec_name=rec_name)                    
-            try: 
-                if not os.path.exists(rec_save_path):
-                    raise FileNotFoundError
-                rec_centered = si.load_extractor(rec_save_path)
-                logger.info(f"Loaded centered recording {rec_name} from {rec_save_path}")
-            except:
-                if os.path.exists(rec_save_path):
-                    shutil.rmtree(rec_save_path)
-                os.makedirs(rec_save_path, exist_ok=True) 
-                
-                chunk_size = np.min([10000, rec.get_num_samples()]) - 100 #Fallback for ultra short recordings (too little activity)
-                logger.info(f"Centering recording {rec_name} with chunk size {chunk_size}")
-                rec_centered = si.center(rec,chunk_size=chunk_size)                    
-                rec_centered.save(folder = rec_save_path, overwrite = True, verbose = True, **save_kwargs)
-                logger.info(f"Saved centered recording to {rec_save_path}")
-            ch_id = rec.get_property("contact_vector")['device_channel_indices']
-            rec_el = rec.get_property("contact_vector")["electrode"]                
-            chan_idx = [np.where(rec_el == el)[0][0] for el in common_el]
-            sel_channels = rec.get_channel_ids()[chan_idx]   
-            rec_centered_sliced = rec_centered.channel_slice(sel_channels, renamed_channel_ids=list(range(len(chan_idx))))         
-            rec_list.append(rec_centered_sliced) 
+            try:
+                rec_save_path = recording_dir_by_stream+f'/{rec_name}'
+                rec = si.MaxwellRecordingExtractor(rec_path, stream_id=stream_id, rec_name=rec_name)                    
+                try: 
+                    if not os.path.exists(rec_save_path):
+                        raise FileNotFoundError
+                    rec_centered = si.load_extractor(rec_save_path)
+                    logger.info(f"Loaded centered recording {rec_name} from {rec_save_path}")
+                except:
+                    if os.path.exists(rec_save_path):
+                        shutil.rmtree(rec_save_path)
+                    os.makedirs(rec_save_path, exist_ok=True) 
+                    
+                    chunk_size = np.min([10000, rec.get_num_samples()]) - 100 #Fallback for ultra short recordings (too little activity)
+                    logger.info(f"Centering recording {rec_name} with chunk size {chunk_size}")
+                    rec_centered = si.center(rec,chunk_size=chunk_size)                    
+                    rec_centered.save(folder = rec_save_path, overwrite = True, verbose = True, **save_kwargs)
+                    logger.info(f"Saved centered recording to {rec_save_path}")
+                ch_id = rec.get_property("contact_vector")['device_channel_indices']
+                rec_el = rec.get_property("contact_vector")["electrode"]                
+                chan_idx = [np.where(rec_el == el)[0][0] for el in common_el]
+                sel_channels = rec.get_channel_ids()[chan_idx]   
+                rec_centered_sliced = rec_centered.channel_slice(sel_channels, renamed_channel_ids=list(range(len(chan_idx))))         
+                rec_list.append(rec_centered_sliced)
+            except Exception as e:
+                print(e)
+                continue 
         
         multirecording = si.concatenate_recordings(rec_list)
         
