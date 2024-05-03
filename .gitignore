@@ -11,3 +11,6 @@ AnalyzedData/*
 .vscode
 **.pkl
 slurm*.out
+**.png
+**.npz
+**.zip
