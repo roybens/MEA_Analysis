@@ -10,9 +10,11 @@ import sklearn as sk
 from tqdm import tqdm
 import shutil
 import logging
+import sys
 
 #local
-import mea_processing_library as MPL
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from MEAProcessingLibrary import mea_processing_library as MPL
 #from merge_templates import merge_templates
 #from old_merg_func import merge_templates
 from old_merg_func_multi import merge_templates
