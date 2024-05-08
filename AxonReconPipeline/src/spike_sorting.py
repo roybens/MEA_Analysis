@@ -10,12 +10,14 @@ from pathlib import Path
 from tqdm import tqdm
 from glob import glob
 import shutil
+import sys
 
 # import spikeinterface
 # from spikeinterface.widgets import plot_electrode_geometry
 
 #local:
-import mea_processing_library as MPL
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from MEAProcessingLibrary import mea_processing_library as MPL
 
 #spikeinterface:
 import spikeinterface.sorters as ss

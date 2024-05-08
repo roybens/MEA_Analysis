@@ -13,9 +13,6 @@ from timeit import default_timer as timer
 import pandas as pd
 #import docker
 
-#Currently not used, may be useful for optimization
-from memory_profiler import profile
-
 #spikeinterface imports
 import spikeinterface
 import spikeinterface.full as si
