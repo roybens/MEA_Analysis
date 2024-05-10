@@ -192,7 +192,6 @@ def extract_sortings_per_stream(
                                                     #scan_merge = False,
                                                     stream_select = stream_select)
     return sorting_list_by_stream
-
 def get_list_of_sortings_by_scan(
         continuous_h5_dirs, 
         recordings_dir = './AxonReconPipeline/data/temp_data/recordings', 
@@ -405,7 +404,7 @@ def main(h5_parent_dirs, allowed_scan_types=['AxonTracking'], stream_select = No
 
     stream_select = 0
     templates_dir='./AxonReconPipeline/data/temp_data/templates'
-    for i, continuous_h5_dir in continuous_h5_dirs.items():
+    for i, continuous_h5_dir in continuous_h5_file_info.items():
         recording_details = MPL.extract_recording_details(continuous_h5_dir['h5_file_path'])
         date = recording_details[0]['date']
         chip_id = recording_details[0]['chipID']
@@ -823,6 +822,9 @@ if __name__ == "__main__":
     h5_parent_dirs = KCNT1_effort
     
     '''options'''
+    # homo
     stream_select = 0
+    # hetero
+    stream_select = 3
     load_waveforms = True #Load waveforms from disk instead of extracting them, if possible
     main(h5_parent_dirs, allowed_scan_types = allowed_scan_types, stream_select = stream_select)
