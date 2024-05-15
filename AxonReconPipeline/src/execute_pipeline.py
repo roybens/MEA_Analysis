@@ -352,7 +352,6 @@ def main(h5_parent_dirs, allowed_scan_types=['AxonTracking'], stream_select = No
         params['upsample'] = 5
         params['neighbor_radius'] = 100
         params['r2_threshold'] = 0.8
-
     elif option == 'organoid':
         ## Modulating params for organoid data
 
@@ -391,7 +390,6 @@ def main(h5_parent_dirs, allowed_scan_types=['AxonTracking'], stream_select = No
         params['r2_threshold'] = 0.7 #0.9  # R^2 threshold for velocity linear fit below which an axon branch is discarded
         params['r2_threshold_for_outliers'] = 0.9 #0.98  # R^2 threshold below which outliers are detected and removed
         params['min_outlier_tracking_error'] = 75 #50  # Tracking error in µm above which a point can be considered an outlier and removed
-    
     def get_extremum(template, locations):
         """
         Get the extremum of the template.
@@ -400,7 +398,6 @@ def main(h5_parent_dirs, allowed_scan_types=['AxonTracking'], stream_select = No
         extremum_idx = np.unravel_index(np.argmax(np.abs(template)), template.shape)[0]
         extremum = locations[extremum_idx]
         return extremum
-
 
     stream_select = 0
     templates_dir='./AxonReconPipeline/data/temp_data/templates'
@@ -809,7 +806,12 @@ if __name__ == "__main__":
         #"/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/FolicAcid_AxonTracking_05022024/FolicAcid_AxonTrack_Comparison/240205/M07038/AxonTracking/000006"
         ]
     KCNT1_effort = [
-        '/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082'
+        #homo and het
+        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082'
+        
+        #homo, het, wt
+        '/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240409/M07037/AxonTracking/000095'
+
     ]
     
     #Set allowed scan types, axontracking alone is currently the best option
@@ -825,6 +827,8 @@ if __name__ == "__main__":
     # homo
     stream_select = 0
     # hetero
-    stream_select = 3
+    #stream_select = 1
+    # # wt
+    #stream_select = 2
     load_waveforms = True #Load waveforms from disk instead of extracting them, if possible
     main(h5_parent_dirs, allowed_scan_types = allowed_scan_types, stream_select = stream_select)

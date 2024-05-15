@@ -7,7 +7,7 @@ IPNAnalysis/Sorting_Intermediate_files/*
 IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
-AxonReconPipeline/data/*
+AxonReconPipeline/data/temp_data/*
 **.mat
 .vscode
 **.pkl
