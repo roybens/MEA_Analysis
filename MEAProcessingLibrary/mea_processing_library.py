@@ -542,13 +542,19 @@ def run_kilosort2_5_docker_image(recording, output_folder, docker_image= "spikei
     #                                    verbose=verbose,
     #                                    #use_gpu=False, 
     #                                    **sorter_params)
-    sorting_KS2_5 = ss.run_sorter(sorter_name = "kilosort2_5",
-                                  recording = recording, 
+    print("Ima here")
+    sorter_params = si.get_default_sorter_params('kilosort2')
+    sorting_KS2_5 = ss.run_sorter(
+                                    sorter_name = "kilosort2",
+                                    #sorter_name = "kilosort2_5",
+                                    recording = recording, 
                                     output_folder=output_folder, 
-                                    docker_image="spikeinterface/kilosort2_5-compiled-base:latest", 
+                                    docker_image="rohanmalige/benshalom:v3", 
+                                    #docker_image = docker_image,
                                     verbose=verbose,
                                     #use_gpu=False, 
                                     **sorter_params)
+    print("hey")
     #sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
     return sorting_KS2_5
 

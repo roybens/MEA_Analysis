@@ -98,7 +98,10 @@ def get_waveforms_result(folder,with_recording= True,sorter = None):
     return waveforms
 
 def run_kilosort(recording,output_folder):
-   
+    print("hello I am here")
+    #docker_image = 'rohanmalige/benshalom:v3'
+    docker_image = 'spikeinterface/kilosort2-compiled-base:latest'
+    #docker_image = "kilosort2-maxwellcomplib:latest"
     default_KS2_params = ss.get_default_sorter_params('kilosort2')
     #default_KS3_params = ss.get_default_sorter_params('kilosort3')
     #default_KS2_params['keep_good_only'] = True
@@ -106,12 +109,12 @@ def run_kilosort(recording,output_folder):
     #default_KS2_params['projection_threshold']=[18, 10]
     #default_KS2_params['preclust_threshold'] = 14
     #run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "kilosort2-maxwellcomplib:latest",verbose=True, **default_KS2_params)
-    try: run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=True, **default_KS2_params)
+    try: run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= docker_image,verbose=True, **default_KS2_params)
     except Exception as e:
         print(e)
         helper.empty_directory(output_folder)
         os.rmdir(output_folder) 
-        try: run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "kilosort2-maxwellcomplib:latest",verbose=True, **default_KS2_params)
+        try: run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= docker_image,verbose=True, **default_KS2_params)
         except Exception as e:
             print(e)
     #run_sorter = ss.run_kilosort3(recording, output_folder=output_folder, docker_image= "spikeinterface/kilosort-compiled-base:latest",verbose=True, **default_KS3_params)

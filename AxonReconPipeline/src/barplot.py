@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# IMPORTANT INFO: make sure to change
+# IMPORTANT INFO: make sure to change the starting ID when using a new dataset
 
 # make box and whisker plots for data over entire chip and bar plots for over one unit
 df = pd.read_excel('/mnt/disk15tb/Taner/axon_analytics_homozyg.xls')
@@ -457,8 +457,52 @@ for i, data in enumerate(lenarray, start=1):
     annotate_boxplot(data, i, 10)
 plt.show() 
 
+# showing box plots of the entire stream on 1 graph. Redefine data1 and dat2 by changing y0
+# Sample data
+y0 = flattenedlenarray
+data1 = {'Identified_Putative_Neurons':[' ']*len(y0),
+         'Branch_Lengths': y0,
+         'color': np.random.choice([0,1,2,3,4,5,6,7,8,9])}
+data2 = {'Identified_Putative_Neurons':[' ']*len(y0),
+         'Branch_Lengths': y0,
+         'color': np.random.choice([0,1,2,3,4,5,6,7,8,9])}
 
+df1 = pd.DataFrame(data1)
+df2 = pd.DataFrame(data2)
 
+# Add dataset labels
+df1['Dataset'] = 'Dataset 1'
+df2['Dataset'] = 'Dataset 2'
+
+# Combine DataFrames
+combined_df = pd.concat([df1, df2])
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+# Create subplot figure with 1 row and 2 columns
+# fig must be redefined in the code above. each fig alone must be made before and then combined here
+fig1 = fig
+fig2 = fig
+plot = make_subplots(rows=1, cols=2, subplot_titles=('Dataset 1', 'Dataset 2'))
+
+# Add traces from fig1 to the first subplot
+for trace in fig1.data:
+    plot.add_trace(trace, row=1, col=1)
+
+# Add traces from fig2 to the second subplot
+for trace in fig2.data:
+    plot.add_trace(trace, row=1, col=2)
+
+# Update layout
+plot.update_layout(
+    title_text="Comparison of Two Datasets",
+    xaxis_title="Identified Putative Neurons",
+    yaxis_title="Branch Lengths",
+    showlegend=False  # Hide legend if not needed
+) 
+
+# Show the combined plot
+plot.show()
 
 
 

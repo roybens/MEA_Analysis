@@ -167,13 +167,14 @@ def extract_sortings_per_stream(
     run_id = recording_details[0]['runID']
     
     #Sorter params - dont really need to define this here, remove later
-    sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+    # sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
+    sorter_params = si.get_default_sorter_params('kilosort2')
     sorter_params['n_jobs'] = -1
     sorter_params['detect_threshold'] = 7
     sorter_params['minFR'] = 0.01
     sorter_params['minfr_goodchannels'] = 0.01
     sorter_params['keep_good_only'] = False
-    sorter_params['do_correction'] = False
+    #sorter_params['do_correction'] = False
     #
     verbose = True
     #spikesorting_dir = './AxonReconPipeline/data/temp_data/sortings'
@@ -186,7 +187,8 @@ def extract_sortings_per_stream(
     sorting_list_by_stream = hp.sort_recording_list(h5_file_path,
                                                     save_root=spikesorting_root,
                                                     #save_path_changes= 5,
-                                                    sorter = 'kilosort2_5',
+                                                    #sorter = 'kilosort2_5',
+                                                    sorter = 'kilosort2',
                                                     sorter_params = sorter_params,
                                                     verbose = verbose,
                                                     #scan_merge = False,
@@ -825,10 +827,10 @@ if __name__ == "__main__":
     
     '''options'''
     # homo
-    stream_select = 0
+    #stream_select = 0
     # hetero
-    #stream_select = 1
+    #stream_select = 3
     # # wt
-    #stream_select = 2
+    stream_select = 2
     load_waveforms = True #Load waveforms from disk instead of extracting them, if possible
     main(h5_parent_dirs, allowed_scan_types = allowed_scan_types, stream_select = stream_select)
