@@ -10,7 +10,7 @@ import spikeinterface.widgets as sw
 import spikeinterface.postprocessing as sp
 import spikeinterface.preprocessing as spre
 import spikeinterface.qualitymetrics as qm
-import helper_functions as helper
+import lib_helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
 import multiprocessing
