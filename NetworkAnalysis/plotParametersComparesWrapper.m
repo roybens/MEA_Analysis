@@ -22,6 +22,7 @@ opDir = data.opDir;
 gaussianSigma = data.gaussianSigma;
 binSize = data.binSize;
 minPeakDistance = data.minPeakDistance;
+minPeakProminence = data.minProminience;
 thresholdBurst = data.thresholdBurst;
 use_fixed_threshold = false;
 thresholdStartStop = data.thresholdStartStop; 
@@ -47,8 +48,20 @@ try
     % Pre-calculate total number of parameters
     numParameters = numel(parameters);
     
-        % Specify the exact number of cores to use
-    numCores = 10;  % Adjust this number based on your needs and resource availability
+    % Read JSON file
+    fid = fopen('expParameterSetting.json');
+    if fid == -1
+        error('Cannot open params.json file');
+    end
+    raw = fread(fid, inf);
+    str = char(raw');
+    fclose(fid);
+    
+     % Decode JSON file
+    params = jsondecode(str);
+
+    % Specify the exact number of cores to use
+    numCores = 2 * numParameters;  % Adjust this number based on your needs and resource availability
     
     % Initialize or modify the existing parallel pool
     currentPool = gcp('nocreate');  % Check for existing parallel pool
@@ -63,8 +76,14 @@ try
     end
     % Execute computation in parallel
     parfor i = 1:numParameters
+
+            if isfield(params, parameters{i})
+                varParams = params.(parameters{i})';
+            else
+                error('Parameter name "%s" not found in the JSON file', parameters{i});
+            end
         % Call the Compare_NetworkParameters function with current parameter
-        Compare_NetworkParameters(dataDir, refDir, outDir, parameters{i}, parameterValues{i}, 'VarParameter', [0, 0.02, 1], 'BaseParameters', base_parameters);
+        Compare_NetworkParameters(dataDir, refDir, outDir, parameters{i}, parameterValues{i}, 'VarParameter', varParams, 'BaseParameters', base_parameters);
     end
 
     % If completed successfully
@@ -88,4 +107,12 @@ end
 delete(d);
 success = true;
 
+% Find all existing jobs
+allJobs = findJob(parcluster);
 
+% Delete each job
+for i = 1:length(allJobs)
+    delete(allJobs(i));
+end
+
+print(1,'Completion successful!');
