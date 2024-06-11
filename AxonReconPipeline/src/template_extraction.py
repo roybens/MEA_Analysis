@@ -19,7 +19,6 @@ from MEAProcessingLibrary import mea_processing_library as MPL
 #from old_merg_func import merge_templates
 from old_merg_func_multi import merge_templates
 
-
 #from axon_tracking import spike_sorting as ss
 import spike_sorting as ss
 
@@ -86,9 +85,7 @@ def extract_templates_from_sorting_dict(sorting_list, h5_file_path, qc_params={}
             cleaned_sorting = si.remove_excess_spikes(cleaned_sorting, multirecording) #Relevant if last spike time == recording_length
             cleaned_sorting.register_recording(multirecording)
             segment_sorting = si.SplitSegmentSorting(cleaned_sorting, multirecording)
-            extract_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_params, save_root=None, just_load_waveforms = just_load_waveforms)
-
-           
+            extract_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_params, save_root=None, just_load_waveforms = just_load_waveforms)          
 def get_assay_information(rec_path):
     h5 = h5py.File(rec_path)
     pre, post, well_id = -1, -1, 0
@@ -100,7 +97,6 @@ def get_assay_information(rec_path):
         well_id += 1
         
     return [pre, post]
-
 def find_successful_sortings(path_list, save_path_changes):
 
     sorting_dict = dict()
@@ -114,13 +110,10 @@ def find_successful_sortings(path_list, save_path_changes):
                          if name == "templates.npy"]
         sorting_dict[rec_path] = sorting_files
         
-    return sorting_dict
-
-            
+    return sorting_dict         
 def postprocess_sorting():
     #Maybe we will do some postprocessing before we use them
     return
-
 def select_units(sorting, min_n_spikes=500, exclude_mua=True):
     if exclude_mua:
         ks_label = sorting.get_property('KSLabel')
@@ -139,9 +132,6 @@ def select_units(sorting, min_n_spikes=500, exclude_mua=True):
     cleaned_sorting = sorting.remove_units(bad_id)
     
     return cleaned_sorting
-
-
-
 def extract_waveforms(h5_file_path, segment_sorting, stream_id, save_root, n_jobs, overwrite_wf):
     try:
         save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._kwargs['parent_recording']._kwargs['recording']._kwargs['file_path']
@@ -194,8 +184,6 @@ def extract_waveforms(h5_file_path, segment_sorting, stream_id, save_root, n_job
                                                  remove_if_exists=True)
             seg_we.set_params(ms_before=cutout[0], ms_after=cutout[1], return_scaled = True)
             seg_we.run_extract_waveforms(n_jobs=n_jobs)
-
-
 def align_waveforms(seg_we, sel_unit_id, cutout, ms_peak_cutout, upsample, align_cutout, rm_outliers, n_jobs, n_neighbors):
     
     sample_peak_cutout = ms_peak_cutout * upsample
@@ -225,8 +213,6 @@ def align_waveforms(seg_we, sel_unit_id, cutout, ms_peak_cutout, upsample, align
     aligned_template = np.median(aligned_wfs, axis=0)
     
     return aligned_template
-
-
 def remove_wf_outliers(aligned_wfs, ref_el, n_jobs, n_neighbors):
     clf = sk.neighbors.LocalOutlierFactor(n_jobs=n_jobs, n_neighbors=n_neighbors)
     outlier_idx = clf.fit_predict(aligned_wfs[:,:,ref_el])
@@ -337,43 +323,23 @@ def convert_to_grid(template_matrix, pos):
     y_idx = np.int16(clean_y / 17.5)
     grid = np.full([np.max(x_idx) + 1, np.max(y_idx) + 1, clean_template.shape[0]],0).astype('float32')
     for i in range(len(y_idx)):
-        grid[x_idx[i],y_idx[i],:] = clean_template[:,i]
-    
-    # clean_template = np.delete(template_matrix, np.isnan(pos['x']), axis = 1)
-    # clean_x = pos['x'][~np.isnan(pos['x'])]
-    # clean_y = pos['y'][~np.isnan(pos['y'])]
-    # x_idx = np.int16(clean_x / 17.5)
-    # y_idx = np.int16(clean_y / 17.5)
-    # grid = np.full([np.max(x_idx) + 1, np.max(y_idx) + 1, clean_template.shape[0]],0).astype('float32')
-    # for i in range(len(y_idx)):
-    #     grid[x_idx[i],y_idx[i],:] = clean_template[:,i]
-    
+        grid[x_idx[i],y_idx[i],:] = clean_template[:,i]    
     return grid
 
-def extract_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_params, save_root=None, just_load_waveforms = False):
+def get_all_templates(h5_file_path, stream_id, segment_sorting, pos, te_params, save_root=None, just_load_waveforms = False):
     sel_unit_ids = segment_sorting.get_unit_ids()
     if save_root is None:
-        #save_root = os.path.dirname(full_path) 
         recording_details = MPL.extract_recording_details(h5_file_path)
         date = recording_details[0]['date']
         chip_id = recording_details[0]['chipID']
         scanType = recording_details[0]['scanType']
         run_id = recording_details[0]['runID']
         save_root = f'./AxonReconPipeline/data/temp_data/templates/{date}/{chip_id}/{scanType}/{run_id}/{stream_id}'
-    #template_save_path = os.path.join(save_root, 'waveforms')
-    # if not os.path.exists(waveform_save_path):
-    #     os.makedirs(waveform_save_path)
     template_save_path = os.path.join(save_root, 'templates')
     if not os.path.exists(template_save_path):
         os.makedirs(template_save_path)
         
     for sel_unit_id in tqdm(sel_unit_ids):
-
-    # #     #debug
-    #     if sel_unit_id == 92: 
-    # # ##
-    #         continue
-    # #     #debug
 
         template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '.npy')
         channel_loc_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_channels.npy')

@@ -10,7 +10,7 @@ import spikeinterface.full as si
 
 #local imports
 from MEAProcessingLibrary.mea_processing_library import 
-import helper_functions as helper
+import lib_helper_functions as helper
 import spike_sorting as hp #hornauerp, https://github.com/hornauerp/axon_tracking/blob/main/axon_tracking/spike_sorting.py
 
 #Logger Setup

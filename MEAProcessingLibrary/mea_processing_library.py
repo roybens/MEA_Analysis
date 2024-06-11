@@ -104,7 +104,7 @@ def extract_recording_details(h5_dirs):
 
     return records
 
-def test_continuity(h5_file_path, verbose=False):
+def test_continuity(h5_file_path, verbose=False, stream_select = None):
     """
     This function tests the continuity of a given h5 file by attempting to read recordings from the file until an error occurs.
     It also counts the number of successful reads (recordings).
@@ -124,13 +124,14 @@ def test_continuity(h5_file_path, verbose=False):
     bool: True if all recordings are continuous, False otherwise.
     """
     logger.info(f"Testing continuity of {h5_file_path}:")
-    stream_count, rec_count = count_wells_and_recs(h5_file_path, verbose = verbose)
+    stream_count, rec_count = count_wells_and_recs(h5_file_path, verbose = verbose, stream_select = stream_select)
     if stream_count == 0:
         logger.error("No recordings detected, none are continuous.")
         return False  
     #This part of the function might be entirely unnecessary:
     TrueorFalse_list = []
     for stream_num in range(stream_count):
+        if stream_select is not None and stream_num != stream_select: continue #skip if stream_select is not None and stream_num is not stream_select, saves time on loading and verifying data
         for rec_num in range(rec_count[stream_num]):
             try: recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, well_num = stream_num, verbose = verbose)
             except: recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, verbose = verbose)
@@ -155,7 +156,7 @@ def test_continuity(h5_file_path, verbose=False):
         return False
     #This part of the function might be entirely unnecessary:
 
-def count_wells_and_recs(h5_file_path, verbose=False):
+def count_wells_and_recs(h5_file_path, verbose=False, stream_select = None):
     """
     This function counts the number of wells (stream IDs) in a given file path by attempting to read recordings 
     from the file until an error occurs. It also counts the number of successful reads (recordings) for each stream ID.
@@ -226,6 +227,7 @@ def count_wells_and_recs(h5_file_path, verbose=False):
         logger.info("MaxTwo Detected.")
         #MaxTwo
         while True:
+            if stream_select is not None and stream_id != stream_select: stream_id += 1; continue #skip if stream_select is not None and stream_id is not stream_select, saves time on loading and verifying data
             try:
                 stream_id_str = f'well{stream_id:03}'
                 rec_name_str = f'rec{rec_count:04}'
@@ -234,23 +236,18 @@ def count_wells_and_recs(h5_file_path, verbose=False):
                 if "Network" in h5_file_path:
                     assert rec_count == 0, "rec_count should be 0 before incrementing when 'network' is in h5_file_path"
                     rec_count = 1
-                else:
-                    rec_count += 1
+                else: rec_count += 1
             except:            
                 rec_counts.append(rec_count)
-                if rec_count == 0:
-                    break            
+                if rec_count == 0: break            
                 stream_ids.append(stream_id_str)
-                if verbose:
-                    logger.info(f"Stream ID: {stream_id_str}, {rec_count} recordings detected.")
+                if verbose: logger.info(f"Stream ID: {stream_id_str}, {rec_count} recordings detected.")
                 rec_count = 0
                 stream_id += 1
-        if len(set(rec_counts)) > 1: 
-            logger.error(f"Warning: The number of recordings is not consistent across all stream IDs. Range: {min(rec_counts)}-{max(rec_counts)}")
-        else: 
-            logger.info(f"Recordings per Stream ID: {rec_counts[0]}")
-        logger.info(f"Stream IDs Detected: {len(stream_ids)}")
-    
+                if stream_select is not None: break #break if stream_select is not None
+        if len(set(rec_counts)) > 1: logger.error(f"Warning: The number of recordings is not consistent across all stream IDs. Range: {min(rec_counts)}-{max(rec_counts)}")
+        else: logger.info(f"Recordings per Stream ID: {rec_counts[0]}")
+        logger.info(f"Stream IDs Detected: {len(stream_ids)}")    
         return len(stream_ids), rec_counts if rec_counts else 0
     
 def count_recording_segments(recording, verbose=True):
@@ -518,7 +515,7 @@ def run_kilosort2_docker_image(recording, chunk_duration, output_folder, docker_
     sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
     return sorting
 
-def run_kilosort2_5_docker_image(recording, output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=False):
+def benshalom_kilosort2_docker_image(recording, output_folder, docker_image= "spikeinterface/kilosort2-compiled-base:latest",verbose=False):
     #This funciton mimics https://github.com/hornauerp/axon_tracking
     #si.Kilosort2_5Sorter.set_kilosort2_5_path('/home/phornauer/Git/Kilosort_2020b') #Change
     sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
@@ -528,34 +525,13 @@ def run_kilosort2_5_docker_image(recording, output_folder, docker_image= "spikei
     sorter_params['minfr_goodchannels'] = 0.01
     sorter_params['keep_good_only'] = False
     sorter_params['do_correction'] = False
-    #sorter_params['use_gpu'] = False
-    sampling_rate = recording.get_sampling_frequency()  # Get the sampling rate in Hz
-    total_frames = recording.get_num_frames()  # Get the total number of frames
 
     #if output_folder is exists:
     if os.path.exists(output_folder):
         shutil.rmtree(output_folder)
     
-    # sorting_KS2_5 = ss.run_kilosort2_5(recording, 
-    #                                    output_folder=output_folder, 
-    #                                    docker_image="spikeinterface/kilosort2_5-compiled-base:latest", 
-    #                                    verbose=verbose,
-    #                                    #use_gpu=False, 
-    #                                    **sorter_params)
-    print("Ima here")
     sorter_params = si.get_default_sorter_params('kilosort2')
-    sorting_KS2_5 = ss.run_sorter(
-                                    sorter_name = "kilosort2",
-                                    #sorter_name = "kilosort2_5",
-                                    recording = recording, 
-                                    output_folder=output_folder, 
-                                    docker_image="rohanmalige/benshalom:v3", 
-                                    #docker_image = docker_image,
-                                    verbose=verbose,
-                                    #use_gpu=False, 
-                                    **sorter_params)
-    print("hey")
-    #sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=verbose, **default_KS2_params)
+    sorting_KS2_5 = ss.run_sorter(sorter_name = "kilosort2", recording = recording, output_folder=output_folder, docker_image="rohanmalige/benshalom:v3", verbose=verbose, **sorter_params)
     return sorting_KS2_5
 
 
