@@ -15,8 +15,11 @@ rmsFiringRate = mxw.util.rms(networkActivityVector.firingRate);
 
 if ~isempty(args.MinPeakDistance)
     if ~isempty(args.Threshold)
+        % [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(networkActivityVector.firingRate,...
+        %     networkActivityVector.time, 'MinPeakHeight', args.Threshold * rmsFiringRate, 'MinPeakDistance', args.MinPeakDistance);
         [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(networkActivityVector.firingRate,...
-            networkActivityVector.time, 'MinPeakHeight', args.Threshold * rmsFiringRate, 'MinPeakDistance', args.MinPeakDistance);
+            networkActivityVector.time, 'MinPeakProminence',1.5 , 'MinPeakDistance', args.MinPeakDistance);
+        
     elseif ~isempty(args.FixedThreshold)
         [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(networkActivityVector.firingRate,...
             networkActivityVector.time, 'MinPeakHeight', args.FixedThreshold, 'MinPeakDistance', args.MinPeakDistance);
