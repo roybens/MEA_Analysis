@@ -3,15 +3,15 @@ function [] = compileNetworkFiles(data)
    
     %ui components.
     fig = data.fig;
-    fprintf(1,"inside the compilenetwork")
     d = uiprogressdlg(fig,'Title','Compiling files',...
         'Message','Start','Cancelable','on');
     drawnow
+
     tic;
     plotFig=data.plotFig;
     extMetricsFlag = data.extMetricsFlag;
     % Unpack the data structure
-   
+    %projectName = data.projectName;
     div0_date =  datetime(data.div0Date, "InputFormat",'MM/dd/yyyy');
     parentFolderPath = data.parentFolderPath;
     refDir = data.refDir;
@@ -19,12 +19,16 @@ function [] = compileNetworkFiles(data)
     gaussianSigma = data.gaussianSigma;
     binSize = data.binSize;
     minPeakDistance = data.minPeakDistance;
-    minProminence = data.minProminience ;
     thresholdBurst = data.thresholdBurst;
    
     thresholdStartStop = data.thresholdStartStop;
-    thresholdFunction = data.thresholdMethod;
-   
+    % Set Threshold function for later use
+    use_fix_threshold = false;
+    if use_fix_threshold
+    threshold_fn = 'FixedThreshold' ;
+    else
+    threshold_fn = 'Threshold';
+    end
     xlimNetwork = data.xlim;
     ylimNetwork = data.ylim;
 
@@ -37,8 +41,7 @@ function [] = compileNetworkFiles(data)
             mkdir(folderPath);
         end
     end
-    
-    
+
 
     logFile = data.logFile;
 
@@ -46,7 +49,14 @@ function [] = compileNetworkFiles(data)
     refTable = readtable(refDir);
     run_ids = unique(refTable.Run_(strcmp(strtrim(lower(refTable.Assay)), 'network today')));  
 
-
+    % Initialize an empty table with the correct types for each column,
+    
+    finalWriteTable = table([], [], [], cell(0,1), [], cell(0,1), [], [], [], [], [], [], [], cell(0,1), ...
+        'VariableNames', {
+            'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
+            'IBI', 'Burst_Peak', 'Burst_Peak_Normalized', 'Burst_Peak_Abs', ...
+            'Number_Bursts', 'Spike_per_Burst', 'BurstDuration', 'ISIString'...
+    });
     
 
     % Get a list of all files in the folder with the desired file name pattern.
@@ -57,14 +67,19 @@ function [] = compileNetworkFiles(data)
  
     
     skippedFiles = cell(numFiles, 1); 
-      
-    allExtMetrics = {};
-  
+       
+    if extMetricsFlag
+        extendendMetricsTable = table([], [], [], cell(0,1), [], cell(0,1),[],  ...
+        'VariableNames', {
+                        'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID','ISIString'...
+        });
+        extNetworkResults = cell(numFiles,1);
+    end
 
-    %%parallelizing the files processsing
-
-    % %%Specify the exact number of cores to use
-    numCores = 12;  % Adjust this number based on your needs and resource availability
+    %parallelizing the files processsing
+    % 
+    % Specify the exact number of cores to use
+    numCores = 10;  % Adjust this number based on your needs and resource availability
 
     % Initialize or modify the existing parallel pool
     currentPool = gcp('nocreate');  % Check for existing parallel pool
@@ -80,7 +95,7 @@ function [] = compileNetworkFiles(data)
 
 
     fprintf(1, 'Plotraster %d , Extended Metrics %d\n ', plotFig,extMetricsFlag);
- 
+ %profile on;
     for k = 1 : numFiles
         if d.CancelRequested
             break
@@ -123,25 +138,21 @@ function [] = compileNetworkFiles(data)
             fileResults = cell(numWells, 1);
             skippedWells = cell(numWells,1);
             if extMetricsFlag
-                extData = cell(numWells,1);
+                extFileResults = cell(numWells,1);
             end
             % for loop for processing each well
-
-            sucessFile = false;
-            attempt = 0;
-            maxRetries = 3;
-            while ~sucessFile && attempt < maxRetries
-            attempt = attempt + 1;
-            try
             parfor z = 1:numWells
-                try
+
                 wellID=wellsIDs(z);
                 fprintf(1, 'Processing Well %d\n', wellID);
                 %tic;
                 neuronSourceType = neuronTypes(z);
-                
-                networkData = mxw.fileManager(pathFileNetwork,wellID);
-              
+                try
+                    networkData = mxw.fileManager(pathFileNetwork,wellID);
+                catch
+                    skippedWells{z} = [pathFileNetwork,num2str(wellID)];
+                    continue
+                end
                
                 % get the startTime of the recordings
                 hd5_time = networkData.fileObj.stopTime;
@@ -161,37 +172,20 @@ function [] = compileNetworkFiles(data)
                 %for 600s second manually reducing to 300
                 %networkAct.time = networkAct.time(1:3000);
                 %networkAct.firingRate= networkAct.firingRate(1:3000);
-                networkStats = computeNetworkStatsModified(networkAct.firingRate,networkAct.time, 'ThresholdMethod',thresholdFunction,'Threshold', thresholdBurst, 'MinPeakProminence', minProminence,'MinPeakDistance', minPeakDistance);
-                %networkStatsNorm = computeNetworkStatsNew_JL(networkAct.firingRateNorm,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
-                networkStatsAbs = computeNetworkStatsModified(networkAct.absfiringRate,networkAct.time, 'ThresholdMethod',thresholdFunction,'Threshold', thresholdBurst, 'MinPeakProminence', minProminence,'MinPeakDistance', minPeakDistance);
+                networkStats = computeNetworkStatsNew_JL(networkAct.firingRate,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
+                networkStatsNorm = computeNetworkStatsNew_JL(networkAct.firingRateNorm,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
+                networkStatsAbs = computeNetworkStatsNew_JL(networkAct.absfiringRate,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
                 
                 %% Tim's code for averaging and aggregating mean spiking data (IBI, Burst peaks, Spikes within Bursts, # of Bursts etc.)
                 %average IBI
                 meanIBI = mean(networkStats.maxAmplitudeTimeDiff);
                 %average Burst peak (burst firing rate y-value)
                 meanBurstPeak = mean(networkStats.maxAmplitudesValues);
-                %meanBPNorm = mean(networkStatsNorm.maxAmplitudesValues);
+                meanBPNorm = mean(networkStatsNorm.maxAmplitudesValues);
                 meanAbsBP = mean(networkStatsAbs.maxAmplitudesValues);
                 %Number of bursts
                 nBursts = length(networkStats.maxAmplitudesTimes);
-               % Calculate standard deviations
-                stdIBI = std(networkStats.maxAmplitudeTimeDiff);
-                stdBurstPeak = std(networkStats.maxAmplitudesValues);
-                %stdBPNorm = std(networkStatsNorm.maxAmplitudesValues);
-                stdAbsBP = std(networkStatsAbs.maxAmplitudesValues);
-                % Calculate coefficients of variation
-                covIBI = (stdIBI / meanIBI) * 100;  % CV as a percentage
-                covBurstPeak = (stdBurstPeak / meanBurstPeak) * 100;  % CV as a percentage
-                %covBPNorm = (stdBPNorm / meanBPNorm) * 100;  % CV as a percentage
-                covAbsBP = (stdAbsBP/meanAbsBP)* 100;
-
-                
-                ts = ((double(networkData.fileObj.spikes.frameno)...
-                    - double(networkData.fileObj.firstFrameNum))/networkData.fileObj.samplingFreq)';
-                
-                ch = networkData.fileObj.spikes.channel;
-                ch = ch(ts>0);
-                ts = ts(ts>0);
+               
                 %average spikesPerBurst        
                 if length(networkStats.maxAmplitudesTimes)>3
                     peakAmps = networkStats.maxAmplitudesValues';
@@ -202,16 +196,14 @@ function [] = compileNetworkFiles(data)
                     for i = 1:length(peakAmps)
                        % take a sizeable (±6 s) chunk of the network activity curve 
                        % around each burst peak point
-                       %MANDAR I THink using this there is a p
+                       %MANDAR I THink using 5 std deviations form the 
+                       %idx = networkAct.time>(peakTimes(i)-5*gaussianSigma) & networkAct.time<(peakTimes(i)+5*gaussianSigma);
                        idx = networkAct.time>(peakTimes(i)-6) & networkAct.time<(peakTimes(i)+6);
                        t1 = networkAct.time(idx);
                        a1 = networkAct.firingRate(idx)';
                       
                        % get the arunIDstemp = run_id_and_type(:,1);mplitude at the desired peak width
                        peakWidthAmp = (peakAmps(i)-round(peakAmps(i)*thresholdStartStop));
-                        %the fraction of the total peak height measured
-                        %from the top at hich the burst start stop are
-                        %defined.
                        
                        % get the indices of the peak edges
                        idx1 = find(a1<peakWidthAmp & t1<peakTimes(i));
@@ -225,20 +217,17 @@ function [] = compileNetworkFiles(data)
                     end
                     
                    % identify spikes that fall within the bursts
-
-
+                    ts = ((double(networkData.fileObj.spikes.frameno)...
+                        - double(networkData.fileObj.firstFrameNum))/networkData.fileObj.samplingFreq)';
+                    ch = networkData.fileObj.spikes.channel;
                     if isempty(edges)
 
-                    spikesPerBurst = NaN;
-                    tsWithinBurst = NaN;
-                    chWithinBurst = NaN;
-                    meanSpikesPerBurst=NaN;
-                    meanBurstDuration =NaN;
-                    covSpikesPerBurst =NaN ;
-                    covBurstDuration = NaN;
-
+                    spikesPerBurst = [];
+                    tsWithinBurst = [];
+                    chWithinBurst = [];
+                    meanBurstDuration =[];
                     else
-                    % Initialize the spikesPerBurst array to zeros 
+                    % Initialize the spikesPerBurst array to zeros
                     spikesPerBurst = zeros(length(edges), 1);
                     
                     % Create an array where each element is the index of the timestamp
@@ -258,24 +247,10 @@ function [] = compileNetworkFiles(data)
                     % For tsWithinBurst and chWithinBurst, you can use logical indexing
                     tsWithinBurst = ts(any(inBurstWindows, 1));
                     chWithinBurst = ch(any(inBurstWindows, 1));
-                    tsOutsideBurst = ts(~any(inBurstWindows, 1));
-                    chOutsideBurst = ch(~any(inBurstWindows, 1));
                     meanSpikesPerBurst = mean(spikesPerBurst);
-                    stdSpikesPerBurst = std(spikesPerBurst);
-                    bursts = abs(edges(:,1) - edges(:,2));
-                    meanBurstDuration = mean(bursts);
-                    stdBurstDuration = std(meanBurstDuration);
-                    covSpikesPerBurst = (stdSpikesPerBurst/meanSpikesPerBurst)*100;
-                    covBurstDuration = (stdBurstDuration/meanBurstDuration) * 100;
+                    meanBurstDuration = mean(abs(edges(:,1) - edges(:,2)));
                     end
-                else
-                    spikesPerBurst = NaN;
-                    tsWithinBurst = NaN;
-                    chWithinBurst = NaN;
-                    meanSpikesPerBurst=NaN;
-                    meanBurstDuration =NaN;
-                    covSpikesPerBurst =NaN ;
-                    covBurstDuration = NaN;
+
 
                 end
                 %totalTime = toc;  % Measure the total elapsed time after the loop
@@ -286,156 +261,27 @@ function [] = compileNetworkFiles(data)
 
                 %%  calculating the Interspikeiinterval observed in each channel
                 if  extMetricsFlag
-                
-                if isnan(tsWithinBurst)
-
-                    % Set all variables to empty or default values because tsWithinBurst is empty
-                    burstISIs = {};
-                    burstISIsCombined = [];
-                    meanBurstISI = NaN;
-                    IQRABurstISI = NaN;
-                    stdBurstISI = NaN;
-                    covBurstISI = NaN;
-                    instAPFreqWithinBurst =NaN;
-                    iqrAPFreqWithinBurst = NaN;
-                    rangeAPFreq = NaN;
-                    binWidth = NaN;
-                    numBins = NaN;
-                    binedgesAP =NaN;
-                    binAPcountsWithinBurst = NaN;
-                    binedgesAPWithinBurst =NaN;
-
-                     meanBurstISIOutside =NaN;
-                     covBurstISIOutside = NaN;
-                     binAPcountsOutsideBurst =NaN;
-                     binedgesAPOutsideBurst =NaN;
-
-                else
-                burstISIs = accumarray(chWithinBurst,tsWithinBurst,[],@(x){diff(x)});
-                burstISIsCombined = vertcat(burstISIs{:});
-                burstISIsCombined = burstISIsCombined(burstISIsCombined<1);
-                meanBurstISI = mean(burstISIsCombined);
-                IQRABurstISI = iqr(burstISIsCombined);
-                stdBurstISI = std(burstISIsCombined);
-                covBurstISI = (stdBurstISI/meanBurstISI)*100;
-                instAPFreqWithinBurst = (1./burstISIsCombined);
-                iqrAPFreqWithinBurst = iqr(instAPFreqWithinBurst);
-                rangeAPFreq = max(instAPFreqWithinBurst)- min(instAPFreqWithinBurst);
-                binWidth = 2 * iqrAPFreqWithinBurst /(length(IQRABurstISI)^(1/3)) ;%Freedman-Diaconis Rule
-                numBins = ceil(rangeAPFreq/binWidth);
-                binedgesAP = logspace(log10(min(instAPFreqWithinBurst)),log10(500),numBins);   % hardcoding 500 hz here ,, as anything above is not physiological ( but What about MUA)
-              
-                [binAPcountsWithinBurst,binedgesAPWithinBurst]= histcounts(instAPFreqWithinBurst,binedgesAP);
-                
-                % Calculate inter-spike intervals (ISIs) for data outside bursts
-                burstISIsOutside = accumarray(chOutsideBurst, tsOutsideBurst, [], @(x) {diff(sort(x))});
-                
-                % Combine ISIs from all channels
-                burstISIsCombinedOutside = vertcat(burstISIsOutside{:});
-                burstISIsCombinedOutside = burstISIsCombinedOutside(burstISIsCombinedOutside < 1);  % Filter ISIs less than 1 second
-                
-                % Calculate mean, IQR, standard deviation, and coefficient of variation for the ISIs
-                meanBurstISIOutside = mean(burstISIsCombinedOutside);
-                IQRBurstISIOutside = iqr(burstISIsCombinedOutside);
-                stdBurstISIOutside = std(burstISIsCombinedOutside);
-                covBurstISIOutside = (stdBurstISIOutside / meanBurstISIOutside) * 100;
-                
-                % Calculate instantaneous AP frequency from ISIs
-                instAPFreqOutsideBurst = 1 ./ burstISIsCombinedOutside;
-                
-                % Compute IQR and range for AP frequencies
-                iqrAPFreqOutsideBurst = iqr(instAPFreqOutsideBurst);
-                rangeAPFreqOutside = max(instAPFreqOutsideBurst) - min(instAPFreqOutsideBurst);
-                
-                % Determine histogram bins using the Freedman-Diaconis Rule
-                binWidthOutside = 2 * iqrAPFreqOutsideBurst / (length(instAPFreqOutsideBurst)^(1/3));
-                numBinsOutside = ceil(rangeAPFreqOutside / binWidthOutside);
-                
-                % Define bin edges for histogram - assuming physiological limit as 500 Hz
-                binedgesAPOutside = logspace(log10(min(instAPFreqOutsideBurst)), log10(500), numBinsOutside);
-                
-                % Histogram counts using the defined bin edges
-                [binAPcountsOutsideBurst, binedgesAPOutsideBurst] = histcounts(instAPFreqOutsideBurst, binedgesAPOutside);
-                
-                end
-                % Combine ISIs from all channels into a single array
-                ISIs = accumarray(relativeSpikeTimes.channel, relativeSpikeTimes.time, [], @(x){diff(x)});
-                ISIsCombined = vertcat(ISIs{:});
-                ISIsCombined = ISIsCombined(ISIsCombined > 0);  % Optional: filter out non-positive values if any
-                
-                % Calculate mean, standard deviation, and IQR
-                meanISI = mean(ISIsCombined);
-                stdISI = std(ISIsCombined);
-                IQRISI = iqr(ISIsCombined);
-                
-                % Calculate coefficient of variation (CV)
-                covISI = (stdISI / meanISI) * 100;
-                
-                % Calculate instantaneous frequencies from ISIs
-                instFreq = 1 ./ ISIsCombined;
-                
-                % Compute IQR and range for instantaneous frequencies
-                iqrFreq = iqr(instFreq);
-                rangeFreq = max(instFreq) - min(instFreq);
-                
-                % Determine histogram bins using the Freedman-Diaconis Rule
-                binWidth = 2 * iqrFreq / (length(instFreq)^(1/3));
-                numBins = ceil(rangeFreq / binWidth);
-                minFreq = min(instFreq(instFreq > 0));  % Avoid log(0) by ensuring positive frequencies
-                
-                % Define bin edges for histogram - setting physiological reasonable limits
-                binedgesFreq = logspace(log10(minFreq), log10(max(instFreq)), numBins);
-                
-                % Histogram counts using the defined bin edges
-                [binFreqCounts, binedgesFreq] = histcounts(instFreq, binedgesFreq);
-                
-
-                %%%now calculating the Fanoi factor
-                % ts is the spike times, let me set 100 ms bin with
-                binedgesfano = min(ts): 0.1 : max(ts);
-                spikeCountsFano = histcounts(ts,binedgesfano);
-                meanSpikeCounts = mean(spikeCountsFano);
-                varSpikeCounts = var(spikeCountsFano);
-                fanoFactor = varSpikeCounts / meanSpikeCounts;
-
-
-                %channelISIStrings = cellfun(@(x) strjoin(arrayfun(@num2str, x, 'UniformOutput', false), ','), ISIs, 'UniformOutput', false);
-                %combinedISIString = strjoin(channelISIStrings, ';');   
-                fileResults{z} = table(scan_runID, scan_div, wellID, strtrim({neuronSourceType{1}}), hd5Date, {scan_chipID}, ...
-                     meanIBI,covIBI, meanBurstPeak,covBurstPeak, ...
-                       nBursts, meanSpikesPerBurst,covSpikesPerBurst,meanAbsBP,covAbsBP, meanBurstDuration,covBurstDuration,...
-                        meanISI,covISI, ...
-                       meanBurstISI,covBurstISI, ...
-                        meanBurstISIOutside,covBurstISIOutside, ...
-                        fanoFactor,...
+                ISIs = accumarray(relativeSpikeTimes.channel, relativeSpikeTimes.time, [], @(x) {diff(x)});
+                channelISIStrings = cellfun(@(x) strjoin(arrayfun(@num2str, x, 'UniformOutput', false), ','), ISIs, 'UniformOutput', false);
+                combinedISIString = strjoin(channelISIStrings, ';');   
+                extFileResults{z} = table(scan_runID, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
+                        {combinedISIString},...
                        'VariableNames', {
                 'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-                'mean_IBI','cov_IBI', 'mean_Burst_Peak','cov_Burst_Peak',...
-                'Number_Bursts', 'mean_Spike_per_Burst','cov_Spike_per_Burst','mean_Burst_Peak_Abs','cov_Burst_Peak_Abs', 'mean_BurstDuration','cov_BurstDuration',...
-                 'MeanNetworkISI','CoVNetworkISI',...
-                'MeanWithinBurstISI','CoVWithinBurstISI',...
-               'MeanOutsideBurstISI','CoVOutsideBurstISI',...
-               'Fanofactor'...
+                 'ISIString'...
                 });
-
-                extMetrics = struct('Run_ID',scan_runID, 'DIV', scan_div,'Well' ,wellID,'Chip_ID',{scan_chipID},'NeuronType',strtrim({neuronSourceType{1}}),...
-                    'networkAPFreqBins',binFreqCounts,'networkAPFreqEdges',binedgesFreq,...
-                    'burstAPFreqBins',binAPcountsWithinBurst,'burstAPFreqEdges',binedgesAPWithinBurst,...
-                    'nonburstAPFreqBins',binAPcountsOutsideBurst,'nonburstAPFreqEdges',binedgesAPOutsideBurst);
-
-                extData{z} = extMetrics;
-                else
+                end
                 %%
               % Create a new row for the table, now including combinedISIString
-                fileResults{z} = table(scan_runID, scan_div, wellID, strtrim({neuronSourceType{1}}), hd5Date, {scan_chipID}, ...
-                       meanIBI,covIBI, meanBurstPeak,covBurstPeak, meanBPNorm,covBPNorm, meanAbsBP,covAbsBP, ...
-                       nBursts, meanSpikesPerBurst,covSpikesPerBurst, meanBurstDuration,covBurstDuration,...
+                fileResults{z} = table(scan_runID, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
+                       meanIBI, meanBurstPeak, meanBPNorm, meanAbsBP, ...
+                       nBursts, meanSpikesPerBurst, meanBurstDuration,...
                        'VariableNames', {
                 'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-                'mean_IBI','cov_IBI', 'mean_Burst_Peak','cov_Burst_Peak',...
-                'Number_Bursts', 'mean_Spike_per_Burst','cov_Spike_per_Burst','mean_Burst_Peak_Abs','cov_Burst_Peak_Abs', 'mean_BurstDuration','cov_BurstDuration',...             
+                'IBI', 'Burst_Peak', 'Burst_Peak_Normalized', 'Burst_Peak_Abs', ...
+                'Number_Bursts', 'Spike_per_Burst', 'BurstDuration'...
                 });
-                end
+
          
                %totalTime = toc;  % Measure the total elapsed time after the loop
     
@@ -460,7 +306,7 @@ function [] = compileNetworkFiles(data)
                     ylim([1 max(relativeSpikeTimes.channel)]);
                 
                     subplot(2,1,2);
-                    plotNetworkActivityModified(networkAct, 'ThresholdFunction',networkStats.thresholdFunction, 'Threshold',networkStats.threshold, 'Figure', false);
+                    mxw.plot.networkActivity(networkAct, 'Threshold', thresholdBurst, 'Figure', false);
                     box off;
                     hold on;    
                     plot(networkStats.maxAmplitudesTimes, networkStats.maxAmplitudesValues, 'or');
@@ -543,67 +389,30 @@ function [] = compileNetworkFiles(data)
                  % Display total elapsed time
                      %fprintf('in Well %d Total elapsed time for plot and save all graphs: %f seconds\n', wellID,totalTime); 
             end
-                catch ME
-                fprintf('Error: %s\n', ME.message);
-                skippedWells{z} = [pathFileNetwork,num2str(wellID)];
-                    continue
-                end
 
             end
-               networkResults{k} = vertcat(fileResults{~cellfun(@isempty, fileResults)});
-               skippedFiles{k} = vertcat(skippedWells{~cellfun(@isempty, skippedWells)});
-               if extMetricsFlag
-               allExtMetrics{k} = extData;
-               end
-               sucessFile = true;
-            
-            catch ME
-                % Handle specific errors
-                if contains(ME.message, 'parallel')
-                    fprintf('Error: %s\n', ME.message);
-                    fprintf('Attempt %d/%d: Restarting parallel pool for file %s.\n', attempt, maxRetries, pathFileNetwork);
-                    delete(gcp('nocreate')); % Shut down any existing parallel pool
-                    parpool(numCores);    % Restart the parallel pool
-                else
-                    fprintf('Unexpected error: %s\n', ME.message);
-                    break; % Break the loop for unexpected errors
-                end
-            end
-            end
-            if ~sucessFile
 
-             fprintf('Failed to process file %s after %d attempts. Skipping this file.\n', pathFileNetwork, maxRetries);
-             delete(gcp('nocreate')); % Shut down any existing parallel pool
-             parpool(numCores); 
-             continue
-            end
-
-        end 
+        end
+       networkResults{k} = vertcat(fileResults{~cellfun(@isempty, fileResults)});
+       skippedFiles{k} = vertcat(skippedWells{~cellfun(@isempty, skippedWells)});
+       if extMetricsFlag
+           extNetworkResults{k} = vertcat(extFileResults{~cellfun(@isempty, extFileResults)});
+       end
     end
-   % Find all existing jobs
-    allJobs = findJob(parcluster);
-    
-    % Delete each job
-    for i = 1:length(allJobs)
-        delete(allJobs(i));
-    end
-
-
+    delete(gcp('nocreate'));
    % profile viewer;
     
     skippedFiles = vertcat(skippedFiles{~cellfun(@isempty, skippedFiles )});
     % Concatenate all tables from each primary file into the final table
     finalWriteTable = vertcat(networkResults{~cellfun(@isempty, networkResults)});
     
-    csvfilepath =  fullfile(opDir,'Network_outputs/Compiled_Networks.csv');
-    if isfile(csvfilepath)
-        delete(csvfilepath);
-    end
-    writetable(finalWriteTable,csvfilepath );
+    writetable(finalWriteTable, fullfile(opDir,'Network_outputs/Compiled_Networks.csv'));
+    
     if extMetricsFlag
-       save(fullfile(opDir,'Network_outputs/extendedMetrics.mat'),'allExtMetrics');
-    end
 
+        extendendMetricsTable =vertcat(extNetworkResults{~cellfun(@isempty, extNetworkResults)});
+        writetable(extendendMetricsTable, fullfile(opDir,'Network_outputs/Extended_Metrics.csv'));
+    end
 
     if ~isempty(skippedFiles)
         
@@ -614,12 +423,7 @@ function [] = compileNetworkFiles(data)
     fprintf(' Total elapsed time for execution: %f seconds\n', toc);
     fprintf(1,'Network analysis successfully compiled.\n');
 
-end
-
-
-
-
-
+    end
 
 
 

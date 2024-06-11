@@ -369,12 +369,12 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         kilosort_output_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/kilosort2__{rec_name}"
         logging.info("ks folder:"+ kilosort_output_folder) #changes made here 
         start = timer()
-        sortingKS3 = run_kilosort(recording_chunk,output_folder='./Kilosort_tmp')
+        sortingKS3 = run_kilosort(recording_chunk,output_folder=f'{kilosort_output_folder}')
         logging.debug("Sorting complete")
         sortingKS3 = sortingKS3.remove_empty_units()
         sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk) #Sometimes KS returns spikes outside the number of samples. < https://github.com/SpikeInterface/spikeinterface/pull/1378>
         
-        sortingKS3= sortingKS3.save(folder = kilosort_output_folder, overwrite=True)
+        sortingKS3= sortingKS3.save(folder = f"{kilosort_output_folder}_2", overwrite=True)
 
         # sorting_analyzer = spikeinterface.create_sorting_analyzer(sortingKS3, recording,
         #                                       format="binary_folder", folder="/my_sorting_analyzer",
@@ -400,6 +400,7 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         start = timer()
         #export_to_phy(waveform_extractor=waveforms, output_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/phy",**job_kwargs)
         qual_metrics = get_quality_metrics(waveforms)  
+        qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics_unfiltered.xlsx")
         sp.compute_spike_amplitudes(waveforms,load_if_exists=True,**job_kwargs)
         update_qual_metrics = remove_violated_units(qual_metrics)
         non_violated_units  = update_qual_metrics.index.values
@@ -426,6 +427,7 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         #qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
          #                                              'isi_violation', 'amplitude_cutoff','amplitude_median'])  ## to do : have to deal with NAN values
         #rohan made change here
+        template_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/template_metrics_unfiltered.xlsx")
         template_metrics = template_metrics.loc[non_violated_units]
         template_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/template_metrics.xlsx")
         locations = si.compute_unit_locations(waveforms)
@@ -435,17 +437,30 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         #rohan made change here 
         qual_metrics = qual_metrics.loc[non_violated_units]
         qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics.xlsx")
-        fig,ax1 = plt.subplots(figsize=(10.5,6.5))
+       
         unit_ids = waveforms.unit_ids
+        
+        unit_locations =dict(zip(unit_ids,locations))
+        fig1,ax1 = plt.subplots(figsize=(10.5,6.5))
         sw.plot_probe_map(recording_chunk,ax=ax1,with_channel_ids=False)
+        for unit_id, (x,y,z) in unit_locations.items() :  # in new si 1.00 they are returning three points.
+            ax1.scatter(x,y,s=10,c='blue')
+        ax1.invert_yaxis()    
+        #rohan made changes here
+        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/locations_unfiltered_units.pdf")
+        plt.clf()
+        fig2,ax2 = plt.subplots(figsize=(10.5,6.5))
+        sw.plot_probe_map(recording_chunk,ax=ax2,with_channel_ids=False)
         unit_locations =dict(zip(unit_ids,locations))
         for unit_id, (x,y,z) in unit_locations.items() :  # in new si 1.00 they are returning three points.
             if unit_id in non_violated_units:
-                ax1.scatter(x,y,s=10,c='blue')
-        ax1.invert_yaxis()    
+                ax2.scatter(x,y,s=10,c='blue')
+        ax2.invert_yaxis()    
         #rohan made changes here
         plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/locations_{numunits}_units.pdf")
         plt.clf()
+
+
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
         # extremum_channel_dict = 
