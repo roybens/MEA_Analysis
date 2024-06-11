@@ -18,7 +18,7 @@ from generate_recording_and_sorting_objects import main as generate_recording_an
 from axon_trace_classes import axon_trace_objects
 from reconstruct_axons import reconstruct_axon_trace_objects
 import mea_processing_library as MPL
-import helper_functions as helper
+import lib_helper_functions as helper
 import spike_sorting as hp #hornauerp, https://github.com/hornauerp/axon_tracking/blob/main/axon_tracking/spike_sorting.py
 import template_extraction as te_hp
 

@@ -49,6 +49,114 @@ def debug():
     return templates, channel_locations, plot_dir
 
 
+def fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_by_sample):
+    def get_pitch():
+        # Between any two adjacent channels, there is some minimmum distance, which we can use to determine if a channel is missing
+        # Get distances between channels and find the minimum distance
+        distances = []
+        for i in range(len(merged_channel_loc[-1])):
+            for j in range(i+1, len(merged_channel_loc[-1])):
+                distances.append(np.linalg.norm(np.array(merged_channel_loc[-1][i]) - np.array(merged_channel_loc[-1][j])))
+                min_distance = np.min(distances)
+                if min_distance == 17.5: #specific to maxwell MEAs, 17.5 um
+                    return min_distance
+        #assert min distance is a mult of 17.5um
+        assert min_distance % 17.5 == 0, "Minimum distance is not a multiple of 17.5 um."
+        return min_distance
+    
+    ## Fill in missing channels
+    print('Filling in missing channels...')
+    # Find min and max x and y values in channel locations
+    x_min = np.min([loc[0] for loc in merged_channel_loc[-1]])
+    x_max = np.max([loc[0] for loc in merged_channel_loc[-1]])
+    y_min = np.min([loc[1] for loc in merged_channel_loc[-1]])
+    y_max = np.max([loc[1] for loc in merged_channel_loc[-1]])
+
+    # Between any two adjacent channels, there is some minimmum distance, which we can use to determine if a channel is missing
+    # Get distances between channels and find the minimum distance
+    min_distance = get_pitch() #basically, expcted channel resolution
+
+    # Create a grid of channels
+    x_grid = np.arange(x_min, x_max+min_distance, min_distance)
+    y_grid = np.arange(y_min, y_max+min_distance, min_distance)
+    xx, yy = np.meshgrid(x_grid, y_grid)
+    grid = np.array([xx.flatten(), yy.flatten()]).T
+
+    #get channel locations present in grid, missing from channel locations
+    existing_channels_set = set(map(tuple, merged_channel_loc[-1]))
+    expected_channels_set = set(map(tuple, grid))
+    missing_channel_set = [ch for idx, ch in enumerate(expected_channels_set) if tuple(ch) not in existing_channels_set]
+    assert len(missing_channel_set) + len(merged_channel_loc[-1]) == len(grid), "Missing channels do not match."
+    assert len(missing_channel_set) + len(merged_channel_loc[-1]) <= 26400, "Too many channels for Maxwell MEAs."
+
+    # Fill in missing channels               
+    
+    #print total merged channels so far                
+    #print(f'Total merged channels: {len(merged_channel_loc[-1])}')
+    print(f'Processing {len(missing_channel_set)} unrecorded channels')
+                        ## Copy existing templates over
+    # Calculate size of new sub-arrays
+    #new_size = merged_templates[-1][0].shape[0] + 1 #get the size of any sample in merged templates, add 1
+    new_size = merged_templates[-1][0].shape[0] + len(missing_channel_set)
+    # Calculate new size, Create pre-sized merged_template array
+    new_merged_templates = [np.array([np.zeros(new_size, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
+    #Allocated updated data to new_merged_templates
+    for l, t in enumerate(merged_templates[-1]):
+        # Allocate new array
+        new_array = np.zeros(new_size, dtype=t.dtype)  
+        # Copy existing data
+        new_array[:t.shape[0]] = t
+        # Save to list
+        new_merged_templates[-1][l] = new_array
+    #Update new value at sample at channel
+    # Save back to merged templates  
+    #merged_templates = new_merged_templates
+
+    #update array to count how many times a channel is merged
+    num_samples = new_merged_templates[-1][0].shape[0]
+    new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_samples, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
+    for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
+        for channel_idx, count_num in enumerate (merged_count_at_channel_by_sample[-1][sample_idx]):
+            new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num          
+    #merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample
+
+    ## Copy existing Channels over
+    # Calculate size of new sub-arrays and create space for new channel location
+    same_size = merged_channel_loc[-1][0].shape[0] #get the size of any channel location tuple
+    new_length = len(merged_channel_loc[-1]) + len(missing_channel_set)
+    new_merged_channels = [np.array([np.zeros(same_size, dtype='float64')] * new_length, dtype='float64')]
+    for l, c in enumerate(merged_channel_loc[-1]):
+        # Allocate new array
+        new_tuple = np.zeros(same_size, dtype=c.dtype)  
+        # Copy existing data
+        new_tuple = c
+        # Save to list
+        new_merged_channels[-1][l] = new_tuple
+    #Update new value at sample at channel
+    #merged_channel_loc = new_merged_channel   
+
+    ###Update Values
+    for idx, j in enumerate(missing_channel_set):
+        position = merged_templates[-1][0].shape[0] + idx
+        #new_merged_count_at_channel_by_sample[-1][k][position] = 0
+        channel_loc_to_append = tuple(missing_channel_set[idx])   
+        tuple_to_append = np.array(channel_loc_to_append)  
+        new_merged_channels[-1][position] = tuple_to_append          
+
+    #validate
+    for footprint in new_merged_templates[-1]:
+        assert np.array(footprint[-len(missing_channel_set)]).all() == 0, "Filler channels are not zeroed out."
+    for footprint in new_merged_count_at_channel_by_sample[-1]:
+        assert np.array(footprint[-len(missing_channel_set)]).all() == 0, "Filler channels are not zeroed out."
+    for ch in missing_channel_set:
+        assert ch in new_merged_channels[-1], "Missing channels are not in the channel locations."
+
+    merged_templates = new_merged_templates
+    merged_channel_loc = new_merged_channels
+    merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample
+
+    return merged_templates, merged_channel_loc, merged_count_at_channel_by_sample   
+
 def merge_templates(templates, channel_locations, plot_dir):
     ###Merge
     merged_templates = []
@@ -248,115 +356,7 @@ def merge_templates(templates, channel_locations, plot_dir):
         assert len(merged_templates_filled[-1][i]) <= 26400
     assert len(merged_channel_loc_filled[-1]) <= 26400
     
-    return merged_templates, merged_channel_loc, merged_templates_filled, merged_channel_loc_filled
-
-def fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_by_sample):
-    def get_pitch():
-        # Between any two adjacent channels, there is some minimmum distance, which we can use to determine if a channel is missing
-        # Get distances between channels and find the minimum distance
-        distances = []
-        for i in range(len(merged_channel_loc[-1])):
-            for j in range(i+1, len(merged_channel_loc[-1])):
-                distances.append(np.linalg.norm(np.array(merged_channel_loc[-1][i]) - np.array(merged_channel_loc[-1][j])))
-                min_distance = np.min(distances)
-                if min_distance == 17.5: #specific to maxwell MEAs, 17.5 um
-                    return min_distance
-        #assert min distance is a mult of 17.5um
-        assert min_distance % 17.5 == 0, "Minimum distance is not a multiple of 17.5 um."
-        return min_distance
-    
-    ## Fill in missing channels
-    print('Filling in missing channels...')
-    # Find min and max x and y values in channel locations
-    x_min = np.min([loc[0] for loc in merged_channel_loc[-1]])
-    x_max = np.max([loc[0] for loc in merged_channel_loc[-1]])
-    y_min = np.min([loc[1] for loc in merged_channel_loc[-1]])
-    y_max = np.max([loc[1] for loc in merged_channel_loc[-1]])
-
-    # Between any two adjacent channels, there is some minimmum distance, which we can use to determine if a channel is missing
-    # Get distances between channels and find the minimum distance
-    min_distance = get_pitch() #basically, expcted channel resolution
-
-    # Create a grid of channels
-    x_grid = np.arange(x_min, x_max+min_distance, min_distance)
-    y_grid = np.arange(y_min, y_max+min_distance, min_distance)
-    xx, yy = np.meshgrid(x_grid, y_grid)
-    grid = np.array([xx.flatten(), yy.flatten()]).T
-
-    #get channel locations present in grid, missing from channel locations
-    existing_channels_set = set(map(tuple, merged_channel_loc[-1]))
-    expected_channels_set = set(map(tuple, grid))
-    missing_channel_set = [ch for idx, ch in enumerate(expected_channels_set) if tuple(ch) not in existing_channels_set]
-    assert len(missing_channel_set) + len(merged_channel_loc[-1]) == len(grid), "Missing channels do not match."
-    assert len(missing_channel_set) + len(merged_channel_loc[-1]) <= 26400, "Too many channels for Maxwell MEAs."
-
-    # Fill in missing channels               
-    
-    #print total merged channels so far                
-    #print(f'Total merged channels: {len(merged_channel_loc[-1])}')
-    print(f'Processing {len(missing_channel_set)} unrecorded channels')
-                        ## Copy existing templates over
-    # Calculate size of new sub-arrays
-    #new_size = merged_templates[-1][0].shape[0] + 1 #get the size of any sample in merged templates, add 1
-    new_size = merged_templates[-1][0].shape[0] + len(missing_channel_set)
-    # Calculate new size, Create pre-sized merged_template array
-    new_merged_templates = [np.array([np.zeros(new_size, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-    #Allocated updated data to new_merged_templates
-    for l, t in enumerate(merged_templates[-1]):
-        # Allocate new array
-        new_array = np.zeros(new_size, dtype=t.dtype)  
-        # Copy existing data
-        new_array[:t.shape[0]] = t
-        # Save to list
-        new_merged_templates[-1][l] = new_array
-    #Update new value at sample at channel
-    # Save back to merged templates  
-    #merged_templates = new_merged_templates
-
-    #update array to count how many times a channel is merged
-    num_samples = new_merged_templates[-1][0].shape[0]
-    new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_samples, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-    for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
-        for channel_idx, count_num in enumerate (merged_count_at_channel_by_sample[-1][sample_idx]):
-            new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num          
-    #merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample
-
-    ## Copy existing Channels over
-    # Calculate size of new sub-arrays and create space for new channel location
-    same_size = merged_channel_loc[-1][0].shape[0] #get the size of any channel location tuple
-    new_length = len(merged_channel_loc[-1]) + len(missing_channel_set)
-    new_merged_channels = [np.array([np.zeros(same_size, dtype='float64')] * new_length, dtype='float64')]
-    for l, c in enumerate(merged_channel_loc[-1]):
-        # Allocate new array
-        new_tuple = np.zeros(same_size, dtype=c.dtype)  
-        # Copy existing data
-        new_tuple = c
-        # Save to list
-        new_merged_channels[-1][l] = new_tuple
-    #Update new value at sample at channel
-    #merged_channel_loc = new_merged_channel   
-
-    ###Update Values
-    for idx, j in enumerate(missing_channel_set):
-        position = merged_templates[-1][0].shape[0] + idx
-        #new_merged_count_at_channel_by_sample[-1][k][position] = 0
-        channel_loc_to_append = tuple(missing_channel_set[idx])   
-        tuple_to_append = np.array(channel_loc_to_append)  
-        new_merged_channels[-1][position] = tuple_to_append          
-
-    #validate
-    for footprint in new_merged_templates[-1]:
-        assert np.array(footprint[-len(missing_channel_set)]).all() == 0, "Filler channels are not zeroed out."
-    for footprint in new_merged_count_at_channel_by_sample[-1]:
-        assert np.array(footprint[-len(missing_channel_set)]).all() == 0, "Filler channels are not zeroed out."
-    for ch in missing_channel_set:
-        assert ch in new_merged_channels[-1], "Missing channels are not in the channel locations."
-
-    merged_templates = new_merged_templates
-    merged_channel_loc = new_merged_channels
-    merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample
-
-    return merged_templates, merged_channel_loc, merged_count_at_channel_by_sample     
+    return merged_templates, merged_channel_loc, merged_templates_filled, merged_channel_loc_filled  
 
 if __name__ == '__main__':
     templates, channel_locations, plot_dir = debug()

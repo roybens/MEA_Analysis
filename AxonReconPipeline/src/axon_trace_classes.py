@@ -12,7 +12,7 @@ import spikeinterface.widgets as sw
 import spikeinterface.postprocessing as sp
 import spikeinterface.preprocessing as spre
 import spikeinterface.qualitymetrics as qm
-import helper_functions as helper
+import lib_helper_functions as helper
 from pprint import pprint
 import os
 import re
