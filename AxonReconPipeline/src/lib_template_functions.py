@@ -5,14 +5,30 @@ import sys
 import os
 import h5py
 import spikeinterface.full as si
+<<<<<<< HEAD
 import numpy as np
 from tqdm import tqdm
+=======
+#import spikeinterface.sorters as ss
+#import shutil
+import numpy as np
+from tqdm import tqdm
+#from pathlib import Path
+#import time
+
+#from axon_tracking import spike_sorting as ss
+#import spike_sorting as ss
+>>>>>>> 57c3339 (updating memory handling)
 
 ''' Local imports '''
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
 import AxonReconPipeline.src.lib_sorting_functions as sorter
 import lib_waveform_functions as waveformer
+<<<<<<< HEAD
+=======
+#import reconstruct_axons as ra
+>>>>>>> 57c3339 (updating memory handling)
 
 ''' Template merging functions '''
 from func_merge_templates import merge_templates
@@ -212,6 +228,7 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             assert te_params.get('load_merged_templates', False) == True, 'load_merged_templates is set to False. Generating New Templates.'
             assert te_params.get('overwrite_tmp', False) == False, 'overwrite_tmp is set to True. Generating New Templates.'
             
+<<<<<<< HEAD
             if logger is not None: logger.info(f'Loading merged template for unit {sel_unit_id}')
             else: print(f'Loading merged template for unit {sel_unit_id}')                
             merged_template = np.load(template_save_file)
@@ -233,6 +250,10 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
         except Exception as e: 
             if logger is not None: logger.warning(f'loading template for unit {sel_unit_id}:\n{e}. Generating New Templates.')
             else: print(f'Error loading template for unit {sel_unit_id}:\n{e}. Generating New Templates.'); pass 
+=======
+            #rec_names, common_el, pos = ss.find_common_electrodes(rec_path, stream_id)
+            multirecording, pos = sorter.concatenate_recording_slices(rec_path, stream_id)
+>>>>>>> 57c3339 (updating memory handling)
 
         try:
             if logger is not None: logger.info(f'Extracting template segments for unit {sel_unit_id}')
