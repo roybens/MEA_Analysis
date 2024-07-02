@@ -47,6 +47,7 @@ def extract_waveforms_of_units_by_segment(h5_file_path, stream_id, segment_sorti
     def extract_waveforms(h5_file_path, segment_sorting, stream_id, save_root, n_jobs, overwrite_wf):
         try:
             save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._kwargs['parent_recording']._kwargs['recording']._kwargs['file_path']
+            save_root = os.path.dirname(save_root)
         except:
             save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._parent_recording._kwargs['folder_path']
             #segment_sorting._kwargs['recording_list'][0]._kwargs['parent_recording']._kwargs['folder_path']

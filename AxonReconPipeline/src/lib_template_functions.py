@@ -5,22 +5,22 @@ import sys
 import os
 import h5py
 import spikeinterface.full as si
-import spikeinterface.sorters as ss
-import shutil
+#import spikeinterface.sorters as ss
+#import shutil
 import numpy as np
 from tqdm import tqdm
-from pathlib import Path
-import time
+#from pathlib import Path
+#import time
 
 #from axon_tracking import spike_sorting as ss
-import spike_sorting as ss
+#import spike_sorting as ss
 
 ''' Local imports '''
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
 import lib_sorting_functions as sorter
 import lib_waveform_functions as waveformer
-import reconstruct_axons as ra
+#import reconstruct_axons as ra
 
 '''logging setup'''
 import logging
@@ -502,7 +502,7 @@ def extract_templates_from_sortings(sorting_list, h5_file_path, qc_params={}, te
                     continue
             
             #rec_names, common_el, pos = ss.find_common_electrodes(rec_path, stream_id)
-            multirecording, pos = ss.concatenate_recording_slices(rec_path, stream_id)
+            multirecording, pos = sorter.concatenate_recording_slices(rec_path, stream_id)
 
             #duration = int(h5['assay']['inputs']['record_time'][0].decode('UTF-8')) * n_recs #In case we want to use firing rate as criterion
             cleaned_sorting = select_units(sorting, **qc_params)
