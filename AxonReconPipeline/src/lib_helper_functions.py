@@ -7,6 +7,7 @@ import math
 import os
 import fnmatch
 import sys
+import re
 
 ''' Local imports '''
 from file_selector import main as file_selector_main
@@ -54,6 +55,41 @@ def select_folders_and_get_continuous_h5_dirs(debug_mode=False, pre_selected_fol
     return continuous_h5_dirs
 
 '''misc helper functions for the pipeline'''
+def copy_reconstruction_data(h5_parent_dirs, destination_dirs, recon_dir):
+    for i in range(len(h5_parent_dirs)):
+        import shutil
+        recon_child_dirs = os.listdir(recon_dir)
+        for recon_child_dir in recon_child_dirs:
+            #recon_child_dir_path = recon_child_dir.split('reconstructions')[-1]
+            if recon_child_dir not in h5_parent_dirs[i]: continue #skip if the recon_child_dir is not in the h5_parent_dir
+            final_dest = os.path.join(destination_dirs[i], recon_child_dir)
+            #if not os.path.exists(final_dest): os.makedirs(final_dest)
+            if os.path.exists(final_dest): shutil.rmtree(final_dest)
+            try: shutil.copytree(os.path.join(recon_dir, recon_child_dir), final_dest, dirs_exist_ok=True)
+            except FileExistsError: pass
+
+def build_destination_dirs(h5_parent_dirs, destination_parent_dir):
+    destination_dirs = []
+    for i in range(len(h5_parent_dirs)):
+        #match YYMMDD in the path
+        date = re.search(r'(\d{6})', h5_parent_dirs[i][::-1]).groups() #search right to left
+        #make sure year is after 2020, month is 1-12, and day is 1-31
+        #for i in range(len(date)):
+        date_string = date[0][::-1] #reverse the string
+        try: assert int(date_string[:2]) >= 20 and int(date_string[2:4]) <= 12 and int(date_string[4:]) <= 31, f"Date format is incorrect in h5_parent_dirs[{i}]: {h5_parent_dirs[i]}"
+        except AssertionError as e: continue
+        #get the dir name before the date, using the exact match of the date
+        line_name = re.search(r'(.*)' + date_string, h5_parent_dirs[i]).group(1)
+        #remove last slash if it exists
+        if line_name[-1] == '/': line_name = line_name[:-1]
+        line_name = os.path.basename(line_name)
+        #get everything including and after date
+        #child_dirs = h5_parent_dirs[i].split(date_string + '/')[1]
+        #destination_dirs.append(os.path.join(destination_parent_dir, line_name, date[i], child_dirs))
+        destination_dirs.append(os.path.join(destination_parent_dir, line_name))
+        #get unique values
+        #destination_dirs = list(set(destination_dirs))
+    return destination_dirs
 def get_surrounding_coordinates(x, y, number):
     surrounding_coordinates = []
     number = math.sqrt(number)
