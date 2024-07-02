@@ -1,6 +1,7 @@
 '''Main script to execute the AxonReconPipeline'''
 
 '''Imports'''
+import shutil
 import axon_velocity as av
 
 # Local Python Function Libraries
@@ -41,41 +42,81 @@ def attempt_load_merged_templates(continuous_h5_file_info, templates_dir, allowe
 
 def main(h5_parent_dirs, allowed_scan_types=['AxonTracking'], stream_select = None):
 
+    '''Delete temp data if it exists'''
+    temp_data_path = './AxonReconPipeline/data/temp_data'
+    #if os.path.exists(temp_data_path): shutil.rmtree(temp_data_path, ignore_errors=True)
+    
     '''Select folders and get continuous h5 filepaths'''
     continuous_h5_file_info = helper.select_folders_and_get_continuous_h5_dirs(pre_selected_folders = h5_parent_dirs, debug_mode = debug_mode, stream_select = stream_select) #TODO: add stream select here.
     
     '''Attempt to load temporary data from disk'''
-    quick_templates_loaded = False
-    if load_merged_templates: quick_templates_loaded = attempt_load_merged_templates(continuous_h5_file_info, templates_dir, allowed_scan_types, stream_select = stream_select)
+    # quick_templates_loaded = False
+    # if load_merged_templates: quick_templates_loaded = attempt_load_merged_templates(continuous_h5_file_info, templates_dir, allowed_scan_types, stream_select = stream_select)
     
     '''Execute Main Pipeline Steps, as needed'''
-    if quick_templates_loaded is False:
-        '''Generate multirecordings objects for spikesorting and waveform extraction steps'''
-        sorter.build_multirecording_objects(continuous_h5_file_info, allowed_scan_types, recordings_dir, stream_select = stream_select, n_jobs = 8)
-        '''Extract sorting objects per stream from sliced and cocatenated recordings (most/all fixed electrodes during axontracking scan)'''
-        sorter.spikesort_recordings(continuous_h5_file_info, sortings_dir = sortings_dir, allowed_scan_types = allowed_scan_types, stream_select = stream_select,)
-        '''Extract Waveforms from sorting objects'''
-        waveformer.extract_all_waveforms(continuous_h5_file_info, qc_params=qc_params, te_params=te_params, stream_break = stream_select)
-        '''Get Templates from Waveform Objects'''
-        templater.extract_all_templates(continuous_h5_file_info, qc_params=qc_params, te_params=te_params, allowed_scan_types=allowed_scan_types, templates_dir = templates_dir, stream_select = stream_select, just_load_waveforms = load_waveforms)   
-
+    #if quick_templates_loaded is False:
+    '''Generate multirecordings objects for spikesorting and waveform extraction steps'''
+    #sorter.build_multirecording_objects(continuous_h5_file_info, allowed_scan_types, recordings_dir, stream_select = stream_select, n_jobs = 8)
+    
+    '''Extract sorting objects per stream from sliced and cocatenated recordings (most/all fixed electrodes during axontracking scan)'''
+    sorter.spikesort_recordings(continuous_h5_file_info, sortings_dir = sortings_dir, allowed_scan_types = allowed_scan_types, stream_select = stream_select,)
+    
+    '''Extract Waveforms from sorting objects'''
+    waveformer.extract_all_waveforms(continuous_h5_file_info, qc_params=qc_params, te_params=te_params, stream_break = stream_select)
+    if run_lean: shutil.rmtree(sortings_dir, ignore_errors=True)
+    
+    '''Get Templates from Waveform Objects'''
+    templater.extract_all_templates(continuous_h5_file_info, qc_params=qc_params, te_params=te_params, allowed_scan_types=allowed_scan_types, templates_dir = templates_dir, stream_select = stream_select, just_load_waveforms = load_waveforms)   
+    if run_lean: shutil.rmtree(waveforms_dir, ignore_errors=True)
+    
     '''Analysis and Reconstruction Steps'''
     axoner.analyze_and_reconstruct(continuous_h5_file_info, templates_dir, params, stream_select = stream_select, n_jobs = 32)
+    #if run_lean: shutil.rmtree(templates_dir, ignore_errors=True)
+
+    '''Copy reconstruction data to destination directories'''
+    #recon_dir = Path(temp_dir) / 'reconstructions'
+    #helper.copy_reconstruction_data(h5_parent_dirs, destination_dirs, recon_dir)
 
 if __name__ == "__main__":
-    '''new main'''
 
     '''directories'''
     recordings_dir = './AxonReconPipeline/data/temp_data/recordings'
     sortings_dir = './AxonReconPipeline/data/temp_data/sortings'
+    waveforms_dir = './AxonReconPipeline/data/temp_data/waveforms'
     templates_dir='./AxonReconPipeline/data/temp_data/templates'
+    recon_dir = './AxonReconPipeline/data/temp_data/reconstructions'
+    KCNT1_effort = [        
+        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082', #homo and het 
+        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240409/M07037/AxonTracking/000095', #homo, het, wt       
+        #'/mnt/disk20tb/KCNT1_T3_NeuronalScans/KCNT1_T3/KCNT1_T3/240328/M07037/AxonTracking/000055',  #data I'm using for refactoring, since NAS is out.
+        
+        '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking', #homo, het, wt  DIV 10
+        #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240328/M07037/AxonTracking', #homo, het, wt  DIV 16
+        #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240405/M07037/AxonTracking', #homo, het, wt  DIV 24
+        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240409/M07037/AxonTracking', #homo, het, wt  DIV 28
+        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240412/M07037/AxonTracking', #homo, het, wt  DIV 31
+
+    ]
+    h5_parent_dirs = KCNT1_effort
+    
+    #Check if all paths exist
+    import os
+    for i in range(len(h5_parent_dirs)): assert os.path.exists(h5_parent_dirs[i]), f"Path {h5_parent_dirs[i]} does not exist."
+
+    #check cwd 
+    print(f"Current working directory: {os.getcwd()}")
+
+    #for each dir in h5_parent_dirs, get the name of the line, which should directly preceed the date folder (YYMMDD)
+    destination_parent_dir = '/mnt/ben-shalom_nas/axonal_reconstruction_analyses/'
+    destination_dirs = helper.build_destination_dirs(h5_parent_dirs, destination_parent_dir)
 
     '''runtime/loading options''' 
     debug_mode = True #avoid launching gui for file selection, use pre-selected folders 
-    load_merged_templates = True #Load merged templates from disk instead of extracting them, if possible
+    load_merged_templates = False #Load merged templates from disk instead of extracting them, if possible
     load_template_segments = True #Load templates from disk instead of extracting them, if possible
     load_waveforms = True #Load waveforms from disk instead of extracting them, if possible
     load_sortings = True #Load sortings from disk instead of extracting them, if possible
+    run_lean = False #Delete sortings after waveform extraction to save disk space
 
     '''allowed scan types'''
     allowed_scan_types = [
@@ -153,14 +194,6 @@ if __name__ == "__main__":
         params['r2_threshold'] = 0.7 #0.9  # R^2 threshold for velocity linear fit below which an axon branch is discarded
         params['r2_threshold_for_outliers'] = 0.9 #0.98  # R^2 threshold below which outliers are detected and removed
         params['min_outlier_tracking_error'] = 75 #50  # Tracking error in µm above which a point can be considered an outlier and removed
-
-    '''h5 data directories'''
-    KCNT1_effort = [        
-        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082' #homo and het 
-        #'/mnt/ben-shalom_nas/rbs_maxtwo/rbsmaxtwo/media/rbs-maxtwo/harddisk20tb/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240409/M07037/AxonTracking/000095' #homo, het, wt       
-        '/mnt/disk20tb/KCNT1_T3_NeuronalScans/KCNT1_T3/KCNT1_T3/240328/M07037/AxonTracking/000055'  #data I'm using for refactoring, since NAS is out.
-    ]
-    h5_parent_dirs = KCNT1_effort
 
     '''data selection options'''
     #stream_select = 0 #KCNT1, homo

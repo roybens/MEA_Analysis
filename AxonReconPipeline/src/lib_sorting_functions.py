@@ -100,15 +100,15 @@ def concatenate_recording_slices(rec_path, stream_id, recording_dir = default_re
     '''Try to load multi-recording if it exists, otherwise create it'''
     multirec_name = f'{stream_id}_multirecording'
     multirec_save_path = recording_dir_by_stream+f'/{multirec_name}'
-    try: 
-        assert False #Force the except block, remove later
-        multirecording = si.load_extractor(multirec_save_path)
-        logger.info(f"Loaded multirecording {multirec_name} from {multirec_save_path}")
-        return multirecording, common_el
-    except:
-        if os.path.exists(multirec_save_path):
-            shutil.rmtree(multirec_save_path)
-        os.makedirs(multirec_save_path, exist_ok=True)
+    # try: 
+    #     assert False #Force the except block, remove later
+    #     multirecording = si.load_extractor(multirec_save_path)
+    #     logger.info(f"Loaded multirecording {multirec_name} from {multirec_save_path}")
+    #     return multirecording, common_el
+    # except:
+    #     if os.path.exists(multirec_save_path):
+    #         shutil.rmtree(multirec_save_path)
+    #     os.makedirs(multirec_save_path, exist_ok=True)
 
     '''Center recordings and remove non-common electrodes'''
     rec_list = []          
@@ -125,13 +125,14 @@ def concatenate_recording_slices(rec_path, stream_id, recording_dir = default_re
             except:
                 if os.path.exists(rec_save_path):
                     shutil.rmtree(rec_save_path)
-                os.makedirs(rec_save_path, exist_ok=True) 
+                
                 
                 chunk_size = np.min([10000, rec.get_num_samples()]) - 100 #Fallback for ultra short recordings (too little activity)
                 logger.info(f"Centering recording {rec_name} with chunk size {chunk_size}")
                 rec_centered = si.center(rec,chunk_size=chunk_size)                    
-                rec_centered.save(folder = rec_save_path, overwrite = True, verbose = True, **save_kwargs)
-                logger.info(f"Saved centered recording to {rec_save_path}")
+                #os.makedirs(rec_save_path, exist_ok=True) 
+                #rec_centered.save(folder = rec_save_path, overwrite = True, verbose = True, **save_kwargs)
+                #logger.info(f"Saved centered recording to {rec_save_path}")
             ch_id = rec.get_property("contact_vector")['device_channel_indices']
             rec_el = rec.get_property("contact_vector")["electrode"]                
             chan_idx = [np.where(rec_el == el)[0][0] for el in common_el]
