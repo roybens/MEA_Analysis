@@ -4,7 +4,7 @@ This script is designed to process neuronal data recorded from MEA (Microelectro
 
 ## Class Descriptions and Key Functions
 
-![UML Diagram](/mnt/disk15tb/rohan/MEA_Analysis/IPNAnalysis/image.png)
+![UML Diagram](image.png)
 
 ### Logger
 - **Attributes:**
