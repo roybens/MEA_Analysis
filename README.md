@@ -1,14 +1,14 @@
 # MEA_Analysis
 
 <p>MEA_Analysis is a python pipeline which utilizes the [spikeinterface](https://github.com/SpikeInterface) and the kilorsort to get the desired spikes from the mice brain.Our research focused on how the healthy neuron spikes differs from a diseased neuron.</p>
---
+---
 # Working:
 ###
-<p></p>We take the readings we have 3 different types _'Network Today'_, _'Network last'_, _'Network Best'_. <br />
+<p> We take the readings we have 3 different types _'Network Today'_, _'Network last'_, _'Network Best'_. <br />
 1.**Network Today:** This refers to the recording of the neuron activity we took on that particular day. <br />
 2.**Network last:** This refers to the number of days since the last recording. <br />
 3.**Network Best:** This refers to the best available neuron spike recording that exists. Usually after 20 days we get the best recording.<br /></p>
---
+---
 # Usage
 ### Data Preprocessing
 1. **Data Preprocessing**: Here we make sure we get the correct the sequence of data as in the data and the runids will match so we can recongnize on what date the neuron activity was recorded.
