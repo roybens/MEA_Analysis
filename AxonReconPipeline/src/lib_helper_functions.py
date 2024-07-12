@@ -33,7 +33,8 @@ def exclude_non_continuous_data(informed_h5_dirs, stream_select=None):
     i=0
     for dir in informed_h5_dirs:
         h5_file_path = dir['h5_file_path']
-        if MPL.test_continuity(h5_file_path, verbose = True, stream_select=stream_select):
+        continuous, recordings = MPL.load_continuous_recordings(h5_file_path, verbose = True, stream_select=stream_select)
+        if continuous:
             #copy informed_h5_dir to continuous_h5_dirs
             continuous_h5_dirs[i] = dir
             i=i+1
