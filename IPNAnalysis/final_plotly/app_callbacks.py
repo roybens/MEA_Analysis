@@ -1,7 +1,8 @@
 from dash import dcc, html, callback_context
 from dash.dependencies import Input, Output, State, ALL
-from final_plotly.data_processing import parse_contents, parse_mat
-from final_plotly.plot_functions import plot_activity_graphs, plot_isi_graph
+from data_processing import parse_contents, parse_mat
+from plot_functions import plot_activity_graphs, plot_isi_graph
+import io, zipfile,base64
 default_colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
 def register_callbacks(app):
     @app.callback(
@@ -199,7 +200,7 @@ def register_callbacks(app):
     @app.callback(
         Output('hidden-hex-codes', 'data'),
         Input('submit-button', 'n_clicks'),
-        State({'type': 'color-hex', 'index': ALL}, 'value'),
+        Input({'type': 'color-hex', 'index': ALL}, 'value'),
         State('upload-data', 'contents'),
         State('upload-data', 'filename'),
         prevent_initial_call=True  # Add this to prevent initial call
