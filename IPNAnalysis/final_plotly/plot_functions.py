@@ -102,6 +102,7 @@ def plot_activity_graphs(data, div, output_types, ordered_genotypes, selected_co
                             ax.plot([x_genotype[genotype1][i], x_genotype[genotype2][i]], [maxim + 0.05 * maxim * count] * 2, 'k', linewidth=1.3)
                             ax.text((x_genotype[genotype1][i] + x_genotype[genotype2][i]) / 2, maxim + 0.05 * maxim * count, sign, ha='center', va='bottom', fontsize=7)
                             ax.axvline(x_genotype[genotype1][i], color='black', linestyle=':', linewidth=0.5)
+                            ax.axvline(x_genotype[genotype2][i], color='black', linestyle=':', linewidth=0.5)
                         count += 1
 
         plt.title(f"{output_type}", fontsize=14)
