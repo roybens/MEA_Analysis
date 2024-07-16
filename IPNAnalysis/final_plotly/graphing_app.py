@@ -1,6 +1,6 @@
 from dash import Dash
-from final_plotly.layout import create_layout
-from final_plotly.app_callbacks import register_callbacks
+from layout import create_layout
+from app_callbacks import register_callbacks
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 app.layout = create_layout()
