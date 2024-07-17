@@ -210,9 +210,14 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
                             #  "length": str(path_lengths), "r2": str(r2s), "num_channels_included": str(num_channels_included), 
                             #  "channel_density": str(channel_density), "init_chan": str(init_chans)})
     recon_dir_parent = os.path.dirname(recon_dir)
+<<<<<<< HEAD
     if not os.path.exists(recon_dir_parent):
         os.makedirs(recon_dir_parent)
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics{suffix}.csv", index=False)
+=======
+    if not os.path.exists(recon_dir_parent): os.makedirs(recon_dir_parent)
+    df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics.csv", index=False)
+>>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
 
 # lib_plotting_and_analysis.py
 
