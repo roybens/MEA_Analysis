@@ -196,11 +196,17 @@ def get_list_of_h5_files(h5_parent_dirs, **kwargs):
     #mport os
     h5_files = []
     for h5_parent_dir in h5_parent_dirs:
+<<<<<<< HEAD
         if h5_parent_dir.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in h5_parent_dir: 
             h5_files.append(h5_parent_dir) #if h5_parent_dir is an .h5 file, add it to the list
             continue #if h5_parent_dir is an .h5 file, skip the loop
         for root, dirs, files in os.walk(h5_parent_dir):
             for file in files:
                 if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root: 
+=======
+        for root, dirs, files in os.walk(h5_parent_dir):
+            for file in files:
+                if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root:
+>>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
                     h5_files.append(os.path.join(root, file))
     return h5_files
