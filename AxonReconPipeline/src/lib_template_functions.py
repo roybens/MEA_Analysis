@@ -25,15 +25,29 @@ default_n_jobs = 4
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger):
-    seg_we = waveforms[rec_name]['waveforms']
-    template = seg_we.get_template(sel_unit_id)
-    if np.isnan(template).all():
-        if logger is not None:
-            logger.warning(f'Unit {sel_unit_id} in segment {sel_idx} is empty. Skipping.')
-        else:
-            print(f'Unit {sel_unit_id} in segment {sel_idx} is empty. Skipping.')
+    
+    # Get the waveform extractor object
+    try: 
+        seg_we = waveforms[rec_name]['waveforms']
+    except KeyError: 
+        if logger is not None: logger.error(f'{rec_name} does not exist')
+        else: print(f'{rec_name} does not exist')
         return None, None
     
+    # Get the template for the selected unit
+    try: template = seg_we.get_template(sel_unit_id)
+    except KeyError: 
+        if logger is not None: logger.error(f'Could not get templates for {sel_unit_id} in {rec_name}')
+        else: print(f'Could not get templates for {sel_unit_id} in {rec_name}')
+        return None, None
+    
+    # Check if the template is empty
+    if np.isnan(template).all():
+        if logger is not None: logger.warning(f'Unit {sel_unit_id} in segment {sel_idx} is empty. Skipping.')
+        else: print(f'Unit {sel_unit_id} in segment {sel_idx} is empty. Skipping.')
+        return None, None
+    
+    # Get the channel locations
     locs = seg_we.get_channel_locations()
     dir_path = os.path.join(save_root, 'template_segments')
     file_name = f'seg{sel_idx}_unit{sel_unit_id}.npy'
@@ -41,11 +55,10 @@ def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logge
     channel_loc_save_file = os.path.join(dir_path, channel_loc_file_name)
     template_save_file = os.path.join(dir_path, file_name)
     
+    #Warnings for NaN values
     if not np.isnan(template).all() and np.isnan(template).any():
-        if logger is not None:
-            logger.warning(f'Unit {sel_unit_id} in segment {sel_idx} has NaN values')
-        else:
-            print(f'Unit {sel_unit_id} in segment {sel_idx} has NaN values')
+        if logger is not None: logger.warning(f'Unit {sel_unit_id} in segment {sel_idx} has NaN values')
+        else: print(f'Unit {sel_unit_id} in segment {sel_idx} has NaN values')
             
     return (rec_name, {'template': template, 'path': template_save_file}), (rec_name, {'channel_locations': locs, 'path': channel_loc_save_file})
 
@@ -72,6 +85,8 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
                 channel_locations[rec_name_l] = loc_data
                 if logger is not None: logger.debug(f'Processed segment {rec_name_t} for unit {sel_unit_id}')
                 else: print(f'Processed segment {rec_name_t} for unit {sel_unit_id}')
+                #debug
+                #break
 
     return template_segments, channel_locations
 
@@ -152,10 +167,8 @@ def merge_templates(templates, channel_locations, logger=None):
     merged_channel_loc = []
     verbose = True
 
-    if logger is not None:
-        logger.debug('Starting merge...')
-    else:
-        print('Starting merge...')
+    if logger is not None: logger.debug('Starting merge...')
+    else: print('Starting merge...')
         
     test_channel_measure = 0
     for i in range(len(templates)):
@@ -286,38 +299,27 @@ def merge_templates(templates, channel_locations, logger=None):
       
             else:
                 raise Exception("Something funky is going on")
-    if logger is not None:
-        logger.debug('done merging')
-    else:
-        print('done merging')
+    if logger is not None: logger.debug('done merging')
+    else: print('done merging')
         
-    if logger is not None:
-        logger.debug(f'Total merged channels: {len(merged_channel_loc[-1])}')
-    else:
-        print(f'Total merged channels: {len(merged_channel_loc[-1])}')
+    if logger is not None: logger.debug(f'Total merged channels: {len(merged_channel_loc[-1])}')
+    else: print(f'Total merged channels: {len(merged_channel_loc[-1])}')
         
-    for i in range(len(merged_templates[-1])):
-        assert len(merged_templates[-1][i]) <= 26400
+    for i in range(len(merged_templates[-1])): assert len(merged_templates[-1][i]) <= 26400
     assert len(merged_channel_loc[-1]) <= 26400
 
     merged_templates_filled, merged_channel_loc_filled, merged_count_at_channel_by_sample_filled = fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_by_sample, logger=logger)
 
-    if logger is not None:
-        logger.debug(f'Total merged channels after fill: {len(merged_channel_loc_filled[-1])}')
-    else:
-        print(f'Total merged channels after fill: {len(merged_channel_loc_filled[-1])}')
+    if logger is not None: logger.debug(f'Total merged channels after fill: {len(merged_channel_loc_filled[-1])}')
+    else: print(f'Total merged channels after fill: {len(merged_channel_loc_filled[-1])}')
         
-    for i in range(len(merged_templates_filled[-1])):
-        assert len(merged_templates_filled[-1][i]) <= 26400
+    for i in range(len(merged_templates_filled[-1])): assert len(merged_templates_filled[-1][i]) <= 26400
     assert len(merged_channel_loc_filled[-1]) <= 26400
     return merged_templates, merged_channel_loc, merged_templates_filled, merged_channel_loc_filled  
 
 def merge_template_segments(unit_segments, channel_locations, logger=None):
-    if logger is not None:
-        logger.info(f'Merging partial templates')
-    else:
-        print(f'Merging partial templates')
-        
+    if logger is not None: logger.info(f'Merging partial templates')
+    else: print(f'Merging partial templates')        
     template_list = [tmp['template'] for rec_name, tmp in unit_segments.items()]
     channel_locations_list = [ch_loc['channel_locations'] for rec_name, ch_loc in channel_locations.items()]
     merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = merge_templates(template_list, channel_locations_list, logger=logger)
@@ -327,24 +329,45 @@ def merge_template_segments(unit_segments, channel_locations, logger=None):
     merged_channel_locs_filled = merged_channel_locs_filled[0]
     return merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled
 
-def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=None, unit_limit=None, logger=None):
-    def add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled):
+def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=None, unit_limit=None, logger=None, template_bypass=False):
+    
+    def get_existing_unit_ids():
+        template_files = os.listdir(template_save_path)
+        sel_unit_ids = []
+        for f in template_files:
+            try: sel_unit_ids.append(int(f.split('.')[0]))
+            except ValueError: continue  # Skip files that don't start with an integer          
+        return sel_unit_ids
+    
+    def add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled, 
+                    template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill):
         unit_templates[sel_unit_id] = {
             'template_segments': unit_segments, 
             'channel_locations': channel_locations,
+            'merged_template_path': template_save_file,
             'merged_template': merged_template,
+            'merged_channel_loc_path': channel_loc_save_file,
             'merged_channel_loc': merged_channel_loc,
+            'merged_template_filled_path': template_save_file_fill,
             'merged_template_filled': merged_template_filled,
+            'merged_channel_locs_filled_path': channel_loc_save_file_fill,
             'merged_channel_locs_filled': merged_channel_locs_filled, 
             }
     
-    if logger is not None:
-        logger.info(f'Extracting merged templates for {h5_path}')
-    else:
-        print(f'Extracting merged templates for {h5_path}')
-        
-    sel_unit_ids = segment_sorting.get_unit_ids()
-    if save_root is not None: template_save_path = save_root
+    if logger is not None: logger.info(f'Extracting merged templates for {h5_path}')
+    else: print(f'Extracting merged templates for {h5_path}')        
+
+    h5_details = MPL.extract_recording_details(h5_path)
+    h5_details = h5_details[0]
+    date = h5_details['date']
+    chip_id = h5_details['chipID']
+    scanType = h5_details['scanType']
+    run_id = h5_details['runID']
+    if save_root is not None: template_save_path = save_root+f'/{date}/{chip_id}/{scanType}/{run_id}/{stream_id}'
+    if template_bypass: 
+        sel_unit_ids = get_existing_unit_ids()
+        assert len(sel_unit_ids) > 0, 'No existing templates found. Generating New Templates.'    
+    else: sel_unit_ids = segment_sorting.get_unit_ids()
     if not os.path.exists(template_save_path): os.makedirs(template_save_path)
         
     unit_templates = {}
@@ -369,7 +392,8 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             merged_channel_locs_filled = np.load(channel_loc_save_file_fill)
             add_to_dict("loading segments is not currently supported", 
                         "loading segment channels is not currently supported", 
-                        merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled)
+                        merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled,
+                        template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill)
             unit_count += 1
             if unit_limit is not None and unit_count >= unit_limit: break
             continue 
@@ -388,7 +412,8 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             else: print(f'Merging partial templates for unit {sel_unit_id}')
                 
             merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = merge_template_segments(unit_segments, channel_locations, logger=logger)
-            add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled)
+            add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled,
+                        template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill)
             if te_params.get('save_merged_templates', False):
                 np.save(template_save_file, merged_template)
                 np.save(channel_loc_save_file, merged_channel_loc)
@@ -399,17 +424,22 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             unit_count += 1
             if unit_limit is not None and unit_count >= unit_limit: break                
         except Exception as e:
-            if logger is not None: logger.error(f'Unit {sel_unit_id} encountered the following error:\n {e}')
+            if logger is not None: logger.error(f'Unit {sel_unit_id} encountered the following error: {e}')
             else: print(f'Unit {sel_unit_id} encountered the following error:\n {e}')               
         
 
     return unit_templates
 
-def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_root=None, te_params={}, qc_params={}, unit_limit=None, logger=None):
-    if logger is not None:
-        logger.info(f'Extracting templates for {h5_path}')
-    else:
-        print(f'Extracting templates for {h5_path}')
+def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_root=None, te_params={}, qc_params={}, unit_limit=None, logger=None, template_bypass=False):
+    if logger is not None: logger.info(f'Extracting templates for {h5_path}')
+    else:print(f'Extracting templates for {h5_path}')
+    if template_bypass:
+        try: 
+            unit_templates = extract_merged_templates(h5_path, stream_id, None, None, te_params, save_root=save_root, unit_limit=unit_limit, logger=logger, template_bypass=True)
+            return unit_templates
+        except Exception as e: 
+            if logger is not None: logger.error(f'Error loading templates via bypass:\n{e}')
+            else: print(f'Error loading templates via bypass:{e}')
     cleaned_sorting = waveformer.select_units(sorting, **qc_params)
     cleaned_sorting = si.remove_excess_spikes(cleaned_sorting, multirec) 
     cleaned_sorting.register_recording(multirec)

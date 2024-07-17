@@ -47,28 +47,29 @@ logger.addHandler(stream_handler)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s')
 stream_handler.setFormatter(formatter)
 
-def extract_raw_h5_filepaths(directories):
-    """
-    This function finds all files named 'data.raw.h5' in the given directories and their subdirectories.
+# def extract_raw_h5_filepaths(directories):
+#     """
+#     This function finds all files named 'data.raw.h5' in the given directories and their subdirectories.
 
-    Parameters:
-    directories: The list of directories to search for 'data.raw.h5' files.
+#     Parameters:
+#     directories: The list of directories to search for 'data.raw.h5' files.
 
-    Returns:
-    h5_dirs: The list of paths to the found 'data.raw.h5' files.
-    """
-    logger.info(f"Extracting .h5 file paths from directories:")
-    h5_dirs = []
-    for directory in directories:
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                if file == "data.raw.h5":
-                    h5_dirs.append(os.path.join(root, file))
-    return h5_dirs
+#     Returns:
+#     h5_dirs: The list of paths to the found 'data.raw.h5' files.
+#     """
+#     logger.info(f"Extracting .h5 file paths from directories:")
+#     h5_dirs = []
+#     for directory in directories:
+#         for root, dirs, files in os.walk(directory):
+#             for file in files:
+#                 if file == "data.raw.h5":
+#                     h5_dirs.append(os.path.join(root, file))
+#     return h5_dirs
 
 def extract_raw_h5_filepaths(h5_dir):
     #walk through the directory and find all .h5 files
     h5_subdirs = []
+    if h5_dir.endswith('.h5'): return [h5_dir]
     for root, dirs, files in os.walk(h5_dir): 
         for file in files:
             if file.endswith('.h5'):

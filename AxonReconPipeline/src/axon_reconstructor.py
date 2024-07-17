@@ -8,6 +8,12 @@ import lib_waveform_functions as waveformer
 import lib_template_functions as templater
 import lib_axon_velocity_functions as axoner
 import spikeinterface.full as si
+
+#import pickle
+import subprocess
+import json
+import numpy as np
+import dill
 import h5py
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -23,6 +29,7 @@ class AxonReconstructor:
         self.allowed_scan_types = allowed_scan_types
         self.stream_select = stream_select
         self.unit_limit = kwargs.get('unit_limit', None)
+        self.save_reconstructor_object = kwargs.get('save_reconstructor_object', False)
 
         self.debug_mode = kwargs.get('debug_mode', True)
         self.load_existing_sortings = kwargs.get('load_existing_sortings', True)
@@ -36,7 +43,8 @@ class AxonReconstructor:
         self.sortings_dir = kwargs.get('sortings_dir', './AxonReconPipeline/data/temp_data/sortings')
         self.waveforms_dir = kwargs.get('waveforms_dir', './AxonReconPipeline/data/temp_data/waveforms')
         self.templates_dir = kwargs.get('templates_dir', './AxonReconPipeline/data/temp_data/templates')
-        self.recon_dir = kwargs.get('recon_dir', './AxonReconPipeline/data/temp_data/reconstructions')
+        self.recon_dir = kwargs.get('recon_dir', './AxonReconPipeline/data/reconstructions')
+        self.reconstructor_dir = kwargs.get('reconstructor_dir', './AxonReconPipeline/data/reconstructors')
 
         self.n_jobs = kwargs.get('n_jobs', 4)
         self.max_workers = kwargs.get('max_workers', 32)
@@ -46,12 +54,15 @@ class AxonReconstructor:
         self.te_params = self.get_te_params(kwargs)
         self.qc_params = self.get_qc_params(kwargs)
         self.av_params = self.get_av_params(kwargs)
+        self.reconstructor_save_options, self.reconstructor_load_options = self.get_reconstructor_options(kwargs)
 
         self.continuous_h5_file_info = None
         self.sorting_lists_by_scan = None
         self.waveforms = None
         self.templates = None
         self.reconstruction_results = None
+        self.requirements = None
+        self.git_version = None
 
         self.logger.debug("AxonReconstructor initialized with parameters: %s", self.__dict__)
 
@@ -109,11 +120,9 @@ class AxonReconstructor:
             'overwrite_tmp': False,
             'load_merged_templates': True,
             'save_merged_templates': True,
+            #'template_bypass': False,
         }
         default_params.update(kwargs.get('te_params', {}))
-        for key, value in default_params.items():
-            for k, v in kwargs.get('te_params', {}).items():
-                if k == key: default_params[key] = v
         return default_params
 
     def get_qc_params(self, kwargs):
@@ -137,15 +146,35 @@ class AxonReconstructor:
             'r2_threshold': 0.8
         }
         av_params.update(kwargs.get('av_params', {}))
-        for key, value in av_params.items():
-            for k, v in kwargs.get('av_params', {}).items():
-                if k == key: av_params[key] = v
         return av_params
+    
+    def get_reconstructor_options(self, kwargs):
+        reconstructor_save_options = {
+            'recordings': False,
+            'multirecordings': False,
+            'sortings': False,
+            'waveforms': False,
+            'templates': True,
+            'reconstructions': False
+        }
+        reconstructor_save_options.update(kwargs.get('reconstructor_save_options', {}))
+        reconstructor_load_options = {
+            'load_reconstructor': True,
+            'load_multirecs': True,
+            'load_sortings': True,
+            'load_wfs': True,
+            'load_templates': True,
+            'load_templates_bypass': False,
+            'restore_environment': False
+        }
+        reconstructor_load_options.update(kwargs.get('reconstructor_load_options', {}))
+        return reconstructor_save_options, reconstructor_load_options
 
     def load_recordings(self):
         self.logger.info("Loading continuous h5 files")
         
-        self.recordings = {}        
+        recordings = {}
+        self.reconstructor_id = None        
         for dir in self.h5_parent_dirs:
             h5_file_paths = MPL.extract_raw_h5_filepaths(dir)
             for h5_path in h5_file_paths:
@@ -156,7 +185,8 @@ class AxonReconstructor:
                 scan_type = h5_details[0]['scanType']
                 if scan_type in self.sorting_params['allowed_scan_types']:
                     device, recording_segments, stream_count, rec_counts = MPL.load_recordings(h5_path, stream_select=self.stream_select, logger=self.logger)
-                    self.recordings[f"{date}_{chip_id}_{run_id}"] = {
+                    if self.reconstructor_id is None: self.reconstructor_id = f"{date}_{chip_id}_{run_id}" #TODO: This is a hacky way to set the reconstructor_id, need to fix such that there is one reconstructor per recording
+                    recordings[f"{date}_{chip_id}_{run_id}"] = {
                         'h5_path': h5_path,
                         'scanType': h5_details[0]['scanType'],
                         'date': date,
@@ -169,12 +199,29 @@ class AxonReconstructor:
                 }
 
         #self.logger.debug("Loaded continuous h5 files: %s", self.recordings)
-        self.logger.info("Completed loading continuous h5 files")
+        #try: self.recordings.update(recordings)
+        #except: self.recordings = recordings
+        self.recordings = recordings
+        self.logger.info("Completed loading .h5 files")
 
-    def concatenate_recordings(self):
+    def _validate_multirec(self, rec_key, stream_id, recording_segments):
+        assert self.reconstructor_load_options['load_multirecs'], 'Load multirecs option is set to False. Generating new multirecording.'
+        self.logger.info(f'Attempting to load multirec {rec_key} stream {stream_id}')
+        assert 'multirecordings' in self.__dict__, "No multirecordings found in reconstructor. Generating new multirecording."
+        #assert self.multirecordings, "No multirecordings found in reconstructor. Generating new multirecording." 
+        assert stream_id in self.multirecordings[rec_key]['streams'], f"No multirecordings found in reconstructor for {stream_id}. Generating new multirecording."
+        assert self.multirecordings[rec_key]['streams'][stream_id]['multirecording'], f"No multirecording found in reconstructor for {stream_id}. Generating new multirecording."
+        assert len(self.multirecordings[rec_key]['streams'][stream_id]['common_el'])>0, f"Empty common_el found in reconstructor for {stream_id}. Generating new multirecording."
+        #assert len(self.multirecordings[rec_key]['streams'][stream_id]['multirecording']) > 0, f"Empty multirecording found in reconstructor for {stream_id}. Generating new multirecordings."
+        self.logger.info(f"Success! Using exisiting multirecording from reconstructor object for {stream_id}. Skipping concatenation.")
+        return self.multirecordings[rec_key]['streams'][stream_id]
+    
+    def concatenate_recordings(self):        
         self.logger.info("Concatenating recordings")
-        self.multirecordings = {}
-        for recording in self.recordings.values():
+        multirecordings = {}
+        try: assert self.recordings, "No recordings found. Skipping concatenation."
+        except AssertionError as e: self.logger.error(e); return
+        for rec_key, recording in self.recordings.items():
             date = recording['date']
             chip_id = recording['chip_id']
             scanType = recording['scanType']
@@ -182,47 +229,87 @@ class AxonReconstructor:
             h5_path = recording['h5_path']
             h5 = h5py.File(h5_path)
             stream_ids = list(h5['wells'].keys())
-            if self.stream_select is not None: 
-                stream_ids = [stream_ids[self.stream_select]] if isinstance(stream_ids[self.stream_select], str) else stream_ids[self.stream_select]
+            if self.stream_select is not None: stream_ids = [stream_ids[self.stream_select]] if isinstance(stream_ids[self.stream_select], str) else stream_ids[self.stream_select]
             streams = {}
             for stream_id in stream_ids:
                 recording_segments = recording['streams'][stream_id]['recording_segments']
-                self.logger.info(f'Concatenating recording segments for {date}_{chip_id}_{run_id} stream {stream_id}')
-                multirecording, common_el, multirec_save_path = sorter.concatenate_recording_segments(
-                    h5_path, recording_segments, stream_id, save_dir=self.recordings_dir, logger=self.logger)  
-                streams[stream_id] = {
-                    'multirecording': multirecording,
-                    'common_el': common_el,
-                    'multirec_save_path': multirec_save_path
-                }    
-            self.multirecordings[f"{date}_{chip_id}_{run_id}"] = {
+
+                # Check if multirecording already exists in reconstructor object
+                try: 
+                    assert self.reconstructor_load_options['load_reconstructor'], 'Load reconstructor option from reconstructor is set to False. Concatenating new multirecording.'
+                    multirecording_dict = self._validate_multirec(rec_key, stream_id, recording_segments)
+                    streams[stream_id] = multirecording_dict
+                # If not, generate new multirecording
+                except AssertionError as e: 
+                    self.logger.warning(e)
+                    self.logger.info(f'Concatenating recording segments for {date}_{chip_id}_{run_id} stream {stream_id}')
+                    multirecording, common_el, multirec_save_path = sorter.concatenate_recording_segments(
+                        h5_path, recording_segments, stream_id, save_dir=self.recordings_dir, logger=self.logger)                     
+                    streams[stream_id] = {
+                        'multirecording': multirecording,
+                        'common_el': common_el,
+                        'multirec_save_path': multirec_save_path
+                    } 
+
+            multirecordings[f"{date}_{chip_id}_{run_id}"] = {
+                'h5_path': h5_path, 
                 'scanType': scanType,
                 'date': date,
                 'chip_id': chip_id,
                 'run_id': run_id,
                 'streams': streams
             }
+        #self.multirecordings = multirecordings
+        try: 
+            #self.multirecordings.update(multirecordings)
+            self.update_nested_dict(self.multirecordings, multirecordings)
+        except: self.multirecordings = multirecordings
         self.logger.info("Completed concatenation of recordings")
+    
+    def _validate_sort(self, rec_key, stream_id, streams):
+        assert self.reconstructor_load_options['load_sortings'], 'Load existing sortings option is set to False. Generating new sorting.'
+        self.logger.info(f'Attempting to load sorting {rec_key} stream {stream_id}')
+        assert 'sortings' in self.__dict__, "No sortings found in reconstructor. Generating new sorting."
+        #assert self.sortings, "No sortings found in reconstructor. Generating new sorting." 
+        assert stream_id in self.sortings[rec_key]['streams'], f"No sortings found in reconstructor for {stream_id}. Generating new sorting."
+        assert self.sortings[rec_key]['streams'][stream_id]['sorting'], f"No sorting found in reconstructor for {stream_id}. Generating new sorting."
+        assert os.path.exists(self.sortings[rec_key]['streams'][stream_id]['sorting_path']+'/sorter_output'), f"Sorting path not found for {stream_id}. Generating new sorting."
+        self.logger.info(f"Success! Using exisiting sorting from reconstructor object for {stream_id}. Skipping spike sorting.")
+        return self.sortings[rec_key]['streams'][stream_id]
     
     def spikesort_recordings(self):
         self.logger.info("Starting spike sorting process")
-        self.sortings = {} 
-        for multirec in self.multirecordings.values():
+        sortings = {}
+        try: assert self.multirecordings, "No multirecordings found. Skipping spike sorting." 
+        except AssertionError as e: self.logger.error(e); return 
+        for rec_key, multirec in self.multirecordings.items():
             date = multirec['date']
             chip_id = multirec['chip_id']
             scanType = multirec['scanType']
             run_id = multirec['run_id']
             self.logger.info(f'Generating spike sorting objects for {date}_{chip_id}_{run_id}')
+            spikesorting_root = os.path.join(self.sorting_params['sortings_dir'], f'{date}/{chip_id}/{scanType}/{run_id}')
             streams = {}
             for stream_id, stream in multirec['streams'].items():
-                mr = stream['multirecording']
-                spikesorting_root = os.path.join(self.sorting_params['sortings_dir'], f'{date}/{chip_id}/{scanType}/{run_id}')
-                sorting, stream_sort_path = sorter.sort_multirecording(mr, stream_id, save_root=spikesorting_root, sorting_params=self.sorting_params, logger=self.logger)
-                streams[stream_id] = {
-                    'sorting_path': stream_sort_path,
-                    'sorting': sorting
-                } 
-            self.sortings[f"{date}_{chip_id}_{run_id}"] = {
+                if self.stream_select is not None and stream_id != 'well{:03}'.format(self.stream_select): continue
+
+                # Check if sorting already exists in reconstructor object
+                try:
+                    assert self.reconstructor_load_options['load_reconstructor'], 'Load existing sortings option from reconstructor is set to False. Generating new sorting.'
+                    sorting_dict = self._validate_sort(rec_key, stream_id, multirec['streams'])
+                    streams[stream_id] = sorting_dict
+                # If not, generate new sorting
+                except AssertionError as e:
+                    self.logger.warning(e)
+                    self.logger.info(f'Spike sorting stream {stream_id}')
+                    mr = stream['multirecording']                    
+                    sorting, stream_sort_path = sorter.sort_multirecording(mr, stream_id, save_root=spikesorting_root, sorting_params=self.sorting_params, logger=self.logger)
+                    streams[stream_id] = {
+                        'sorting_path': stream_sort_path,
+                        'sorting': sorting
+                    }
+
+            sortings[f"{date}_{chip_id}_{run_id}"] = {
                 'scanType': scanType,
                 'date': date,
                 'chip_id': chip_id,
@@ -230,30 +317,60 @@ class AxonReconstructor:
                 'spiksorting_root': spikesorting_root,
                 'streams': streams
             }
+        try: 
+            #self.sortings.update(sortings)
+            self.update_nested_dict(self.sortings, sortings)
+        except: self.sortings = sortings
         self.logger.debug("Completed spike sorting")
 
-    def extract_waveforms(self):
-        self.waveforms = {}
+    def _validate_wf(self, rec_key, stream_id, sorting):
+        assert self.reconstructor_load_options['load_wfs'], 'Load existing waveforms option is set to False. Generating new waveforms.'
+        self.logger.info(f'Attempting to load waveforms {rec_key} stream {stream_id}')
+        assert 'waveforms' in self.__dict__, "No waveforms found in reconstructor. Generating new waveforms."
+        #assert self.waveforms, "No waveforms found in reconstructor. Generating new waveforms." 
+        assert stream_id in self.waveforms[rec_key]['streams'], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
+        assert self.waveforms[rec_key]['streams'][stream_id], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
+        for rec_name, waveform_seg in self.waveforms[rec_key]['streams'][stream_id].items():
+            assert os.path.exists(self.waveforms[rec_key]['streams'][stream_id][rec_name]['path']), f"Waveform path not found for {stream_id}, segment {rec_name}. Generating new waveforms as needed."
+        self.logger.info(f"Success! Using exisiting waveforms from reconstructor object for {stream_id}. Skipping waveform extraction.")
+        return self.waveforms[rec_key]['streams'][stream_id]
+    
+    def extract_waveforms(self):    
+        waveforms = {}
         self.logger.info("Extracting waveforms")
+        try: assert self.sortings, "No sortings found. Skipping waveform extraction."
+        except AssertionError as e: self.logger.error(e); return
         for key, sorting in self.sortings.items():
             multirecs = self.multirecordings[key]
             streams = {}
             for stream_id, multirec in multirecs['streams'].items():
-                mr = multirec['multirecording']
-                sort = sorting['streams'][stream_id]['sorting']
-                cleaned_sorting = waveformer.select_units(sort, **self.qc_params)
-                cleaned_sorting = si.remove_excess_spikes(cleaned_sorting, mr) # Relevant if last spike time == recording_length
-                cleaned_sorting.register_recording(mr)
-                segment_sorting = si.SplitSegmentSorting(cleaned_sorting, mr)
-                self.logger.info(f'Extracting waveforms from stream: {stream_id}')
-                h5_path = self.recordings[key]['h5_path']
-                waveforms = waveformer.extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=self.waveforms_dir, logger=self.logger, te_params = self.te_params) # TODO: make distinct wf_params
-                streams[stream_id] = waveforms
+                
+                # Check if waveforms already exist in reconstructor object
+                try:
+                    assert self.reconstructor_load_options['load_reconstructor'], 'Load existing waveforms option is set to False. Generating new waveforms.'
+                    stream_wfs = self._validate_wf(key, stream_id, sorting)
+                    streams[stream_id] = stream_wfs
+                except:
+                    mr = multirec['multirecording']
+                    sort = sorting['streams'][stream_id]['sorting']
+                    if sort is None: 
+                        self.logger.error(f"Sorting object not found for {key} stream {stream_id}. Skipping waveform extraction.")
+                        continue
+                    cleaned_sorting = waveformer.select_units(sort, **self.qc_params)
+                    cleaned_sorting = si.remove_excess_spikes(cleaned_sorting, mr) # Relevant if last spike time == recording_length
+                    cleaned_sorting.register_recording(mr)
+                    segment_sorting = si.SplitSegmentSorting(cleaned_sorting, mr)
+                    self.logger.info(f'Extracting waveforms from stream: {stream_id}')
+                    h5_path = self.recordings[key]['h5_path']
+                    stream_wfs = waveformer.extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=self.waveforms_dir, logger=self.logger, te_params = self.te_params) # TODO: make distinct wf_params
+                    streams[stream_id] = stream_wfs
+
                 if self.stream_select is not None:
                     formatted = 'well{:03}'.format(self.stream_select)
                     if stream_id == formatted:
                         break
-            self.waveforms[key] = {
+            waveforms[key] = {
+                'h5_path': multirecs['h5_path'],
                 'scanType': multirecs['scanType'],
                 'date': multirecs['date'],
                 'chip_id': multirecs['chip_id'],
@@ -261,60 +378,209 @@ class AxonReconstructor:
                 'waveforms_dir': self.waveforms_dir,
                 'streams': streams
             }
+        try: 
+            #self.waveforms.update(waveforms)
+            self.update_nested_dict(self.waveforms, waveforms)
+        except: self.waveforms = waveforms
         self.logger.info("Completed waveform extraction")
 
-    def extract_templates(self):
+    def _validate_templates(self, rec_key, stream_id, datum):
+        assert self.reconstructor_load_options['load_reconstructor'], 'Load existing templates option is set to False. Generating new templates.'
+        self.logger.info(f'Attempting to load templates {rec_key} stream {stream_id}')
+        assert 'templates' in self.__dict__, "No templates found in reconstructor. Generating new templates."
+        #assert self.templates, "No templates found in reconstructor. Generating new templates." 
+        assert stream_id in self.templates[rec_key]['streams'], f"No templates found in reconstructor for {stream_id}. Generating new templates."
+        assert self.templates[rec_key]['streams'][stream_id], f"No templates found in reconstructor for {stream_id}. Generating new templates."
+        unit_list = [unit for unit in self.templates[rec_key]['streams'][stream_id]['units'].keys()]
+        assert len(unit_list) > 0, f"No units found in reconstructor for {stream_id}. Generating new templates."
+        for unit, unit_template in self.templates[rec_key]['streams'][stream_id]['units'].items():
+            #assert templates are numpy arrays
+            assert isinstance(unit_template['merged_template'], np.ndarray), f"'merged_template' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+            assert isinstance(unit_template['merged_channel_loc'], np.ndarray), f"'merged_channel_loc' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+            assert isinstance(unit_template['merged_template_filled'], np.ndarray), f"'merged_template_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+            assert isinstance(unit_template['merged_channel_locs_filled'], np.ndarray), f"'merged_channel_locs_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+        self.logger.info(f"Success! Using exisiting templates from reconstructor object for {stream_id}. Skipping template extraction.")
+        return self.templates[rec_key]['streams'][stream_id]
+    
+    def extract_templates(self, template_bypass=False):
         self.logger.info("Extracting templates")
-        self.templates = {}
-        for key, waveforms in self.waveforms.items():
+        templates = {}
+        # if template_bypass: 
+        #     try: assert self.recordings, "No recordings found. Skipping template extraction."
+        #     except AssertionError as e: self.logger.error(e); return
+        #     data = self.recordings
+        # else: 
+        try: assert self.waveforms, "No waveforms found. Skipping template extraction."
+        except AssertionError as e: self.logger.error(e); return
+        data = self.waveforms
+        for key, datum in data.items():
             streams = {}
-            for stream_id, wfs in waveforms['streams'].items():
-                if self.stream_select is not None: 
-                    if stream_id != 'well{:03}'.format(self.stream_select): 
-                        continue
-                self.logger.info(f'Extracting templates from stream: {stream_id}')
-                h5_path = self.recordings[key]['h5_path']
-                sorting = self.sortings[key]['streams'][stream_id]['sorting']
-                multirec = self.multirecordings[key]['streams'][stream_id]['multirecording']
-                unit_templates = templater.extract_templates(
-                    multirec, sorting, wfs, h5_path, stream_id, save_root=self.templates_dir, 
-                    te_params=self.te_params, qc_params=self.qc_params, unit_limit=self.unit_limit, logger=self.logger)
-                streams[stream_id] = {'units': unit_templates}
-            self.templates[key] = {
-                'scanType': waveforms['scanType'],
-                'date': waveforms['date'],
-                'chip_id': waveforms['chip_id'],
-                'run_id': waveforms['run_id'],
+            for stream_id, wfs in datum['streams'].items():
+                if self.stream_select is not None and stream_id != 'well{:03}'.format(self.stream_select): continue
+
+                # Check if templates already exist in reconstructor object
+                try:
+                    assert self.reconstructor_load_options['load_reconstructor'], 'Load existing templates option from reconstructor is set to False. Generating new templates.'
+                    stream_templates = self._validate_templates(key, stream_id, datum)
+                    streams[stream_id] = stream_templates
+                except AssertionError as e:
+                    self.logger.warning(e)
+                    self.logger.info(f'Extracting templates from stream: {stream_id}')
+                    h5_path = self.recordings[key]['h5_path']
+                    if template_bypass: 
+                        sorting = None
+                        multirec = None
+                    else: 
+                        sorting = self.sortings[key]['streams'][stream_id]['sorting']
+                        multirec = self.multirecordings[key]['streams'][stream_id]['multirecording']
+                    unit_templates = templater.extract_templates(
+                        multirec, sorting, wfs, h5_path, stream_id, save_root=self.templates_dir, 
+                        te_params=self.te_params, qc_params=self.qc_params, unit_limit=self.unit_limit, 
+                        logger=self.logger, template_bypass=template_bypass)
+                    streams[stream_id] = {'units': unit_templates}
+            templates[key] = {
+                'h5_path': datum['h5_path'],
+                'scanType': datum['scanType'],
+                'date': datum['date'],
+                'chip_id': datum['chip_id'],
+                'run_id': datum['run_id'],
                 'templates_dir': self.templates_dir,
                 'streams': streams
             }
+        try: 
+            #self.templates.update(templates)
+            self.update_nested_dict(self.templates, templates)
+        except: self.templates = templates
         self.logger.debug("Completed template extraction")
 
-    def analyze_and_reconstruct(self):
+    def analyze_and_reconstruct(self, load_existing_templates=False):
         self.logger.info("Reconstructing Axonal Morphology")
-        
-        self.reconstruction_results = axoner.analyze_and_reconstruct(
+        try: assert self.templates, "No templates found. Skipping analysis and reconstruction."
+        except AssertionError as e: self.logger.error(e); return
+        axoner.analyze_and_reconstruct(
             self.templates,
             recon_dir=self.recon_dir,
             params=self.av_params,
             stream_select=self.stream_select,
-            n_jobs=self.n_jobs,
+            n_jobs=self.max_workers,
             logger=self.logger
         )
         self.logger.debug("Completed analysis and reconstruction")
+
+    def save_reconstructor(self):
+        # Ensure the directory exists
+        if not os.path.exists(self.reconstructor_dir):
+            os.makedirs(self.reconstructor_dir)
+
+        #reconstructor_id = f"{self.recordings['date']}_{self.recordings['chip_id']}_{self.recordings['run_id']}"
+        reconstructor_id = self.reconstructor_id
+        
+        self.logger.info("Saving reconstructor object streams")
+
+        # Capture pip requirements
+        self.requirements = subprocess.check_output(['pip', 'freeze']).decode().splitlines()
+
+        # Capture git version
+        self.git_version = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()
+
+        #Optionally remove excess data
+        if not self.reconstructor_save_options['recordings']: del self.recordings
+        if not self.reconstructor_save_options['multirecordings']: del self.multirecordings
+        if not self.reconstructor_save_options['sortings']: del self.sortings
+        if not self.reconstructor_save_options['waveforms']: del self.waveforms
+        if not self.reconstructor_save_options['templates']: del self.templates
+
+        # Save the entire object using dill        
+        dill_file_path = os.path.join(self.reconstructor_dir, f'{reconstructor_id}.dill')
+        with open(dill_file_path, 'wb') as f:
+            dill.dump(self, f)
+
+        self.logger.info(f"Reconstructor object saved to {dill_file_path}")
+
+    def update_nested_dict(self, target, source):
+        """
+        Recursively updates a nested dictionary `target` with values from `source`.
+        """
+        for key, value in source.items():
+            if isinstance(value, dict):
+                if target.get(key) is None:
+                    target[key] = {}
+                elif not isinstance(target[key], dict):
+                    raise AttributeError(f"Expected dict at target[{key}], but got {type(target[key])}")
+                self.update_nested_dict(target[key], value)
+            else:
+                target[key] = value
     
-    def run_pipeline(self):
+    def load_reconstructor(self):
+        self.logger.info("Loading reconstructor object")
+        dill_file_path = os.path.join(self.reconstructor_dir, f'{self.reconstructor_id}.dill')
+        with open(dill_file_path, 'rb') as f:
+            loaded_obj = dill.load(f)
+            
+            #Exclude certain runtime parameters
+            keys_to_delete = []
+            exclusions_key_words = ['switch', 'load', 'select']
+            for key, item in loaded_obj.__dict__.items():# ['switch', 'load']:
+                for word in exclusions_key_words:
+                    if word in key: keys_to_delete.append(key) #del loaded_obj.__dict__[key]
+            for key in keys_to_delete: del loaded_obj.__dict__[key]
+
+            #self.__dict__.update(loaded_obj.__dict__)
+            self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
+            if self.reconstructor_load_options['restore_environment']: self._restore_environment()
+            # self.concatenate_switch = False
+            # self.sort_switch = False
+            # self.waveform_switch = False
+            # self.template_switch = False
+
+        return self
+
+    def _restore_environment(self):
+        # Write the requirements to a file
+        requirements_file_path = os.path.join(self.reconstructor_dir, 'requirements.txt')
+        with open(requirements_file_path, 'w') as f:
+            f.write("\n".join(self.requirements))
+
+        # Reinstall the requirements
+        subprocess.run(['pip', 'install', '-r', requirements_file_path])
+
+        # Check out the specific git version
+        subprocess.run(['git', 'checkout', self.git_version])
+
+        self.logger.info("Environment and git version restored")
+
+    def bypass_to_templates(self):
+        self.logger.info("Attempting to bypass pipeline steps to template extraction")
+        assert self.reconstructor_load_options['load_reconstructor'], "Load reconstructor option is set to False. Cannot bypass to templates without reconstructor object."
+        try: 
+            self.extract_templates(template_bypass=True)
+            self.logger.info("Bypass to templates successful")
+            self.concatenate_switch = False
+            self.sort_switch = False
+            self.waveform_switch = False
+            self.template_switch = False
+        except Exception as e: self.logger.error(f"Error bypassing to templates: {e}. Continuing with pipeline execution as normal.")
+    
+    def run_pipeline(self, **kwargs):
+        # Pipeline switches
+        self.concatenate_switch = kwargs.get('concatenate_switch', True)
+        self.sort_switch = kwargs.get('sort_switch', True)
+        self.waveform_switch = kwargs.get('waveform_switch', True)
+        self.template_switch = kwargs.get('template_switch', True)
+        self.recon_switch = kwargs.get('recon_switch', True)
+
+        #Pipeline steps
         self.logger.info("Starting pipeline execution")        
         self.load_recordings()
-        self.concatenate_recordings()
-        self.spikesort_recordings()
-        self.extract_waveforms()
-        self.extract_templates()        
-        self.analyze_and_reconstruct()
-
-        if self.run_lean:
-            self.clean_up()
-
+        if self.reconstructor_load_options['load_reconstructor']: self.load_reconstructor()
+        if self.reconstructor_load_options['load_templates_bypass']: self.bypass_to_templates() #Useful if sorting and waveform temp data have been delteted but templates are still available
+        if self.concatenate_switch: self.concatenate_recordings()
+        if self.sort_switch: self.spikesort_recordings()
+        if self.waveform_switch: self.extract_waveforms()
+        if self.template_switch: self.extract_templates()        
+        if self.recon_switch: self.analyze_and_reconstruct()
+        if self.save_reconstructor_object: self.save_reconstructor() #TODO: Finish implementing this
+        if self.run_lean: self.clean_up()
         self.logger.info("Pipeline execution completed")
 
     def clean_up(self):

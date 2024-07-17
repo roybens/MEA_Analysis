@@ -51,26 +51,35 @@ def extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=None, 
         with h5py.File(h5_path, 'r') as h5:
             rec_names = list(h5['wells'][stream_id].keys())
             wf_paths = [os.path.join(save_root, f'waveforms/{date}/{chip_id}/{scanType}/{run_id}/{stream_id}/seg{sel_idx}') for sel_idx in range(len(rec_names))]
+            seg_sorts = []
+            logger.info(f'Extracting waveforms for stream {stream_id}')
+            for sel_idx, wf_path in enumerate(wf_paths):
+                try: seg_sorts.append((wf_path, si.SelectSegmentSorting(segment_sorting, sel_idx)))
+                except: pass #deal with erroneus recording segments
 
             if not overwrite_wf:
                 if logger is not None: logger.info(f'Loading waveforms for stream {stream_id}')
                 with ThreadPoolExecutor(max_workers=n_jobs) as executor:
-                    try:
-                        futures = {executor.submit(load_waveforms, wf_path, si.SelectSegmentSorting(segment_sorting, sel_idx)): sel_idx for sel_idx, wf_path in enumerate(wf_paths)}
-                        for future in futures:
-                            sel_idx = futures[future]
-                            try:
-                                wf_path, seg_we = future.result()
-                                if seg_we is not None:
-                                    segment_waveforms[rec_names[sel_idx]] = {'path': wf_path, 'waveforms': seg_we}
-                            except Exception as e:
-                                if logger is not None: logger.error(f"Error loading waveforms for segment {sel_idx}: {e}")
-                    except Exception as e:
-                        if logger is not None: logger.error(f"Error loading waveforms: {e}")
+                    futures = {executor.submit(load_waveforms, seg_sort[0], seg_sort[1]): sel_idx for sel_idx, seg_sort in enumerate(seg_sorts)}
+
+                try:
+                    for future in futures:
+                        sel_idx = futures[future]
+                        try:
+                            wf_path, seg_we = future.result()
+                            if seg_we is not None:
+                                segment_waveforms[rec_names[sel_idx]] = {'path': wf_path, 'waveforms': seg_we}
+                        except Exception as e:
+                            if logger is not None: logger.error(f"Error loading waveforms for segment {sel_idx}: {e}")
+                except Exception as e:
+                    if 'Waveform folder does not exist' in str(e):
+                        if logger is not None: logger.warning(f'Waveform folder does not exist, extracting waveforms')
+                        else: print(f'Waveform folder does not exist, extracting waveforms')
+                    if logger is not None: logger.error(f"Error loading waveforms: {e}")
+                    else: print(f"Error loading waveforms: {e}")
 
             for sel_idx, rec_name in enumerate(rec_names):
-                if rec_name in segment_waveforms:
-                    continue
+                if rec_name in segment_waveforms: continue
                 wf_path = wf_paths[sel_idx]
                 try:
                     rec = si.MaxwellRecordingExtractor(h5_path, stream_id=stream_id, rec_name=rec_name)
@@ -85,7 +94,8 @@ def extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=None, 
                 seg_sort.register_recording(rec_centered)
 
                 if not os.path.exists(wf_path) or overwrite_wf:
-                    if logger is not None: logger.info(f'Extracting waveforms to {wf_path}')
+                    if logger is not None: logger.info(f'Extracting waveforms to {wf_path}, n_jobs={n_jobs}')
+                    else: print(f'Extracting waveforms to {wf_path}, n_jobs={n_jobs}')
                     os.makedirs(wf_path, exist_ok=True)
                     seg_we = si.WaveformExtractor.create(rec_centered, seg_sort, wf_path, allow_unfiltered=True, remove_if_exists=True)
                     seg_we.set_params(ms_before=cutout[0], ms_after=cutout[1], return_scaled=True)
