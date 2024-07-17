@@ -7,7 +7,7 @@ IPNAnalysis/Sorting_Intermediate_files/*
 IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
-#AxonReconPipeline/data/temp_data/*
+AxonReconPipeline/data*
 AxonReconPipeline/data/temp_data/recordings/*
 AxonReconPipeline/data/temp_data/sortings/*
 AxonReconPipeline/data/temp_data/waveforms/*
