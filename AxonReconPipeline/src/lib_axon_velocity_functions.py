@@ -191,6 +191,7 @@ def generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id, fresh_plots
 def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, recon_dir):
     df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, "channel_density": channel_density})
     recon_dir_parent = os.path.dirname(recon_dir)
+    if not os.path.exists(recon_dir_parent): os.makedirs(recon_dir_parent)
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics.csv", index=False)
 
 def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, logger=None):

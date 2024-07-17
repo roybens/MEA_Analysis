@@ -190,3 +190,14 @@ def isexists_folder_not_empty(folder_path):
 
     # If the folder is not empty, return True
     return len(items) > 0
+def get_list_of_h5_files(h5_parent_dirs, **kwargs):
+    
+    # walk through h5_parent_dirs, get all .h5 files make a list
+    #mport os
+    h5_files = []
+    for h5_parent_dir in h5_parent_dirs:
+        for root, dirs, files in os.walk(h5_parent_dir):
+            for file in files:
+                if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root:
+                    h5_files.append(os.path.join(root, file))
+    return h5_files

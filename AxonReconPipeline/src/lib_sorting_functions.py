@@ -43,8 +43,6 @@ def find_common_electrodes(rec_path, stream_id, n_jobs=4, max_workers=24, logger
     return rec_names, list(common_el)
 
 def concatenate_recording_segments(h5_path, recording_segments, stream_id=None, save_dir=None, n_jobs=4, max_workers=24, logger=None):
-    if logger:
-        logger.info(f"Concatenating recording segments for {h5_path}, stream {stream_id}")
     
     rec_names, common_el = find_common_electrodes(h5_path, stream_id, n_jobs, max_workers, logger=logger)
     multirec_name = f'{stream_id}_multirecording'
@@ -69,6 +67,8 @@ def concatenate_recording_segments(h5_path, recording_segments, stream_id=None, 
                 logger.error(e)
             return None
 
+    if logger: logger.info(f"Concatenating recording segments for {h5_path}, stream {stream_id}")
+    else: print(f"Concatenating recording segments for {h5_path}, stream {stream_id}")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         rec_list = list(executor.map(process_rec_name, recording_segments))
     
