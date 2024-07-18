@@ -8,6 +8,7 @@ IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
 <<<<<<< HEAD
+<<<<<<< HEAD
 AxonReconPipeline/data/*
 =======
 AxonReconPipeline/data*
@@ -17,13 +18,20 @@ AxonReconPipeline/data/temp_data/waveforms/*
 AxonReconPipeline/data/temp_data/templates/*
 #AxonReconPipeline/data/temp_data/reconstructions/*
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+AxonReconPipeline/data/*
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
 **.mat
 .vscode
 **.pkl
 slurm*.out
 **.png
 **.npz
+<<<<<<< HEAD
 **.zip
 **.log
 *.out
 *.log
+=======
+**.zip
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)

@@ -50,9 +50,13 @@ def process_template_segment(sel_unit_id, rec_name, waveforms, save_root, sel_id
 def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger):
     
     # Get the waveform extractor object
+<<<<<<< HEAD
     try: 
         seg_we = waveforms[rec_name]['waveforms']
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+    try: seg_we = waveforms[rec_name]['waveforms']
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
     except KeyError: 
         if logger is not None: logger.error(f'{rec_name} does not exist')
         else: print(f'{rec_name} does not exist')
@@ -60,6 +64,7 @@ def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logge
     
     # Get the template for the selected unit
     try: template = seg_we.get_template(sel_unit_id)
+<<<<<<< HEAD
 <<<<<<< HEAD
     except Exception as e: 
         if logger is not None: logger.error(f'Could not get templates for {sel_unit_id} in {rec_name}: {e}')
@@ -69,6 +74,11 @@ def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logge
         if logger is not None: logger.error(f'Could not get templates for {sel_unit_id} in {rec_name}')
         else: print(f'Could not get templates for {sel_unit_id} in {rec_name}')
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+    except Exception as e: 
+        if logger is not None: logger.error(f'Could not get templates for {sel_unit_id} in {rec_name}: {e}')
+        else: print(f'Could not get templates for {sel_unit_id} in {rec_name}: {e}')
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
         return None, None
     
     # Check if the template is empty
@@ -79,10 +89,15 @@ def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logge
     
     # Get the channel locations
 <<<<<<< HEAD
+<<<<<<< HEAD
     # if '14' in rec_name:
     #     print()
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+    # if '14' in rec_name:
+    #     print()
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
     locs = seg_we.get_channel_locations()
     dir_path = os.path.join(save_root, 'template_segments')
     file_name = f'seg{sel_idx}_unit{sel_unit_id}.npy'
@@ -115,6 +130,9 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
         for future in as_completed(futures):
             
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
             try:
                 template_result, loc_result = future.result()
                 if template_result and loc_result:
@@ -128,6 +146,7 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
                 if logger is not None: logger.error(f'Error processing unit {sel_unit_id} in segment {rec_name_l}: {e}')
                 else: print(f'Error processing unit {sel_unit_id} in segment {rec_name_l}: {e}')
                 continue
+<<<<<<< HEAD
                 #debug
                 #break
 
@@ -143,6 +162,8 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
                 channel_locations[rec_name_l] = loc_data
                 if logger is not None: logger.debug(f'Processed segment {rec_name_t} for unit {sel_unit_id}')
                 else: print(f'Processed segment {rec_name_t} for unit {sel_unit_id}')
+=======
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
                 #debug
                 #break
 
@@ -187,8 +208,9 @@ def fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_
         new_array[:t.shape[0]] = t
         new_merged_templates[-1][l] = new_array
 
-    num_samples = new_merged_templates[-1][0].shape[0]
-    new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_samples, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
+    num_channels = new_merged_templates[-1][0].shape[0]
+    num_samples = len(merged_templates[-1])
+    new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * num_samples, dtype='float32')]
     for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
         for channel_idx, count_num in enumerate(merged_count_at_channel_by_sample[-1][sample_idx]):
             new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num
@@ -240,9 +262,9 @@ def merge_templates(templates, channel_locations, logger=None):
             merged_templates.append(templates[i])
             merged_channel_loc.append(channel_loc)
             test_channel_measure += len(channel_loc)
-            num_samples = merged_templates[-1][0].shape[0]
-            merged_count_at_channel_by_sample = [np.array([np.zeros(num_samples, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-            new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_samples, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
+            num_channels = merged_templates[-1][0].shape[0]
+            merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
+            new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
             for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
                 for channel_idx, count_num in enumerate(merged_count_at_channel_by_sample[-1][sample_idx]):
                     new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num + 1
@@ -284,16 +306,12 @@ def merge_templates(templates, channel_locations, logger=None):
                 assert np.array_equal(channels_already_merged[idx], merging_channels_ordered[idx]), "Matching channels are not the same."
             shared_ordered_channels = merging_channels_ordered                   
            
-            if logger is not None:
-                logger.debug(f'Processing {len(channels_already_merged)} matching channels')
-            else:
-                print(f'Processing {len(channels_already_merged)} matching channels')
+            if logger is not None: logger.debug(f'Processing {len(channels_already_merged)} matching channels')
+            else: print(f'Processing {len(channels_already_merged)} matching channels')
                 
             if idx_existing_channels_in_overlap or idx_incoming_channels_in_overlap:               
-                if logger is not None:
-                    logger.debug(f'Processing matching channels across footprints, template {i+1}/{len(templates)}...')
-                else:
-                    print(f'Processing matching channels across footprints, template {i+1}/{len(templates)}...')     
+                if logger is not None: logger.debug(f'Processing matching channels across footprints, template {i+1}/{len(templates)}...')
+                else: print(f'Processing matching channels across footprints, template {i+1}/{len(templates)}...')     
                     
                 merged_sample_at_channel = merged_templates[-1][:, idx_existing_channels_in_overlap]
                 sample_to_be_merged = incoming_template[:, idx_incoming_channels_in_overlap]
@@ -311,10 +329,8 @@ def merge_templates(templates, channel_locations, logger=None):
                 merged_count_at_channel_by_sample[-1][:, idx_existing_channels_in_overlap] = total_samples_at_channel
                         
             if idx_new_incoming_channels:         
-                if logger is not None:
-                    logger.debug(f'Processing {len(idx_new_incoming_channels)} non-matching channels')
-                else:
-                    print(f'Processing {len(idx_new_incoming_channels)} non-matching channels')
+                if logger is not None: logger.debug(f'Processing {len(idx_new_incoming_channels)} non-matching channels')
+                else: print(f'Processing {len(idx_new_incoming_channels)} non-matching channels')
                     
                 new_size = merged_templates[-1][0].shape[0] + len(idx_new_incoming_channels)
                 new_merged_templates = [np.array([np.zeros(new_size, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
@@ -323,8 +339,8 @@ def merge_templates(templates, channel_locations, logger=None):
                     new_array[:t.shape[0]] = t
                     new_merged_templates[-1][l] = new_array
 
-                num_samples = new_merged_templates[-1][0].shape[0]
-                new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_samples, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
+                num_channels = new_merged_templates[-1][0].shape[0]
+                new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
                 for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
                     for channel_idx, count_num in enumerate(merged_count_at_channel_by_sample[-1][sample_idx]):
                         new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num
