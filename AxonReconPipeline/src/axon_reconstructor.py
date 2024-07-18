@@ -87,6 +87,7 @@ class AxonReconstructor:
         log_file = self.log_file
         error_log_file = self.error_log_file
         logger = logging.getLogger('axon_reconstructor')
+<<<<<<< HEAD
 
         # Remove all existing handlers
         for handler in logger.handlers[:]:
@@ -144,6 +145,21 @@ class AxonReconstructor:
         logger.error('This is an error message')
         logger.critical('This is a critical message')
         
+=======
+        if not logger.handlers:
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
+            logger.setLevel(logger_level.upper())        
+            stream_handler = logging.StreamHandler()
+            stream_handler.setLevel(logger_level.upper())
+            stream_handler.setFormatter(formatter)        
+            logger.addHandler(stream_handler)
+            logger.info("Logger initialized with level: %s", logger_level)
+            logger.debug('This is a debug message')
+            logger.info('This is an info message')
+            logger.warning('This is a warning message')
+            logger.error('This is an error message')
+            logger.critical('This is a critical message')
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
         return logger
 
     def get_sorting_params(self, kwargs):
@@ -315,9 +331,13 @@ class AxonReconstructor:
         assert 'multirecordings' in self.__dict__, "No multirecordings found in reconstructor. Generating new multirecording."
         #assert self.multirecordings, "No multirecordings found in reconstructor. Generating new multirecording." 
 <<<<<<< HEAD
+<<<<<<< HEAD
         assert self.multirecordings is not None, "No multirecordings found in reconstructor. Generating new multirecording."
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        assert self.multirecordings is not None, "No multirecordings found in reconstructor. Generating new multirecording."
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
         assert stream_id in self.multirecordings[rec_key]['streams'], f"No multirecordings found in reconstructor for {stream_id}. Generating new multirecording."
         assert self.multirecordings[rec_key]['streams'][stream_id]['multirecording'], f"No multirecording found in reconstructor for {stream_id}. Generating new multirecording."
         assert len(self.multirecordings[rec_key]['streams'][stream_id]['common_el'])>0, f"Empty common_el found in reconstructor for {stream_id}. Generating new multirecording."
@@ -381,9 +401,13 @@ class AxonReconstructor:
         assert 'sortings' in self.__dict__, "No sortings found in reconstructor. Generating new sorting."
         #assert self.sortings, "No sortings found in reconstructor. Generating new sorting." 
 <<<<<<< HEAD
+<<<<<<< HEAD
         assert self.sortings is not None, "No sortings found in reconstructor. Generating new sorting."
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        assert self.sortings is not None, "No sortings found in reconstructor. Generating new sorting."
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
         assert stream_id in self.sortings[rec_key]['streams'], f"No sortings found in reconstructor for {stream_id}. Generating new sorting."
         assert self.sortings[rec_key]['streams'][stream_id]['sorting'], f"No sorting found in reconstructor for {stream_id}. Generating new sorting."
         assert os.path.exists(self.sortings[rec_key]['streams'][stream_id]['sorting_path']+'/sorter_output'), f"Sorting path not found for {stream_id}. Generating new sorting."
@@ -464,6 +488,9 @@ class AxonReconstructor:
         assert 'waveforms' in self.__dict__, "No waveforms found in reconstructor. Generating new waveforms."
         #assert self.waveforms, "No waveforms found in reconstructor. Generating new waveforms." 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
         assert self.waveforms is not None, "No waveforms found in reconstructor. Generating new waveforms."
         assert stream_id in self.waveforms[rec_key]['streams'], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
         assert self.waveforms[rec_key]['streams'][stream_id], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
@@ -539,7 +566,11 @@ class AxonReconstructor:
         self.logger.info(f'Attempting to load templates {rec_key} stream {stream_id}')
         assert 'templates' in self.__dict__, "No templates found in reconstructor. Generating new templates."
         #assert self.templates, "No templates found in reconstructor. Generating new templates." 
+<<<<<<< HEAD
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        assert self.templates is not None, "No templates found in reconstructor. Generating new templates."
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
         assert stream_id in self.templates[rec_key]['streams'], f"No templates found in reconstructor for {stream_id}. Generating new templates."
         assert self.templates[rec_key]['streams'][stream_id], f"No templates found in reconstructor for {stream_id}. Generating new templates."
         unit_list = [unit for unit in self.templates[rec_key]['streams'][stream_id]['units'].keys()]
@@ -749,24 +780,28 @@ class AxonReconstructor:
                     self.reconstructor_load_options['load_reconstructor'] = False
 =======
         dill_file_path = os.path.join(self.reconstructor_dir, f'{self.reconstructor_id}.dill')
-        with open(dill_file_path, 'rb') as f:
-            loaded_obj = dill.load(f)
-            
-            #Exclude certain runtime parameters
-            keys_to_delete = []
-            exclusions_key_words = ['switch', 'load', 'select']
-            for key, item in loaded_obj.__dict__.items():# ['switch', 'load']:
-                for word in exclusions_key_words:
-                    if word in key: keys_to_delete.append(key) #del loaded_obj.__dict__[key]
-            for key in keys_to_delete: del loaded_obj.__dict__[key]
+        try:
+            with open(dill_file_path, 'rb') as f:
+                loaded_obj = dill.load(f)
+                
+                #Exclude certain runtime parameters
+                keys_to_delete = []
+                exclusions_key_words = ['switch', 'load', 'select']
+                for key, item in loaded_obj.__dict__.items():# ['switch', 'load']:
+                    for word in exclusions_key_words:
+                        if word in key: keys_to_delete.append(key) #del loaded_obj.__dict__[key]
+                for key in keys_to_delete: del loaded_obj.__dict__[key]
 
-            #self.__dict__.update(loaded_obj.__dict__)
-            self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
-            if self.reconstructor_load_options['restore_environment']: self._restore_environment()
-            # self.concatenate_switch = False
-            # self.sort_switch = False
-            # self.waveform_switch = False
-            # self.template_switch = False
+                #self.__dict__.update(loaded_obj.__dict__)
+                self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
+                if self.reconstructor_load_options['restore_environment']: self._restore_environment()
+                # self.concatenate_switch = False
+                # self.sort_switch = False
+                # self.waveform_switch = False
+                # self.template_switch = False
+        except Exception as e: 
+            self.logger.error(f"Error loading reconstructor object: {e}")       
+            self.reconstructor_load_options['load_reconstructor'] = False
 
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
         return self
