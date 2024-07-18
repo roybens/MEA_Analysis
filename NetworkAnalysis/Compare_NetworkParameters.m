@@ -5,7 +5,7 @@ p.addRequired('fileDir');
 p.addRequired('refDir');
 p.addRequired('outDir');
 p.addRequired('parameter');
-p.addParameter('BaseParameters', [0.3, 0.1, 1.0, 1.2, false, 0.3]);
+p.addParameter('BaseParameters', {0.3, 0.1, 1.0, 1.2, 'Fixed', 0.3,1.0});
 p.addParameter('VarParameter', [0, 0.2, 2]);
 p.addParameter('Assay', 'today')
 
@@ -23,18 +23,18 @@ mkdir(opDir);
 plotFig =1;
 % set base parameters
 % set Gaussian kernel standard deviation [s] (smoothing window)
-gaussianSigma_opt = args.BaseParameters(1);
+gaussianSigma_opt = args.BaseParameters{1};
 % set histogram bin size [s]
-binSize_opt = args.BaseParameters(2);
+binSize_opt = args.BaseParameters{2};
 % set minimum peak distance [s]
-minPeakDistance_opt = args.BaseParameters(3);
+minPeakDistance_opt = args.BaseParameters{3};
 % set burst detection threshold [rms firing rate]
-thresholdBurst_opt = args.BaseParameters(4);
+thresholdBurst_opt = args.BaseParameters{4};
 % set fixed threshold;
-use_fixed_threshold = args.BaseParameters(5);
+threshold_fn = args.BaseParameters{5};
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
-thresholdStartStop = args.BaseParameters(6);
-
+thresholdStartStop = args.BaseParameters{6};
+minPeakProminence_opt = args.BaseParameters{7};
 
 % Set parameter start, increment, and end values
 parameter_start = args.VarParameter(1);
@@ -46,11 +46,7 @@ parameter_end = args.VarParameter(3);
 % set output plot x-axis increment
 plot_inc = (parameter_end - parameter_start)*.1;
 
-% Set Threshold function for later use
-threshold_fn = 'Threshold';
-if use_fixed_threshold
-    threshold_fn = 'FixedThreshold';
-end
+
 
 % extract wt/het ChipIDs from reference sheet
 T = readtable(refDir);
@@ -71,8 +67,8 @@ error_l = [];
 
 % extract run ids based on the desired assay type
 %to do: check if only for network today/best it needs to be done.
-assay_T = T(contains(T.(3),'network today',IgnoreCase=true) & contains(T.(3), args.Assay, IgnoreCase=true),:);
-asssy_runIDs = unique(assay_T.(4)).';
+assay_T = T(contains(T.("Assay"),'network today',IgnoreCase=true) & contains(T.("Assay"), args.Assay, IgnoreCase=true),:);
+asssy_runIDs = unique(assay_T.("Run_")).';
 
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '**/Network/**/*raw.h5'); 
@@ -148,23 +144,31 @@ for f = 1 : length(theFiles)
             % compute network according to desired parameter to compare
             if strcmp(parameter, 'Gaussian')
                 networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', k);
-                networkStats_opt =computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', minPeakDistance_opt);
+                %networkStats_opt =computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', minPeakDistance_opt);
+                networkStats_opt = computeNetworkStatsModified(networkAct_opt.firingRate,networkAct_opt.time, 'ThresholdMethod',threshold_fn,'Threshold', thresholdBurst_opt, 'MinPeakProminence', minPeakProminence_opt,'MinPeakDistance', minPeakDistance_opt);
             elseif strcmp(parameter, 'BinSize')
                 networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', k,'GaussianSigma', gaussianSigma_opt);
-                networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', minPeakDistance_opt);
+                %networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', minPeakDistance_opt);
+                networkStats_opt = computeNetworkStatsModified(networkAct_opt.firingRate,networkAct_opt.time, 'ThresholdMethod',threshold_fn,'Threshold', thresholdBurst_opt, 'MinPeakProminence', minPeakProminence_opt,'MinPeakDistance', minPeakDistance_opt);
             elseif strcmp(parameter, 'Threshold')
                 networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', gaussianSigma_opt);
-                networkStats_opt = computeNetworkStats_JL(networkAct_opt, 'Threshold', k, 'MinPeakDistance', minPeakDistance_opt);
-            elseif strcmp(parameter, 'FixedThreshold')
-                networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', gaussianSigma_opt);
-                networkStats_opt = computeNetworkStats_JL(networkAct_opt, 'FixedThreshold', k, 'MinPeakDistance', minPeakDistance_opt);
+                %networkStats_opt = computeNetworkStats_JL(networkAct_opt, 'Threshold', k, 'MinPeakDistance', minPeakDistance_opt);
+                networkStats_opt = computeNetworkStatsModified(networkAct_opt.firingRate,networkAct_opt.time, 'ThresholdMethod',threshold_fn,'Threshold', k, 'MinPeakProminence', minPeakProminence_opt,'MinPeakDistance', minPeakDistance_opt);
+            
             elseif strcmp(parameter, 'StartStopThreshold')
                 networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', gaussianSigma_opt);
-                networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', minPeakDistance_opt);
+                %networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', minPeakDistance_opt);
+                networkStats_opt = computeNetworkStatsModified(networkAct_opt.firingRate,networkAct_opt.time, 'ThresholdMethod',threshold_fn,'Threshold', thresholdBurst_opt, 'MinPeakProminence', minPeakProminence_opt,'MinPeakDistance', minPeakDistance_opt);
                 thresholdStartStop = k;
             elseif strcmp(parameter, 'MinPeakDistance')
                 networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', gaussianSigma_opt);
-                networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', k);
+                %networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', k);
+                networkStats_opt = computeNetworkStatsModified(networkAct_opt.firingRate,networkAct_opt.time, 'ThresholdMethod',threshold_fn,'Threshold', thresholdBurst_opt, 'MinPeakProminence', minPeakProminence_opt,'MinPeakDistance', k);
+            elseif strcmp(parameter, 'MinPeakProminence')
+                networkAct_opt = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize_opt,'GaussianSigma', gaussianSigma_opt);
+                %networkStats_opt = computeNetworkStats_JL(networkAct_opt, threshold_fn, thresholdBurst_opt, 'MinPeakDistance', k);
+                networkStats_opt = computeNetworkStatsModified(networkAct_opt.firingRate,networkAct_opt.time, 'ThresholdMethod',threshold_fn,'Threshold', thresholdBurst_opt, 'MinPeakProminence', k,'MinPeakDistance', minPeakDistance_opt);
+            
             end
     
             %{
@@ -296,6 +300,9 @@ elseif strcmp(parameter, 'StartStopThreshold')
     plot_x_title = 'Start-Stop Threshold';
 elseif strcmp(parameter, 'MinPeakDistance')
     plot_x_title = 'Min Peak Distance';
+
+elseif strcmp(parameter,'MinPeakProminence')
+   plot_x_title = 'Min Peak Prominence';
 end
 
 IBI_max = 0;
