@@ -38,7 +38,6 @@ def get_extremum(template, locations):
     """
     Get the extremum of the template.
     """
-    # Get the extremum index along the first dim of the template, aligning with channel locations
     extremum_idx = np.unravel_index(np.argmax(np.abs(template)), template.shape)[0]
     extremum = locations[extremum_idx]
     return tuple(extremum)
@@ -64,13 +63,11 @@ def transform_data(merged_template, merged_channel_loc, merged_template_filled, 
 
 def create_plot_dir(recon_dir, unit_id):
     plot_dir = Path(recon_dir) / f'unit_{unit_id}' / 'axon_tracking_plots'
-    # if os.path.exists(plot_dir):
-    #     shutil.rmtree(plot_dir)
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
     return plot_dir
 
-'''ploltting and analysis functions'''
+'''plotting and analysis functions'''
 def save_figure(fig, fig_path):
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
     plt.close()
@@ -148,7 +145,6 @@ def generate_axon_reconstruction_heuristics(gtr0, plot_dir, unit_id, fresh_plots
     if os.path.exists(fig_path) and fresh_plots == False: return
     fig_graph = gtr0.plot_graph(node_search_labels=False, fig=fig_graph, cmap_nodes="viridis", cmap_edges="YlGn")
     save_figure(fig_graph, fig_path)
-    #logger.info(f"unit {unit_id} successfully generated axon_reconstruction_heuristics")
 
 def generate_axon_reconstruction_raw(gtr0, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False):
     fig_graph = plt.figure(figsize=(12, 7))
@@ -162,7 +158,6 @@ def generate_axon_reconstruction_raw(gtr0, plot_dir, unit_id, recon_dir, success
     plt.savefig(fig_path, dpi=600, bbox_inches='tight')
     plt.close()
     successful_recons[str(recon_dir)]["successful_units"][str(unit_id)] = {}
-    #logger.info(f"unit {unit_id} successfully generated raw axon_reconstruction")
 
 def generate_axon_reconstruction_clean(gtr0, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False):
     fig_graph = plt.figure(figsize=(12, 7))
@@ -175,7 +170,6 @@ def generate_axon_reconstruction_clean(gtr0, plot_dir, unit_id, recon_dir, succe
     axpaths_raw.set_title("Clean Branches")
     save_figure(fig_graph, fig_path)
     successful_recons[str(recon_dir)]["successful_units"][str(unit_id)] = {}
-    #logger.info(f"unit {unit_id} successfully generated clean axon_reconstruction")
 
 def generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id, fresh_plots=False):
     fvel, ax_vel = plt.subplots(figsize=(9, 15))
@@ -186,7 +180,6 @@ def generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id, fresh_plots
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
     save_figure(fvel, fig_path)
-    #logger.info(f"unit {unit_id} successfully generated axon_reconstruction_velocities")
 
 def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, recon_dir):
     df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, "channel_density": channel_density})
@@ -194,11 +187,67 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
     if not os.path.exists(recon_dir_parent): os.makedirs(recon_dir_parent)
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics.csv", index=False)
 
+def plot_voltage_signals(template, locations, selected_channels, plot_dir, unit_id, fresh_plots=False):
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"voltage_signals_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    template_selected = template[selected_channels]
+    locs = locations[selected_channels]
+    
+    peaks = np.argmin(template_selected, 1)
+    sorted_idxs = np.argsort(peaks)
+    template_sorted = template_selected[sorted_idxs]
+    locs_sorted = locs[sorted_idxs]
+    
+    dist_peaks_sorted = np.array([np.linalg.norm(loc - locs_sorted[0]) for loc in locs_sorted])
+    dist_peaks_sorted /= np.max(dist_peaks_sorted)
+    dist_peaks_sorted *= len(template_sorted)
+    
+    ptp_glob = np.max(np.ptp(template_sorted, 1))
+    for i, temp in enumerate(template_sorted):
+        temp_shifted = temp + i * 1.5 * ptp_glob
+        min_t = np.min(temp_shifted)
+        min_idx = np.argmin(temp_shifted)
+        ax.plot(temp_shifted, color='C0')
+        ax.plot(min_idx, min_t, marker='o', color='r')
+    
+    ax.axis('off')
+    ax.set_title(f'Voltage Signals for Unit {unit_id}', fontsize=16)
+    save_figure(fig, fig_path)
+
+def plot_all_traces(template, locations, plot_dir, unit_id, fresh_plots=False):
+    fig = plt.figure(figsize=(15, 10))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"all_traces_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    ptp_glob = np.max(np.ptp(template, 1))
+    for i, temp in enumerate(template):
+        temp_shifted = temp + i * 1.5 * ptp_glob
+        min_t = np.min(temp_shifted)
+        min_idx = np.argmin(temp_shifted)
+        ax.plot(temp_shifted, color='C0')
+        ax.plot(min_idx, min_t, marker='o', color='r')
+    
+    ax.axis('off')
+    ax.set_title(f'All Voltage Traces for Unit {unit_id}', fontsize=16)
+    save_figure(fig, fig_path)
+
+def plot_template_propagation_wrapper(template, locations, selected_channels, plot_dir, unit_id, fresh_plots=False):
+    fig = plt.figure(figsize=(8, 40))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"template_propagation_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    ax = plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
+    ax.set_title(f'Template Propagation for Unit {unit_id}', fontsize=16)
+    save_figure(fig, fig_path)
+
 def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, logger=None):
     if logger is not None: logger.info(f'Processing unit {unit_id}')
     else: print(f'Processing unit {unit_id}')
-    #merged_template_dir, merged_channel_dir, merged_template_filled_dir, merged_channel_filled_dir = get_paths(templates_dir, date, chip_id, scanType, run_id, stream_id, unit_id)
-    #merged_template, merged_channel_loc, merged_template_filled, merged_channel_filled_loc = load_data(merged_template_dir, merged_channel_dir, merged_template_filled_dir, merged_channel_filled_dir, unit_id)
     
     merged_template = unit_templates['merged_template']
     merged_channel_loc = unit_templates['merged_channel_loc']
@@ -211,39 +260,28 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
     plot_dir = create_plot_dir(recon_dir, unit_id)
     units, branch_ids, velocities, path_lengths, r2s, extremums, num_channels_included, channel_density = [], [], [], [], [], [], [], []
 
-    # Assuming merged_channel_loc and merged_channel_filled_loc are numpy arrays of shape (n, 2) where n is the number of channels
-    #frac_chans_included.append(len(merged_channel_loc) / len(merged_channel_filled_loc))
     num_channels_included.append(len(merged_channel_loc))
 
-    # Calculate the area covered by the channels
-    # Get the bounding box of the channels to estimate the area
     x_coords = merged_channel_loc[:, 0]
     y_coords = merged_channel_loc[:, 1]
-
-    # Calculate the area of the bounding box
     width = np.max(x_coords) - np.min(x_coords)
     height = np.max(y_coords) - np.min(y_coords)
     area = width * height
-
-    # Calculate the channel density as the number of channels per unit area
     channel_density.append(len(merged_channel_loc) / area) #channels / um^2
     
     try:
-        #with lock: 
         generate_amplitude_map(transformed_template_filled, trans_loc_filled, plot_dir)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate amplitude_map, error: {e}")
         plt.close()
     
     try:
-        #with lock: 
         generate_peak_latency_map(transformed_template_filled, trans_loc_filled, plot_dir)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate peak_latency_map, error: {e}")
         plt.close()
     
     try:
-        #with lock: 
         gtr0 = GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
         select_and_plot_channels(gtr0, plot_dir)
         gtr0 = compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
@@ -253,46 +291,58 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
         return None
     
     try:
-        #with lock:
         generate_axon_analytics(gtr0, units, branch_ids, velocities, path_lengths, r2s, extremums, unit_id, transformed_template, trans_loc)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate axon_analytics, error: {e}")
-        #plt.close()
-
+    
     try:
-        #with lock: 
         generate_axon_reconstruction_heuristics(gtr0, plot_dir, unit_id)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate axon_reconstruction_heuristics, error: {e}")
         plt.close() #close the figure, avoid memory leak
     
     try:
-        #with lock:
         generate_axon_reconstruction_raw(gtr0, plot_dir, unit_id, recon_dir, successful_recons)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate raw axon_reconstruction, error: {e}")
         plt.close() #close the figure, avoid memory leak
     
     try:
-        #with lock: 
         generate_axon_reconstruction_clean(gtr0, plot_dir, unit_id, recon_dir, successful_recons)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate clean axon_reconstruction, error: {e}")
         plt.close() #close the figure, avoid memory leak
     
     try:
-        #with lock: 
         generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to generate axon_reconstruction_velocities, error: {e}")
         plt.close() #close the figure, avoid memory leak
     
+    try:
+        plot_voltage_signals(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to plot voltage signals, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+
+    try:
+        plot_all_traces(transformed_template, trans_loc, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to plot all voltage traces, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+
+    try:
+        plot_template_propagation_wrapper(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to plot template propagation, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+
     return units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density
 
 def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_params(), recon_dir = None, stream_select=None, n_jobs = 8, logger=None):
     for key, tmps in templates.items():        
         for stream_id, stream_templates in tmps['streams'].items():
-            if stream_select is not None: 
+            if stream_select is not None:
                 if stream_id != f'well{stream_select:03}': continue
             unit_templates = stream_templates['units']
             date = tmps['date']
@@ -326,6 +376,3 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
                         logger.info(f'Unit generated an exception: {exc}')
 
             save_axon_analytics(stream_id, all_units, all_extremums, all_branch_ids, all_velocities, all_path_lengths, all_r2s, all_num_channels_included, all_channel_densities, recon_dir)
-            
-            # with open(f'{recon_dir}/successful_recons.json', 'w') as f:
-            #     json.dump(successful_recons, f)
