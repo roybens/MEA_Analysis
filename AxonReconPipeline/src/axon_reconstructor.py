@@ -69,7 +69,7 @@ class AxonReconstructor:
     def setup_logger(self, logger_level='INFO'):
         logger = logging.getLogger('axon_reconstructor')
         if not logger.handlers:
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
             logger.setLevel(logger_level.upper())        
             stream_handler = logging.StreamHandler()
             stream_handler.setLevel(logger_level.upper())
@@ -138,12 +138,40 @@ class AxonReconstructor:
 
     def get_av_params(self, kwargs):
         av_params = {
-            'detect_threshold': 0.01,
-            'kurt_threshold': 0.1,
-            'peak_std_threshold': 0.8,
-            'upsample': 5,
-            'neighbor_radius': 100,
-            'r2_threshold': 0.8
+            'upsample': 1,  # Upsampling factor for template
+            'min_selected_points': 30,  # Minimum number of selected points to run axon tracking
+            'verbose': False,  # If True, the output is verbose
+
+            # Channel selection
+            'detect_threshold': 0.02,  # Detection threshold for amplitude
+            'detection_type': 'relative',  # Detection threshold type
+            'kurt_threshold': 0.3,  # Kurtosis threshold for noise filtering
+            'peak_std_threshold': 1.0,  # Peak time standard deviation threshold
+            'init_delay': 0.1,  # Initial delay threshold
+            'peak_std_distance': 30.0,  # Distance in µm for peak time std calculation
+            'remove_isolated': True,  # Remove isolated channels
+
+            # Graph
+            'init_amp_peak_ratio': 0.2,  # Weight for amplitude and peak latency in initial sorting
+            'max_distance_for_edge': 100.0,  # Max distance in µm between channels for graph edges
+            'max_distance_to_init': 200.0,  # Max distance to initial channel for graph edges
+            'n_neighbors': 3,  # Max number of edges per channel in the graph
+            'distance_exp': 2,  # Exponent for distance calculation
+            'edge_dist_amp_ratio': 0.3,  # Weight between distance and amplitude for neighbor selection
+
+            # Axonal reconstruction
+            'min_path_length': 100.0,  # Minimum axon path length in µm
+            'min_path_points': 5,  # Minimum number of channels in a path
+            'neighbor_radius': 100.0,  # Radius in µm to exclude neighboring channels
+            'min_points_after_branching': 3,  # Min number of points after a branching
+
+            # Path cleaning/velocity estimation
+            'mad_threshold': 8.0,  # MAD threshold for outlier detection
+            'split_paths': True,  # Enable path splitting
+            'max_peak_latency_for_splitting': 0.5,  # Max peak latency jump for splitting paths
+            'r2_threshold': 0.9,  # R2 threshold for velocity fit
+            'r2_threshold_for_outliers': 0.98,  # R2 threshold for outlier detection
+            'min_outlier_tracking_error': 50.0,  # Min tracking error in µm for outlier detection
         }
         av_params.update(kwargs.get('av_params', {}))
         return av_params
@@ -209,6 +237,7 @@ class AxonReconstructor:
         self.logger.info(f'Attempting to load multirec {rec_key} stream {stream_id}')
         assert 'multirecordings' in self.__dict__, "No multirecordings found in reconstructor. Generating new multirecording."
         #assert self.multirecordings, "No multirecordings found in reconstructor. Generating new multirecording." 
+        assert self.multirecordings is not None, "No multirecordings found in reconstructor. Generating new multirecording."
         assert stream_id in self.multirecordings[rec_key]['streams'], f"No multirecordings found in reconstructor for {stream_id}. Generating new multirecording."
         assert self.multirecordings[rec_key]['streams'][stream_id]['multirecording'], f"No multirecording found in reconstructor for {stream_id}. Generating new multirecording."
         assert len(self.multirecordings[rec_key]['streams'][stream_id]['common_el'])>0, f"Empty common_el found in reconstructor for {stream_id}. Generating new multirecording."
@@ -271,6 +300,7 @@ class AxonReconstructor:
         self.logger.info(f'Attempting to load sorting {rec_key} stream {stream_id}')
         assert 'sortings' in self.__dict__, "No sortings found in reconstructor. Generating new sorting."
         #assert self.sortings, "No sortings found in reconstructor. Generating new sorting." 
+        assert self.sortings is not None, "No sortings found in reconstructor. Generating new sorting."
         assert stream_id in self.sortings[rec_key]['streams'], f"No sortings found in reconstructor for {stream_id}. Generating new sorting."
         assert self.sortings[rec_key]['streams'][stream_id]['sorting'], f"No sorting found in reconstructor for {stream_id}. Generating new sorting."
         assert os.path.exists(self.sortings[rec_key]['streams'][stream_id]['sorting_path']+'/sorter_output'), f"Sorting path not found for {stream_id}. Generating new sorting."
@@ -328,6 +358,7 @@ class AxonReconstructor:
         self.logger.info(f'Attempting to load waveforms {rec_key} stream {stream_id}')
         assert 'waveforms' in self.__dict__, "No waveforms found in reconstructor. Generating new waveforms."
         #assert self.waveforms, "No waveforms found in reconstructor. Generating new waveforms." 
+        assert self.waveforms is not None, "No waveforms found in reconstructor. Generating new waveforms."
         assert stream_id in self.waveforms[rec_key]['streams'], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
         assert self.waveforms[rec_key]['streams'][stream_id], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
         for rec_name, waveform_seg in self.waveforms[rec_key]['streams'][stream_id].items():
@@ -389,6 +420,7 @@ class AxonReconstructor:
         self.logger.info(f'Attempting to load templates {rec_key} stream {stream_id}')
         assert 'templates' in self.__dict__, "No templates found in reconstructor. Generating new templates."
         #assert self.templates, "No templates found in reconstructor. Generating new templates." 
+        assert self.templates is not None, "No templates found in reconstructor. Generating new templates."
         assert stream_id in self.templates[rec_key]['streams'], f"No templates found in reconstructor for {stream_id}. Generating new templates."
         assert self.templates[rec_key]['streams'][stream_id], f"No templates found in reconstructor for {stream_id}. Generating new templates."
         unit_list = [unit for unit in self.templates[rec_key]['streams'][stream_id]['units'].keys()]
@@ -514,24 +546,28 @@ class AxonReconstructor:
     def load_reconstructor(self):
         self.logger.info("Loading reconstructor object")
         dill_file_path = os.path.join(self.reconstructor_dir, f'{self.reconstructor_id}.dill')
-        with open(dill_file_path, 'rb') as f:
-            loaded_obj = dill.load(f)
-            
-            #Exclude certain runtime parameters
-            keys_to_delete = []
-            exclusions_key_words = ['switch', 'load', 'select']
-            for key, item in loaded_obj.__dict__.items():# ['switch', 'load']:
-                for word in exclusions_key_words:
-                    if word in key: keys_to_delete.append(key) #del loaded_obj.__dict__[key]
-            for key in keys_to_delete: del loaded_obj.__dict__[key]
+        try:
+            with open(dill_file_path, 'rb') as f:
+                loaded_obj = dill.load(f)
+                
+                #Exclude certain runtime parameters
+                keys_to_delete = []
+                exclusions_key_words = ['switch', 'load', 'select']
+                for key, item in loaded_obj.__dict__.items():# ['switch', 'load']:
+                    for word in exclusions_key_words:
+                        if word in key: keys_to_delete.append(key) #del loaded_obj.__dict__[key]
+                for key in keys_to_delete: del loaded_obj.__dict__[key]
 
-            #self.__dict__.update(loaded_obj.__dict__)
-            self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
-            if self.reconstructor_load_options['restore_environment']: self._restore_environment()
-            # self.concatenate_switch = False
-            # self.sort_switch = False
-            # self.waveform_switch = False
-            # self.template_switch = False
+                #self.__dict__.update(loaded_obj.__dict__)
+                self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
+                if self.reconstructor_load_options['restore_environment']: self._restore_environment()
+                # self.concatenate_switch = False
+                # self.sort_switch = False
+                # self.waveform_switch = False
+                # self.template_switch = False
+        except Exception as e: 
+            self.logger.error(f"Error loading reconstructor object: {e}")       
+            self.reconstructor_load_options['load_reconstructor'] = False
 
         return self
 
@@ -585,9 +621,9 @@ class AxonReconstructor:
 
     def clean_up(self):
         self.logger.info("Cleaning up intermediate files")
-        if os.path.exists(self.sortings_dir):
-            shutil.rmtree(self.sortings_dir)
-            self.logger.debug("Removed sortings directory: %s", self.sortings_dir)
+        # if os.path.exists(self.sortings_dir):
+        #     shutil.rmtree(self.sortings_dir)
+        #     self.logger.debug("Removed sortings directory: %s", self.sortings_dir)
         if os.path.exists(self.waveforms_dir):
             shutil.rmtree(self.waveforms_dir)
             self.logger.debug("Removed waveforms directory: %s", self.waveforms_dir)

@@ -7,12 +7,7 @@ IPNAnalysis/Sorting_Intermediate_files/*
 IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
-AxonReconPipeline/data*
-AxonReconPipeline/data/temp_data/recordings/*
-AxonReconPipeline/data/temp_data/sortings/*
-AxonReconPipeline/data/temp_data/waveforms/*
-AxonReconPipeline/data/temp_data/templates/*
-#AxonReconPipeline/data/temp_data/reconstructions/*
+AxonReconPipeline/data/*
 **.mat
 .vscode
 **.pkl
@@ -20,4 +15,3 @@ slurm*.out
 **.png
 **.npz
 **.zip
-Anaconda3-2024.02-1-Linux-x86_64.sh 
