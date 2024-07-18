@@ -50,8 +50,14 @@ def create_plot_dir(recon_dir, unit_id):
         os.makedirs(plot_dir)
     return plot_dir
 
+<<<<<<< HEAD
 def save_figure(fig, fig_path, dpi=300):
     plt.savefig(fig_path, dpi=dpi, bbox_inches='tight')
+=======
+'''plotting and analysis functions'''
+def save_figure(fig, fig_path):
+    plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
     plt.close()
 
 def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', log=False):
@@ -219,10 +225,80 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics.csv", index=False)
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
 
+<<<<<<< HEAD
 # lib_plotting_and_analysis.py
+=======
+def plot_voltage_signals(template, locations, selected_channels, plot_dir, unit_id, fresh_plots=False):
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"voltage_signals_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    template_selected = template[selected_channels]
+    locs = locations[selected_channels]
+    
+    peaks = np.argmin(template_selected, 1)
+    sorted_idxs = np.argsort(peaks)
+    template_sorted = template_selected[sorted_idxs]
+    locs_sorted = locs[sorted_idxs]
+    
+    dist_peaks_sorted = np.array([np.linalg.norm(loc - locs_sorted[0]) for loc in locs_sorted])
+    dist_peaks_sorted /= np.max(dist_peaks_sorted)
+    dist_peaks_sorted *= len(template_sorted)
+    
+    ptp_glob = np.max(np.ptp(template_sorted, 1))
+    for i, temp in enumerate(template_sorted):
+        temp_shifted = temp + i * 1.5 * ptp_glob
+        min_t = np.min(temp_shifted)
+        min_idx = np.argmin(temp_shifted)
+        ax.plot(temp_shifted, color='C0')
+        ax.plot(min_idx, min_t, marker='o', color='r')
+    
+    ax.axis('off')
+    ax.set_title(f'Voltage Signals for Unit {unit_id}', fontsize=16)
+    save_figure(fig, fig_path)
+
+def plot_all_traces(template, locations, plot_dir, unit_id, fresh_plots=False):
+    fig = plt.figure(figsize=(15, 10))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"all_traces_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    ptp_glob = np.max(np.ptp(template, 1))
+    for i, temp in enumerate(template):
+        temp_shifted = temp + i * 1.5 * ptp_glob
+        min_t = np.min(temp_shifted)
+        min_idx = np.argmin(temp_shifted)
+        ax.plot(temp_shifted, color='C0')
+        ax.plot(min_idx, min_t, marker='o', color='r')
+    
+    ax.axis('off')
+    ax.set_title(f'All Voltage Traces for Unit {unit_id}', fontsize=16)
+    save_figure(fig, fig_path)
+
+def plot_template_propagation_wrapper(template, locations, selected_channels, plot_dir, unit_id, fresh_plots=False):
+    fig = plt.figure(figsize=(8, 40))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"template_propagation_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    ax = plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
+    ax.set_title(f'Template Propagation for Unit {unit_id}', fontsize=16)
+    save_figure(fig, fig_path)
+
+def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, logger=None):
+    if logger is not None: logger.info(f'Processing unit {unit_id}')
+    else: print(f'Processing unit {unit_id}')
+    
+    merged_template = unit_templates['merged_template']
+    merged_channel_loc = unit_templates['merged_channel_loc']
+    merged_template_filled = unit_templates['merged_template_filled']
+    merged_channel_filled_loc = unit_templates['merged_channel_locs_filled']
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
 
 import AxonReconPipeline.axon_velocity.axon_velocity.plotting as av_plotting
 
+<<<<<<< HEAD
 def plot_branch_neurites_wrapper(data, save_path, **kwargs):
     """
     Wrapper for axon_velocity.plotting.plot_branch_neurites.
@@ -292,3 +368,121 @@ def plot_axon_summary_wrapper(save_path, title, fresh_plots, **kwargs):
         fig, axes = av_plotting.plot_axon_summary(**kwargs)
         fig.set_title(title, fontsize=20)
         if save_path is not None: save_figure(fig, save_path, dpi=600)
+=======
+    num_channels_included.append(len(merged_channel_loc))
+
+    x_coords = merged_channel_loc[:, 0]
+    y_coords = merged_channel_loc[:, 1]
+    width = np.max(x_coords) - np.min(x_coords)
+    height = np.max(y_coords) - np.min(y_coords)
+    area = width * height
+    channel_density.append(len(merged_channel_loc) / area) #channels / um^2
+    
+    try:
+        generate_amplitude_map(transformed_template_filled, trans_loc_filled, plot_dir)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate amplitude_map, error: {e}")
+        plt.close()
+    
+    try:
+        generate_peak_latency_map(transformed_template_filled, trans_loc_filled, plot_dir)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate peak_latency_map, error: {e}")
+        plt.close()
+    
+    try:
+        gtr0 = GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
+        select_and_plot_channels(gtr0, plot_dir)
+        gtr0 = compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to select and plot channels or compute_graph_propagation_velocity, error: {e}")
+        plt.close()
+        return None
+    
+    try:
+        generate_axon_analytics(gtr0, units, branch_ids, velocities, path_lengths, r2s, extremums, unit_id, transformed_template, trans_loc)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate axon_analytics, error: {e}")
+    
+    try:
+        generate_axon_reconstruction_heuristics(gtr0, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate axon_reconstruction_heuristics, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+    
+    try:
+        generate_axon_reconstruction_raw(gtr0, plot_dir, unit_id, recon_dir, successful_recons)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate raw axon_reconstruction, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+    
+    try:
+        generate_axon_reconstruction_clean(gtr0, plot_dir, unit_id, recon_dir, successful_recons)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate clean axon_reconstruction, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+    
+    try:
+        generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to generate axon_reconstruction_velocities, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+    
+    try:
+        plot_voltage_signals(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to plot voltage signals, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+
+    try:
+        plot_all_traces(transformed_template, trans_loc, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to plot all voltage traces, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+
+    try:
+        plot_template_propagation_wrapper(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
+    except Exception as e:
+        logger.info(f"unit {unit_id} failed to plot template propagation, error: {e}")
+        plt.close() #close the figure, avoid memory leak
+
+    return units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density
+
+def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_params(), recon_dir = None, stream_select=None, n_jobs = 8, logger=None):
+    for key, tmps in templates.items():        
+        for stream_id, stream_templates in tmps['streams'].items():
+            if stream_select is not None:
+                if stream_id != f'well{stream_select:03}': continue
+            unit_templates = stream_templates['units']
+            date = tmps['date']
+            chip_id = tmps['chip_id']
+            scanType = tmps['scanType']
+            run_id = tmps['run_id']
+            recon_dir = Path(recon_dir) / date / chip_id / scanType / run_id / stream_id
+            successful_recons = {}
+            unit_ids = [unit_id for unit_id in unit_templates.keys()]
+            successful_recons[str(recon_dir)] = {}
+            successful_recons[str(recon_dir)]["successful_units"] = {}
+            all_units, all_branch_ids, all_velocities, all_path_lengths, all_r2s, all_extremums, all_num_channels_included, all_channel_densities = [], [], [], [], [], [], [], []
+            logger.info(f'Processing {len(unit_ids)} units, with {n_jobs} workers')
+            
+            with concurrent.futures.ProcessPoolExecutor(max_workers=n_jobs) as executor:
+                futures = [executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, successful_recons, logger = logger) for unit_id, unit_templates in unit_templates.items()]
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        result = future.result()
+                        if result:
+                            units, extremums, branch_ids, velocities, path_lengths, r2s, channels_included, channel_density= result
+                            all_units.append(units)
+                            all_branch_ids.append(branch_ids)
+                            all_velocities.append(velocities)
+                            all_path_lengths.append(path_lengths)
+                            all_r2s.append(r2s)
+                            all_extremums.append(extremums)
+                            all_num_channels_included.append(channels_included)
+                            all_channel_densities.append(channel_density)
+                    except Exception as exc:
+                        logger.info(f'Unit generated an exception: {exc}')
+
+            save_axon_analytics(stream_id, all_units, all_extremums, all_branch_ids, all_velocities, all_path_lengths, all_r2s, all_num_channels_included, all_channel_densities, recon_dir)
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
