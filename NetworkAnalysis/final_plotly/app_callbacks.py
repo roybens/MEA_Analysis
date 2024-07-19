@@ -1,7 +1,7 @@
 from dash import dcc, html, callback_context
 from dash.dependencies import Input, Output, State, ALL
 from data_processing import parse_contents, parse_mat
-from plot_functions import plot_activity_graphs, plot_isi_graph
+from plot_functions import plot_activity_graphs, plot_isi_graph, plot_bar_with_p_values
 import io, zipfile,base64
 default_colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
 def register_callbacks(app):
@@ -161,7 +161,7 @@ def register_callbacks(app):
         unique_divs = sorted(df['DIV'].unique())
         df['NeuronType'] = df['NeuronType'].str.strip()
         unique_genotypes = df['NeuronType'].unique()
-        unique_chip_wells = df['Chip_ID'].unique()
+        unique_chip_wells = df['Chip_Well'].unique()
 
         div_options = [{'label': str(div), 'value': div} for div in unique_divs]
         chip_well_options = [{'label': str(chip_well), 'value': chip_well} for chip_well in unique_chip_wells]
@@ -247,6 +247,7 @@ def register_callbacks(app):
          Output('download-png', 'data', allow_duplicate=True)],
         [Input('submit-button', 'n_clicks'),
          Input('download-svg-button', 'n_clicks'),
+         
          Input('download-png-button', 'n_clicks')],
         [State('upload-data', 'contents'),
          State('upload-data', 'filename'),
@@ -271,7 +272,8 @@ def register_callbacks(app):
         df['NeuronType'] = df['NeuronType'].str.strip()
         selected_neuron_types = [item for sublist in selected_neuron_types_lists for item in sublist]  # Flatten list of lists
         df = df[df['NeuronType'].isin(selected_neuron_types)]
-        df = df[df['Chip_ID'].isin(selected_chip_wells)]
+        df = df[df['Chip_Well'].isin(selected_chip_wells)]
+        #print(df)
         unique_genotypes = df['NeuronType'].unique()
 
         hex_codes = hex_codes or {}
@@ -293,7 +295,7 @@ def register_callbacks(app):
             if 'activity' in filename.lower():
                 images, svg_bytes_list, png_bytes_list = plot_activity_graphs(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
             else:
-                images, svg_bytes_list, png_bytes_list = plot_activity_graphs(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
+                images, svg_bytes_list, png_bytes_list = plot_bar_with_p_values(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
             
             graphs.extend(images)
             for i, svg_data in enumerate(svg_bytes_list):

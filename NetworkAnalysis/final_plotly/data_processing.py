@@ -1,3 +1,4 @@
+import html
 import pandas as pd
 import numpy as np
 import scipy.io
@@ -13,6 +14,7 @@ def parse_contents(contents, filename):
             df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
             df.columns = df.columns.str.strip()  # Strip whitespace from column names
             df['Chip_Well'] = df['Chip_ID'].astype(str) + '_' + df['Well'].astype(str)
+            #print(df['Chip_Well'])
         else:
             return html.Div([
                 'Unsupported file format'
