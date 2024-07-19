@@ -8,7 +8,28 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+<<<<<<< HEAD
 import sys
+=======
+import json
+import pandas as pd
+
+#parallel processing
+import concurrent.futures
+import threading
+lock = threading.Lock()
+from multiprocessing import Pool, Manager
+
+# Axon trace algo imports
+import MEAutility as mu
+import axon_velocity as av
+#from axon_velocity import *
+from axon_velocity.models import load_cell
+from axon_velocity.evaluation import *
+from probeinterface import plotting as plotting_probe
+
+''' Local imports '''
+>>>>>>> bf222ba (s'more changes)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
 from AxonReconPipeline.axon_velocity.axon_velocity import GraphAxonTracking
@@ -63,6 +84,7 @@ def save_figure(fig, fig_path):
 def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', log=False):
     fig_amp = plt.figure(figsize=(10, 5))
     ax_amp = fig_amp.add_subplot(111)
+<<<<<<< HEAD
     fig_path = plot_dir / f"{title}_amplitude_map.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
@@ -71,11 +93,24 @@ def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=Fal
                        colorbar_orientation="vertical", colorbar_shrink=0.5,
                        plot_image=True)
     ax_amp.set_title(f"Amplitude {title}", fontsize=20)
+=======
+    fig_path = plot_dir / "amplitude_map.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    ax_amp = av.plot_amplitude_map(transformed_template_filled, 
+                                trans_loc_filled, 
+                                log=False, 
+                                ax=ax_amp, 
+                                cmap="PRGn", 
+                                colorbar=True, 
+                                colorbar_orientation="horizontal")
+    ax_amp.set_title(f"Amplitude", fontsize=20)
+>>>>>>> bf222ba (s'more changes)
     save_figure(fig_amp, fig_path)
 
 def generate_peak_latency_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', fs = 10000, log=False):
     fig_peaks = plt.figure(figsize=(10, 5))
     ax_peaks = fig_peaks.add_subplot(111)
+<<<<<<< HEAD
     fig_path = plot_dir / f"{title}_peak_latency_map.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
@@ -84,6 +119,15 @@ def generate_peak_latency_map(template, locations, plot_dir, title, fresh_plots=
                           colorbar_orientation="vertical", colorbar_shrink=0.5,
                           plot_image=True)
     ax_peaks.set_title(f"Peak latency {title}", fontsize=20)
+=======
+    fig_path = plot_dir / "peak_latency_map.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    ax_peaks = av.plot_peak_latency_map(transformed_template_filled, 
+                                    trans_loc_filled, fs=10000, log=False, 
+                                    ax=ax_peaks, colorbar=True, 
+                                    colorbar_orientation="horizontal")
+    ax_peaks.set_title(f"Peak latency", fontsize=20)
+>>>>>>> bf222ba (s'more changes)
     save_figure(fig_peaks, fig_path)
 
 def plot_selected_channels(gtr, plot_dir, suffix="", fresh_plots=False):
@@ -282,7 +326,7 @@ def plot_template_propagation_wrapper(template, locations, selected_channels, pl
     fig_path = plot_dir / f"template_propagation_unit_{unit_id}.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
 
-    ax = plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
+    ax = av.plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
     ax.set_title(f'Template Propagation for Unit {unit_id}', fontsize=16)
     save_figure(fig, fig_path)
 
@@ -391,9 +435,9 @@ def plot_axon_summary_wrapper(save_path, title, fresh_plots, **kwargs):
         plt.close()
     
     try:
-        gtr0 = GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
+        gtr0 = av.GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
         select_and_plot_channels(gtr0, plot_dir)
-        gtr0 = compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
+        gtr0 = av.compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to select and plot channels or compute_graph_propagation_velocity, error: {e}")
         plt.close()
@@ -428,18 +472,6 @@ def plot_axon_summary_wrapper(save_path, title, fresh_plots, **kwargs):
         logger.info(f"unit {unit_id} failed to generate axon_reconstruction_velocities, error: {e}")
         plt.close() #close the figure, avoid memory leak
     
-    try:
-        plot_voltage_signals(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
-    except Exception as e:
-        logger.info(f"unit {unit_id} failed to plot voltage signals, error: {e}")
-        plt.close() #close the figure, avoid memory leak
-
-    try:
-        plot_all_traces(transformed_template, trans_loc, plot_dir, unit_id)
-    except Exception as e:
-        logger.info(f"unit {unit_id} failed to plot all voltage traces, error: {e}")
-        plt.close() #close the figure, avoid memory leak
-
     try:
         plot_template_propagation_wrapper(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
     except Exception as e:
