@@ -24,7 +24,7 @@ from multiprocessing import Pool, Manager
 # Axon trace algo imports
 import MEAutility as mu
 import axon_velocity as av
-from axon_velocity import *
+#from axon_velocity import *
 from axon_velocity.models import load_cell
 from axon_velocity.evaluation import *
 from probeinterface import plotting as plotting_probe
@@ -77,7 +77,7 @@ def generate_amplitude_map(transformed_template_filled, trans_loc_filled, plot_d
     ax_amp = fig_amp.add_subplot(111)
     fig_path = plot_dir / "amplitude_map.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
-    ax_amp = plot_amplitude_map(transformed_template_filled, 
+    ax_amp = av.plot_amplitude_map(transformed_template_filled, 
                                 trans_loc_filled, 
                                 log=False, 
                                 ax=ax_amp, 
@@ -92,7 +92,7 @@ def generate_peak_latency_map(transformed_template_filled, trans_loc_filled, plo
     ax_peaks = fig_peaks.add_subplot(111)
     fig_path = plot_dir / "peak_latency_map.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
-    ax_peaks = plot_peak_latency_map(transformed_template_filled, 
+    ax_peaks = av.plot_peak_latency_map(transformed_template_filled, 
                                     trans_loc_filled, fs=10000, log=False, 
                                     ax=ax_peaks, colorbar=True, 
                                     colorbar_orientation="horizontal")
@@ -241,7 +241,7 @@ def plot_template_propagation_wrapper(template, locations, selected_channels, pl
     fig_path = plot_dir / f"template_propagation_unit_{unit_id}.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
 
-    ax = plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
+    ax = av.plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
     ax.set_title(f'Template Propagation for Unit {unit_id}', fontsize=16)
     save_figure(fig, fig_path)
 
@@ -282,9 +282,9 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
         plt.close()
     
     try:
-        gtr0 = GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
+        gtr0 = av.GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
         select_and_plot_channels(gtr0, plot_dir)
-        gtr0 = compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
+        gtr0 = av.compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to select and plot channels or compute_graph_propagation_velocity, error: {e}")
         plt.close()
@@ -319,18 +319,6 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
         logger.info(f"unit {unit_id} failed to generate axon_reconstruction_velocities, error: {e}")
         plt.close() #close the figure, avoid memory leak
     
-    try:
-        plot_voltage_signals(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
-    except Exception as e:
-        logger.info(f"unit {unit_id} failed to plot voltage signals, error: {e}")
-        plt.close() #close the figure, avoid memory leak
-
-    try:
-        plot_all_traces(transformed_template, trans_loc, plot_dir, unit_id)
-    except Exception as e:
-        logger.info(f"unit {unit_id} failed to plot all voltage traces, error: {e}")
-        plt.close() #close the figure, avoid memory leak
-
     try:
         plot_template_propagation_wrapper(transformed_template, trans_loc, gtr0.selected_channels, plot_dir, unit_id)
     except Exception as e:
