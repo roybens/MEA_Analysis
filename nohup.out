@@ -1,0 +1,72 @@
+Traceback (most recent call last):
+  File "/mnt/disk15tb/adam/git_workspace/MEA_Analysis/./AxonReconPipeline/src/run_pipeline.py", line 2, in <module>
+    import lib_helper_functions as helper
+  File "/mnt/disk15tb/adam/git_workspace/MEA_Analysis/AxonReconPipeline/src/lib_helper_functions.py", line 15, in <module>
+    from MEAProcessingLibrary import mea_processing_library as MPL
+  File "/mnt/disk15tb/adam/git_workspace/MEA_Analysis/MEAProcessingLibrary/mea_processing_library.py", line 14, in <module>
+    import h5py
+ModuleNotFoundError: No module named 'h5py'
+Traceback (most recent call last):
+  File "/mnt/disk15tb/adam/git_workspace/MEA_Analysis/./AxonReconPipeline/src/run_pipeline.py", line 3, in <module>
+    from axon_reconstructor import AxonReconstructor
+  File "/mnt/disk15tb/adam/git_workspace/MEA_Analysis/AxonReconPipeline/src/axon_reconstructor.py", line 9, in <module>
+    import lib_axon_velocity_functions as axoner
+  File "/mnt/disk15tb/adam/git_workspace/MEA_Analysis/AxonReconPipeline/src/lib_axon_velocity_functions.py", line 26, in <module>
+    import axon_velocity as av
+  File "/home/adam/miniconda3/envs/axonenv/lib/python3.11/site-packages/axon_velocity/__init__.py", line 1, in <module>
+    from .axon_velocity import compute_graph_propagation_velocity,  get_default_graph_velocity_params
+  File "/home/adam/miniconda3/envs/axonenv/lib/python3.11/site-packages/axon_velocity/axon_velocity.py", line 3, in <module>
+    from .tracking_classes import GraphAxonTracking
+  File "/home/adam/miniconda3/envs/axonenv/lib/python3.11/site-packages/axon_velocity/tracking_classes.py", line 12, in <module>
+    from .plotting import plot_velocity
+  File "/home/adam/miniconda3/envs/axonenv/lib/python3.11/site-packages/axon_velocity/plotting.py", line 423, in <module>
+    def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_params(), recon_dir = None, stream_select=None, n_jobs = 8, logger=None):
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: partially initialized module 'axon_velocity' has no attribute 'get_default_graph_velocity_params' (most likely due to a circular import)
+2024-07-18 17:09:55,192 - axon_reconstructor - INFO - setup_logger - Logger initialized with level: DEBUG
+2024-07-18 17:09:55,192 - axon_reconstructor - DEBUG - setup_logger - This is a debug message
+2024-07-18 17:09:55,192 - axon_reconstructor - INFO - setup_logger - This is an info message
+2024-07-18 17:09:55,192 - axon_reconstructor - WARNING - setup_logger - This is a warning message
+2024-07-18 17:09:55,192 - axon_reconstructor - ERROR - setup_logger - This is an error message
+2024-07-18 17:09:55,192 - axon_reconstructor - CRITICAL - setup_logger - This is a critical message
+2024-07-18 17:09:55,192 - axon_reconstructor - INFO - __init__ - Initializing AxonReconstructor
+2024-07-18 17:09:55,192 - axon_reconstructor - DEBUG - __init__ - AxonReconstructor initialized with parameters: {'logger': <Logger axon_reconstructor (DEBUG)>, 'h5_parent_dirs': ['/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5'], 'allowed_scan_types': ['AxonTracking'], 'stream_select': 0, 'unit_limit': None, 'save_reconstructor_object': True, 'debug_mode': True, 'load_existing_sortings': True, 'load_merged_templates': False, 'load_template_segments': True, 'load_waveforms': True, 'run_lean': True, 'verbose': True, 'recordings_dir': './AxonReconPipeline/data/temp_data/recordings', 'sortings_dir': './AxonReconPipeline/data/temp_data/sortings', 'waveforms_dir': './AxonReconPipeline/data/temp_data/waveforms', 'templates_dir': './AxonReconPipeline/data/temp_data/templates', 'recon_dir': './AxonReconPipeline/data/reconstructions', 'reconstructor_dir': './AxonReconPipeline/data/reconstructors', 'n_jobs': 1, 'max_workers': 32, 'sorting_params': {'detect_threshold': 7, 'projection_threshold': [10, 4], 'preclust_threshold': 8, 'momentum': [20.0, 400.0], 'car': True, 'minFR': 0.01, 'minfr_goodchannels': 0.01, 'freq_min': 150, 'sigmaMask': 30, 'lam': 10.0, 'nPCs': 3, 'ntbuff': 64, 'nfilt_factor': 4, 'NT': None, 'AUCsplit': 0.9, 'wave_length': 61, 'keep_good_only': False, 'skip_kilosort_preprocessing': False, 'scaleproc': None, 'save_rez_to_mat': False, 'delete_tmp_files': ('matlab_files',), 'delete_recording_dat': False, 'n_jobs': 1, 'chunk_duration': '1s', 'progress_bar': True, 'mp_context': None, 'max_threads_per_process': 1, 'allowed_scan_types': ['AxonTracking'], 'stream_select': 0, 'load_existing_sortings': True, 'sortings_dir': './AxonReconPipeline/data/temp_data/sortings', 'overwrite': False, 'verbose': True, 'do_correction': False, 'use_docker': True}, 'te_params': {'align_cutout': True, 'upsample': 2, 'rm_outliers': True, 'n_jobs': 32, 'n_neighbors': 10, 'peak_cutout': 2, 'overwrite_wf': False, 'overwrite_tmp': False, 'load_merged_templates': True, 'save_merged_templates': True}, 'qc_params': {'min_n_spikes': 500, 'exclude_mua': True}, 'av_params': {'upsample': 1, 'min_selected_points': 30, 'verbose': True, 'detect_threshold': 0.02, 'detection_type': 'relative', 'kurt_threshold': 0.3, 'peak_std_threshold': 1.0, 'init_delay': 0.1, 'peak_std_distance': 30.0, 'remove_isolated': True, 'init_amp_peak_ratio': 0.2, 'max_distance_for_edge': 100.0, 'max_distance_to_init': 200.0, 'n_neighbors': 3, 'distance_exp': 2, 'edge_dist_amp_ratio': 0.3, 'min_path_length': 100.0, 'min_path_points': 5, 'neighbor_radius': 100.0, 'min_points_after_branching': 3, 'mad_threshold': 8.0, 'split_paths': True, 'max_peak_latency_for_splitting': 0.5, 'r2_threshold': 0.9, 'r2_threshold_for_outliers': 0.98, 'min_outlier_tracking_error': 50.0}, 'reconstructor_save_options': {'recordings': True, 'multirecordings': True, 'sortings': True, 'waveforms': True, 'templates': True, 'reconstructions': False}, 'reconstructor_load_options': {'load_reconstructor': True, 'load_multirecs': True, 'load_sortings': True, 'load_wfs': True, 'load_templates': True, 'load_templates_bypass': False, 'restore_environment': False}, 'continuous_h5_file_info': None, 'sorting_lists_by_scan': None, 'waveforms': None, 'templates': None, 'reconstruction_results': None, 'requirements': None, 'git_version': None}
+2024-07-18 17:09:55,192 - axon_reconstructor - INFO - run_pipeline - Starting pipeline execution
+2024-07-18 17:09:55,192 - axon_reconstructor - INFO - load_recordings - Loading continuous h5 files
+2024-07-18 17:09:55,192 - INFO - Extracting recording details from h5 directories: - mea_processing_library.extract_recording_details
+2024-07-18 17:09:55,192 - INFO - Extracting recording details from h5 directories: - mea_processing_library.extract_recording_details
+2024-07-18 17:09:55,193 - axon_reconstructor - INFO - load_recordings - Scan Type: AxonTracking
+2024-07-18 17:09:55,239 - axon_reconstructor - INFO - load_recordings - MaxTwo Detected.
+2024-07-18 17:09:55,284 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0000 loaded.
+2024-07-18 17:09:55,328 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0001 loaded.
+2024-07-18 17:09:55,370 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0002 loaded.
+2024-07-18 17:09:55,414 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0003 loaded.
+2024-07-18 17:09:55,457 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0004 loaded.
+2024-07-18 17:09:55,499 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0005 loaded.
+2024-07-18 17:09:55,542 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0006 loaded.
+2024-07-18 17:09:55,585 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0007 loaded.
+2024-07-18 17:09:55,628 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0008 loaded.
+2024-07-18 17:09:55,671 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0009 loaded.
+2024-07-18 17:09:55,714 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0010 loaded.
+2024-07-18 17:09:55,756 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0011 loaded.
+2024-07-18 17:09:55,800 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0012 loaded.
+2024-07-18 17:09:55,845 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0013 loaded.
+2024-07-18 17:09:55,889 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0014 loaded.
+2024-07-18 17:09:55,935 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0015 loaded.
+2024-07-18 17:09:55,975 - axon_reconstructor - DEBUG - load_recordings - Stream ID: well000, Recording: rec0016 loaded.
+2024-07-18 17:09:55,976 - axon_reconstructor - INFO - load_recordings - Completed loading .h5 files
+2024-07-18 17:09:55,976 - axon_reconstructor - INFO - load_reconstructor - Loading reconstructor object
+2024-07-18 17:09:55,976 - axon_reconstructor - ERROR - load_reconstructor - Error loading reconstructor object: [Errno 2] No such file or directory: '/mnt/disk15tb/adam/git_workspace/MEA_Analysis/AxonReconPipeline/data/temp_data/sortings/240322/M07037/AxonTracking/000025/well000/sorter_output/spike_times.npy'
+2024-07-18 17:09:55,976 - axon_reconstructor - INFO - concatenate_recordings - Concatenating recordings
+2024-07-18 17:09:55,977 - axon_reconstructor - WARNING - concatenate_recordings - Load reconstructor option from reconstructor is set to False. Concatenating new multirecording.
+2024-07-18 17:09:55,977 - axon_reconstructor - INFO - concatenate_recordings - Concatenating recording segments for 240322_M07037_000025 stream well000
+2024-07-18 17:09:55,977 - axon_reconstructor - INFO - find_common_electrodes - Finding common electrodes in /mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5 for stream well000
+2024-07-18 17:09:57,976 - INFO - Extracting recording details from h5 directories: - mea_processing_library.extract_recording_details
+2024-07-18 17:09:57,976 - axon_reconstructor - INFO - concatenate_recording_segments - Concatenating recording segments for /mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5, stream well000
+2024-07-18 17:10:15,998 - axon_reconstructor - INFO - concatenate_recordings - Completed concatenation of recordings
+2024-07-18 17:10:15,998 - axon_reconstructor - INFO - spikesort_recordings - Starting spike sorting process
+2024-07-18 17:10:15,998 - axon_reconstructor - INFO - spikesort_recordings - Generating spike sorting objects for 240322_M07037_000025
+2024-07-18 17:10:15,998 - axon_reconstructor - WARNING - spikesort_recordings - Load existing sortings option from reconstructor is set to False. Generating new sorting.
+2024-07-18 17:10:15,998 - axon_reconstructor - INFO - spikesort_recordings - Spike sorting stream well000
+2024-07-18 17:10:15,998 - axon_reconstructor - INFO - sort_multirecording - Sorting multi-recording for stream well000
+2024-07-18 17:10:16,000 - INFO - Running Kilosort2 spike sorting using Docker Images: rohanmalige/benshalom:v3. - mea_processing_library.benshalom_kilosort2_docker_image
