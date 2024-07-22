@@ -15,3 +15,5 @@ slurm*.out
 **.png
 **.npz
 **.zip
+**.log
+**.out

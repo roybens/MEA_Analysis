@@ -92,12 +92,13 @@ def sort_multirecording(multirecording, stream_id, save_root, sorting_params=dic
     try:
         if sorting_params.get('load_existing_sortings', False) and os.path.exists(sorter_output_folder):
             sorting = ss.Kilosort2Sorter._get_result_from_folder(sorter_output_folder)
-            if logger:
-                logger.info(f"Loaded existing sorting from {sorter_output_folder}")
-            return sorting, stream_sort_path
+            message = f"Loaded existing sorting from {sorter_output_folder}"
+            if logger: logger.info(message)
+            else: print(message)
+            return sorting, stream_sort_path, message
     except Exception as e:
-        if logger:
-            logger.error(f"Error loading existing sorting for stream {stream_id}: {e}")
+        if logger: logger.error(f"Error loading existing sorting for stream {stream_id}: {e}")
+        else: print(f"Error loading existing sorting for stream {stream_id}: {e}")
 
     # If no existing sorting found or loading failed, perform sorting
     try:
@@ -105,10 +106,13 @@ def sort_multirecording(multirecording, stream_id, save_root, sorting_params=dic
         output_folder.mkdir(parents=True, exist_ok=True)
         sorting_params_filtered = {k: v for k, v in sorting_params.items() if k in ss.Kilosort2Sorter.default_params()}
         sorting = MPL.benshalom_kilosort2_docker_image(multirecording, sorting_params=sorting_params_filtered, output_folder=stream_sort_path, verbose=verbose)
-        if logger: logger.info(f"Completed sorting and saved results to {sorter_output_folder}")
-        return sorting, stream_sort_path
+        message = f"Completed sorting and saved results to {sorter_output_folder}"
+        if logger: logger.info(message)
+        else: print(message)
+        return sorting, stream_sort_path, message
     except Exception as e:
-        if logger:
-            logger.error(f"Error sorting multi-recording for stream {stream_id}: {e}")
-        return None, stream_sort_path
+        message = f"Error sorting multi-recording for stream {stream_id}: {e}"
+        if logger: logger.error(message)
+        else: print(message)        
+        return None, stream_sort_path, message
 
