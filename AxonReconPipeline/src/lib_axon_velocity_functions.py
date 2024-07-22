@@ -1,5 +1,9 @@
 ''' This file contains plotting and analysis functions that use the axon_velocity package in main pipeline functions. '''
 
+<<<<<<< HEAD
+=======
+'''imports'''
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 import os
 import h5py
 import numpy as np
@@ -8,6 +12,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+<<<<<<< HEAD
 <<<<<<< HEAD
 import sys
 =======
@@ -31,11 +36,27 @@ from probeinterface import plotting as plotting_probe
 ''' Local imports '''
 >>>>>>> bf222ba (s'more changes)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+=======
+
+# Local imports
+# import sys
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 from MEAProcessingLibrary import mea_processing_library as MPL
 from AxonReconPipeline.axon_velocity.axon_velocity import GraphAxonTracking
 import AxonReconPipeline.axon_velocity.axon_velocity as av
 
 
+<<<<<<< HEAD
+=======
+# Axon trace algorithm imports
+#import MEAutility as mu
+from AxonReconPipeline.axon_velocity import axon_velocity as av  # Import submodule
+#from AxonReconPipeline.axon_velocity.axon_velocity.models import load_cell
+from AxonReconPipeline.axon_velocity.axon_velocity.evaluation import *
+
+'''functions'''
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 def get_extremum(template, locations):
     """
     Get the extremum of the template.
@@ -81,6 +102,7 @@ def save_figure(fig, fig_path):
 >>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
     plt.close()
 
+<<<<<<< HEAD
 def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', log=False):
     fig_amp = plt.figure(figsize=(10, 5))
     ax_amp = fig_amp.add_subplot(111)
@@ -128,6 +150,33 @@ def generate_peak_latency_map(template, locations, plot_dir, title, fresh_plots=
                                     colorbar_orientation="horizontal")
     ax_peaks.set_title(f"Peak latency", fontsize=20)
 >>>>>>> bf222ba (s'more changes)
+=======
+def generate_amplitude_map(transformed_template_filled, trans_loc_filled, plot_dir, title, fresh_plots=False):
+    fig_amp = plt.figure(figsize=(10, 5))
+    ax_amp = fig_amp.add_subplot(111)
+    fig_path = plot_dir / f"{title}_amplitude_map.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    ax_amp = av.plot_amplitude_map(transformed_template_filled, 
+                                   trans_loc_filled, 
+                                   log=False, 
+                                   ax=ax_amp, 
+                                   cmap="PRGn", 
+                                   colorbar=True, 
+                                   colorbar_orientation="horizontal")
+    ax_amp.set_title(f"Amplitude {title}", fontsize=20)
+    save_figure(fig_amp, fig_path)
+
+def generate_peak_latency_map(transformed_template_filled, trans_loc_filled, plot_dir, title, fresh_plots=False):
+    fig_peaks = plt.figure(figsize=(10, 5))
+    ax_peaks = fig_peaks.add_subplot(111)
+    fig_path = plot_dir / f"{title}_peak_latency_map.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    ax_peaks = av.plot_peak_latency_map(transformed_template_filled, 
+                                        trans_loc_filled, fs=10000, log=False, 
+                                        ax=ax_peaks, colorbar=True, 
+                                        colorbar_orientation="horizontal")
+    ax_peaks.set_title(f"Peak latency {title}", fontsize=20)
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     save_figure(fig_peaks, fig_path)
 
 def plot_selected_channels(gtr, plot_dir, suffix="", fresh_plots=False):
@@ -150,6 +199,7 @@ def plot_selected_channels_helper(fig_title, selected_channels, locations, filen
     ax.axis("off")
     save_figure(fig, fig_path)
 
+<<<<<<< HEAD
 def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False):
     fig = plt.figure(figsize=(8, 40))
     ax = fig.add_subplot(111)
@@ -166,6 +216,29 @@ def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False):
                               )
     ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
     save_figure(fig, fig_path)
+=======
+def plot_template_propagation_wrapper(template, locations, selected_channels, plot_dir, unit_id, title, fresh_plots=False):
+    fig = plt.figure(figsize=(8, 40))
+    ax = fig.add_subplot(111)
+    fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+
+    ax = av.plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
+    ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
+    save_figure(fig, fig_path)
+
+def select_and_plot_channels(gtr0, plot_dir, suffix=""):
+    gtr0.select_channels()
+    plot_selected_channels(f"Selected after detection threshold: {gtr0._detect_threshold} ms", 
+                        np.array(list(gtr0._selected_channels_detect)), gtr0.locations, f"detection_threshold{suffix}.png", plot_dir)
+    plot_selected_channels(f"Selected after detection threshold: {gtr0._kurt_threshold} ms", 
+                        np.array(list(gtr0._selected_channels_kurt)), gtr0.locations, f"kurt_threshold{suffix}.png", plot_dir)
+    plot_selected_channels(f"Selected after peak std threshold: {gtr0._peak_std_threhsold} ms", 
+                            np.array(list(gtr0._selected_channels_peakstd)), gtr0.locations, f"peak_std_threshold{suffix}.png", plot_dir)
+    plot_selected_channels(f"Selected after init delay threshold: {gtr0._init_delay} ms", 
+                            np.array(list(gtr0._selected_channels_init)), gtr0.locations, f"init_delay_threshold{suffix}.png", plot_dir)
+    plot_selected_channels("Selected after all thresholds", gtr0.selected_channels, gtr0.locations, f"all_thresholds{suffix}.png", plot_dir)
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 
 def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2s, extremums, init_chans, num_channels_included, 
                             channel_density, 
@@ -191,6 +264,7 @@ def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2
     init_chans.append(gtr.init_channel)
     extremums.append(get_extremum(transformed_template, trans_loc))
 
+<<<<<<< HEAD
 def generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, fresh_plots=False, suffix="", figsize=(10, 7)):
     gtr.build_graph()
     gtr.find_paths()
@@ -203,10 +277,37 @@ def generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, fresh_plots=
     save_figure(fig_graph, fig_path)
 
 def generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix="", plot_full_template=False):
+=======
+def generate_axon_analytics_dvdt(gtr, units, branch_ids, velocities, path_lengths, r2s, extremums, unit_id, transformed_template, trans_loc):
+    units.append(unit_id)
+    for i, br in enumerate(gtr.branches):
+        path = br["channels"]
+        velocity = br["velocity"]
+        r2 = br["r2"]
+        length = gtr.compute_path_length(path)
+        branch_ids.append(i)
+        velocities.append(velocity)
+        path_lengths.append(length)
+        r2s.append(r2)
+    extremums.append(get_extremum(transformed_template, trans_loc))
+
+def generate_axon_reconstruction_heuristics(gtr0, plot_dir, unit_id, fresh_plots=False, suffix=""):
+    gtr0.build_graph()
+    gtr0.find_paths()
+    gtr0._verbose = 1
+    fig_graph = plt.figure(figsize=(10, 7))
+    fig_path = plot_dir / f"axon_reconstruction_heuristics{suffix}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    fig_graph = gtr0.plot_graph(node_search_labels=False, fig=fig_graph, cmap_nodes="viridis", cmap_edges="YlGn")
+    save_figure(fig_graph, fig_path)
+
+def generate_axon_reconstruction_raw(gtr0, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix=""):
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     fig_graph = plt.figure(figsize=(12, 7))
     ax_raw = fig_graph.add_subplot(111)
     axpaths_raw = ax_raw
     fig_path = plot_dir / f"axon_reconstruction_raw{suffix}.png"
+<<<<<<< HEAD
     if os.path.exists(fig_path) and not fresh_plots:
         return
     axpaths_raw = gtr.plot_raw_branches(
@@ -214,17 +315,26 @@ def generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successf
                                         plot_full_template=plot_full_template, ax=axpaths_raw, cmap="rainbow",
                                         plot_labels=True, plot_bp=True, plot_neighbors=True
                                         )
+=======
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    axpaths_raw = gtr0.plot_raw_branches(cmap="tab20", plot_bp=True, plot_neighbors=True, plot_full_template=True, ax=axpaths_raw)
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     axpaths_raw.legend(fontsize=6)
     axpaths_raw.set_title("Raw Branches")
     plt.savefig(fig_path, dpi=600, bbox_inches='tight')
     plt.close()
     successful_recons[str(recon_dir)]["successful_units"][str(unit_id)] = {}
 
+<<<<<<< HEAD
 def generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix="", plot_full_template=False):
+=======
+def generate_axon_reconstruction_clean(gtr0, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix=""):
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     fig_graph = plt.figure(figsize=(12, 7))
     ax_raw = fig_graph.add_subplot(111)
     axpaths_raw = ax_raw
     fig_path = plot_dir / f"axon_reconstruction_clean{suffix}.png"
+<<<<<<< HEAD
     if os.path.exists(fig_path) and not fresh_plots:
         return
     axpaths_raw = gtr.plot_clean_branches(
@@ -232,11 +342,16 @@ def generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, succes
                                         plot_full_template=plot_full_template, ax=axpaths_raw, cmap="rainbow",
                                         plot_bp=True, branch_colors=None
                                         )
+=======
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    axpaths_raw = gtr0.plot_clean_branches(cmap="tab20", plot_bp=True, plot_full_template=True, ax=axpaths_raw)
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     axpaths_raw.legend(fontsize=6)
     axpaths_raw.set_title("Clean Branches")
     save_figure(fig_graph, fig_path)
     successful_recons[str(recon_dir)]["successful_units"][str(unit_id)] = {}
 
+<<<<<<< HEAD
 def generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, fresh_plots=False, suffix=""):
     fvel, ax_vel = plt.subplots(figsize=(9, 15))
     ax_vel.axis("off")
@@ -244,10 +359,19 @@ def generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, fresh_plots=
     if os.path.exists(fig_path) and not fresh_plots:
         return
     fvel = gtr.plot_velocities(cmap="tab20", plot_outliers=True, fig=fvel, markersize=12, markersize_out=18, fs=20)
+=======
+def generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id, fresh_plots=False, suffix=""):
+    fvel, ax_vel = plt.subplots(figsize=(9, 15))
+    ax_vel.axis("off")
+    fig_path = plot_dir / f"axon_reconstruction_velocities{suffix}.png"
+    if os.path.exists(fig_path) and fresh_plots == False: return
+    fvel = gtr0.plot_velocities(cmap="tab20", plot_outliers=True, fig=fvel, markersize=12, markersize_out=18, fs=20)
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
     save_figure(fvel, fig_path)
 
+<<<<<<< HEAD
 def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, init_chans, recon_dir, suffix=""):
     df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, 
                             "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, 
@@ -259,6 +383,10 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
 
                             #  "length": str(path_lengths), "r2": str(r2s), "num_channels_included": str(num_channels_included), 
                             #  "channel_density": str(channel_density), "init_chan": str(init_chans)})
+=======
+def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, recon_dir,  suffix=""):
+    df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, "channel_density": channel_density})
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     recon_dir_parent = os.path.dirname(recon_dir)
 <<<<<<< HEAD
     if not os.path.exists(recon_dir_parent):
@@ -266,8 +394,12 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics{suffix}.csv", index=False)
 =======
     if not os.path.exists(recon_dir_parent): os.makedirs(recon_dir_parent)
+<<<<<<< HEAD
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics.csv", index=False)
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+    df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics{suffix}.csv", index=False)
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 
 <<<<<<< HEAD
 # lib_plotting_and_analysis.py
@@ -320,13 +452,14 @@ def plot_all_traces(template, locations, plot_dir, unit_id, fresh_plots=False):
     ax.set_title(f'All Voltage Traces for Unit {unit_id}', fontsize=16)
     save_figure(fig, fig_path)
 
-def plot_template_propagation_wrapper(template, locations, selected_channels, plot_dir, unit_id, fresh_plots=False):
+def plot_template_propagation_wrapper(template, locations, selected_channels, plot_dir, unit_id, title, fresh_plots=False):
     fig = plt.figure(figsize=(8, 40))
     ax = fig.add_subplot(111)
-    fig_path = plot_dir / f"template_propagation_unit_{unit_id}.png"
+    fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
 
     ax = av.plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
+<<<<<<< HEAD
     ax.set_title(f'Template Propagation for Unit {unit_id}', fontsize=16)
     save_figure(fig, fig_path)
 
@@ -518,3 +651,7 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
 
             save_axon_analytics(stream_id, all_units, all_extremums, all_branch_ids, all_velocities, all_path_lengths, all_r2s, all_num_channels_included, all_channel_densities, recon_dir)
 >>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
+=======
+    ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
+    save_figure(fig, fig_path)
+>>>>>>> 8226c5e (added dv/dt derivative templating)

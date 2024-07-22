@@ -28,6 +28,7 @@ slurm*.out
 **.png
 **.npz
 <<<<<<< HEAD
+<<<<<<< HEAD
 **.zip
 **.log
 *.out
@@ -35,3 +36,8 @@ slurm*.out
 =======
 **.zip
 >>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
+=======
+**.zip
+**.log
+**.out
+>>>>>>> 8226c5e (added dv/dt derivative templating)
