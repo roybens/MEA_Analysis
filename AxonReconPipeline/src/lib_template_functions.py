@@ -14,17 +14,18 @@ from MEAProcessingLibrary import mea_processing_library as MPL
 import AxonReconPipeline.src.lib_sorting_functions as sorter
 import lib_waveform_functions as waveformer
 
-'''default settings'''
-default_recording_dir = './AxonReconPipeline/data/temp_data/recordings'
-default_sorting_dir = './AxonReconPipeline/data/temp_data/sortings'
-default_template_dir = './AxonReconPipeline/data/temp_data/templates'  
+''' Template merging functions '''
+from func_merge_templates import merge_templates
+#aw 20July2024 - this should be faster
+#aw20July2024 - This doesnt currently work. TODO: Fix this later. not important.
+from func_merge_templates import merge_templates_concurrent 
 
 default_n_jobs = 4
 
 '''functions'''
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger):
+def process_template_segment(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger):
     
     # Get the waveform extractor object
     try: seg_we = waveforms[rec_name]['waveforms']
@@ -64,6 +65,8 @@ def process_rec_name(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logge
     return (rec_name, {'template': template, 'path': template_save_file}), (rec_name, {'channel_locations': locs, 'path': channel_loc_save_file})
 
 def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_root=None, logger=None, max_workers=12):
+    if logger is not None: logger.info(f'Extracting template segments for unit {sel_unit_id}')
+    else: print(f'Extracting template segments for unit {sel_unit_id}')
     full_path = h5_path
     h5 = h5py.File(full_path)
     rec_names = list(h5['wells'][stream_id].keys())
@@ -73,7 +76,7 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(process_rec_name, sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger)
+            executor.submit(process_template_segment, sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger)
             for sel_idx, rec_name in enumerate(rec_names)
         ]
         for future in as_completed(futures):
@@ -94,229 +97,9 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
                 #debug
                 #break
 
-    return template_segments, channel_locations
-
-def fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_by_sample, logger=None):
-    def get_pitch():
-        distances = []
-        for i in range(len(merged_channel_loc[-1])):
-            for j in range(i + 1, len(merged_channel_loc[-1])):
-                distances.append(np.linalg.norm(np.array(merged_channel_loc[-1][i]) - np.array(merged_channel_loc[-1][j])))
-                min_distance = np.min(distances)
-                if min_distance == 17.5:
-                    return min_distance
-        assert min_distance % 17.5 == 0, "Minimum distance is not a multiple of 17.5 um."
-        return min_distance
-    
-    logger.info('Filling in missing channels...')
-    x_min = np.min([loc[0] for loc in merged_channel_loc[-1]])
-    x_max = np.max([loc[0] for loc in merged_channel_loc[-1]])
-    y_min = np.min([loc[1] for loc in merged_channel_loc[-1]])
-    y_max = np.max([loc[1] for loc in merged_channel_loc[-1]])
-
-    min_distance = get_pitch()
-
-    x_grid = np.arange(x_min, x_max + min_distance, min_distance)
-    y_grid = np.arange(y_min, y_max + min_distance, min_distance)
-    xx, yy = np.meshgrid(x_grid, y_grid)
-    grid = np.array([xx.flatten(), yy.flatten()]).T
-
-    existing_channels_set = set(map(tuple, merged_channel_loc[-1]))
-    expected_channels_set = set(map(tuple, grid))
-    missing_channel_set = [ch for idx, ch in enumerate(expected_channels_set) if tuple(ch) not in existing_channels_set]
-    assert len(missing_channel_set) + len(merged_channel_loc[-1]) == len(grid), "Missing channels do not match."
-    assert len(missing_channel_set) + len(merged_channel_loc[-1]) <= 26400, "Too many channels for Maxwell MEAs."
-
-    logger.info(f'Processing {len(missing_channel_set)} unrecorded channels')
-    new_size = merged_templates[-1][0].shape[0] + len(missing_channel_set)
-    new_merged_templates = [np.array([np.zeros(new_size, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-    for l, t in enumerate(merged_templates[-1]):
-        new_array = np.zeros(new_size, dtype=t.dtype)
-        new_array[:t.shape[0]] = t
-        new_merged_templates[-1][l] = new_array
-
-    num_channels = new_merged_templates[-1][0].shape[0]
-    num_samples = len(merged_templates[-1])
-    new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * num_samples, dtype='float32')]
-    for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
-        for channel_idx, count_num in enumerate(merged_count_at_channel_by_sample[-1][sample_idx]):
-            new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num
-
-    same_size = merged_channel_loc[-1][0].shape[0]
-    new_length = len(merged_channel_loc[-1]) + len(missing_channel_set)
-    new_merged_channels = [np.array([np.zeros(same_size, dtype='float64')] * new_length, dtype='float64')]
-    for l, c in enumerate(merged_channel_loc[-1]):
-        new_tuple = np.zeros(same_size, dtype=c.dtype)
-        new_tuple = c
-        new_merged_channels[-1][l] = new_tuple
-
-    for idx, j in enumerate(missing_channel_set):
-        position = merged_templates[-1][0].shape[0] + idx
-        channel_loc_to_append = tuple(missing_channel_set[idx])
-        tuple_to_append = np.array(channel_loc_to_append)
-        new_merged_channels[-1][position] = tuple_to_append
-
-    for footprint in new_merged_templates[-1]:
-        assert np.array(footprint[-len(missing_channel_set)]).all() == 0, "Filler channels are not zeroed out."
-    for footprint in new_merged_count_at_channel_by_sample[-1]:
-        assert np.array(footprint[-len(missing_channel_set)]).all() == 0, "Filler channels are not zeroed out."
-    for ch in missing_channel_set:
-        assert ch in new_merged_channels[-1], "Missing channels are not in the channel locations."
-
-    merged_templates = new_merged_templates
-    merged_channel_loc = new_merged_channels
-    merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample
-
-    return merged_templates, merged_channel_loc, merged_count_at_channel_by_sample
-   
-def merge_templates(templates, channel_locations, logger=None):
-    merged_templates = []
-    merged_channel_loc = []
-    verbose = True
-
-    if logger is not None: logger.debug('Starting merge...')
-    else: print('Starting merge...')
-        
-    test_channel_measure = 0
-    for i in range(len(templates)):
-        channel_loc = channel_locations[i]
-
-        if len(merged_templates) == 0:
-            incoming_template = templates[i]
-            if np.isnan(incoming_template).all(): continue
-            assert np.isnan(incoming_template).any() == False, "First template contains NaN values."
-
-            merged_templates.append(templates[i])
-            merged_channel_loc.append(channel_loc)
-            test_channel_measure += len(channel_loc)
-            num_channels = merged_templates[-1][0].shape[0]
-            merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-            new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-            for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
-                for channel_idx, count_num in enumerate(merged_count_at_channel_by_sample[-1][sample_idx]):
-                    new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num + 1
-            merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample 
-        else:
-            if logger is not None:
-                logger.debug(f'Merging matching channels...')
-                logger.debug(f'Total merged channels: {len(merged_channel_loc[-1])}')            
-                logger.debug(f'Total channels: {test_channel_measure}')  
-            else:
-                print(f'Merging matching channels...')
-                print(f'Total merged channels: {len(merged_channel_loc[-1])}')            
-                print(f'Total channels: {test_channel_measure}')  
-                
-            new_template = []
-            new_channel_loc = []
-            incoming_template = templates[i]
-            if logger is not None:
-                logger.debug(f'Processing {len(channel_loc)} channels')
-            else:
-                print(f'Processing {len(channel_loc)} channels')
-
-            existing_channels_set = set(map(tuple, merged_channel_loc[-1]))
-            incoming_channels_set = set(map(tuple, channel_loc))
-            overlapping_channels = existing_channels_set.intersection(incoming_channels_set)
-            
-            idx_incoming_channels_in_overlap = [idx for idx, ch in enumerate(channel_loc) if tuple(ch) in overlapping_channels]
-            idx_existing_channels_in_overlap = [idx for idx, ch in enumerate(merged_channel_loc[-1]) if tuple(ch) in overlapping_channels]
-            idx_new_incoming_channels = [idx for idx, ch in enumerate(channel_loc) if tuple(ch) not in overlapping_channels]
-            assert len(idx_incoming_channels_in_overlap) + len(idx_new_incoming_channels) == len(channel_loc), "Indices do not match."
-            test_channel_measure += len(idx_new_incoming_channels)
-
-            channels_already_merged = merged_channel_loc[-1][idx_existing_channels_in_overlap]
-            merging_channels = channel_loc[idx_incoming_channels_in_overlap]
-            merging_channels_ordered = [ch for idx, ch in enumerate(channels_already_merged) if tuple(ch) in merging_channels]
-            merging_channels_ordered = np.array(merging_channels_ordered, dtype='float64')
-            assert len(channels_already_merged) == len(merging_channels_ordered), "The number of channels does not match."
-            for idx in range(len(channels_already_merged)):
-                assert np.array_equal(channels_already_merged[idx], merging_channels_ordered[idx]), "Matching channels are not the same."
-            shared_ordered_channels = merging_channels_ordered                   
-           
-            if logger is not None: logger.debug(f'Processing {len(channels_already_merged)} matching channels')
-            else: print(f'Processing {len(channels_already_merged)} matching channels')
-                
-            if idx_existing_channels_in_overlap or idx_incoming_channels_in_overlap:               
-                if logger is not None: logger.debug(f'Processing matching channels across footprints, template {i+1}/{len(templates)}...')
-                else: print(f'Processing matching channels across footprints, template {i+1}/{len(templates)}...')     
-                    
-                merged_sample_at_channel = merged_templates[-1][:, idx_existing_channels_in_overlap]
-                sample_to_be_merged = incoming_template[:, idx_incoming_channels_in_overlap]
-
-                merge_count = merged_count_at_channel_by_sample[-1][:, idx_existing_channels_in_overlap]             
-                total_samples_at_channel = merge_count + 1
-                total_samples_at_channel[np.isnan(sample_to_be_merged)] = total_samples_at_channel[np.isnan(sample_to_be_merged)] - 1
-                sample_to_be_merged[np.isnan(sample_to_be_merged)] = 0                               
-                weighted_average = np.zeros_like(total_samples_at_channel)
-                non_zero_mask = total_samples_at_channel != 0
-                weighted_average[non_zero_mask] = (merged_sample_at_channel[non_zero_mask] * merge_count[non_zero_mask] + sample_to_be_merged[non_zero_mask]) / total_samples_at_channel[non_zero_mask]
-                assert not np.isnan(weighted_average).any(), "Weighted average contains NaN values."
-                
-                merged_templates[-1][:, idx_existing_channels_in_overlap] = weighted_average
-                merged_count_at_channel_by_sample[-1][:, idx_existing_channels_in_overlap] = total_samples_at_channel
-                        
-            if idx_new_incoming_channels:         
-                if logger is not None: logger.debug(f'Processing {len(idx_new_incoming_channels)} non-matching channels')
-                else: print(f'Processing {len(idx_new_incoming_channels)} non-matching channels')
-                    
-                new_size = merged_templates[-1][0].shape[0] + len(idx_new_incoming_channels)
-                new_merged_templates = [np.array([np.zeros(new_size, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-                for l, t in enumerate(merged_templates[-1]):
-                    new_array = np.zeros(new_size, dtype=t.dtype)
-                    new_array[:t.shape[0]] = t
-                    new_merged_templates[-1][l] = new_array
-
-                num_channels = new_merged_templates[-1][0].shape[0]
-                new_merged_count_at_channel_by_sample = [np.array([np.zeros(num_channels, dtype='float32')] * len(merged_templates[-1]), dtype='float32')]
-                for sample_idx, merge_counts_in_sample in enumerate(merged_count_at_channel_by_sample[-1]):
-                    for channel_idx, count_num in enumerate(merged_count_at_channel_by_sample[-1][sample_idx]):
-                        new_merged_count_at_channel_by_sample[-1][sample_idx][channel_idx] = count_num
-
-                same_size = merged_channel_loc[-1][0].shape[0]
-                new_length = len(merged_channel_loc[-1]) + len(idx_new_incoming_channels)
-                new_merged_channels = [np.array([np.zeros(same_size, dtype='float64')] * new_length, dtype='float64')]
-                for l, c in enumerate(merged_channel_loc[-1]):
-                    new_tuple = np.zeros(same_size, dtype=c.dtype)
-                    new_tuple = c
-                    new_merged_channels[-1][l] = new_tuple
-
-                for k in tqdm(range(len(templates[i])), desc=f'Processing non-matching channels in each footprint, template {i+1}/{len(templates)}'):
-                    for idx, j in enumerate(idx_new_incoming_channels):
-                        position = merged_templates[-1][0].shape[0] + idx
-                        sample_to_append = templates[i][k][j]
-                        if np.isnan(sample_to_append):
-                            sample_to_append = 0
-                            new_merged_count_at_channel_by_sample[-1][k][position] = 0
-                        else:
-                            new_merged_count_at_channel_by_sample[-1][k][position] += 1
-                        new_merged_templates[-1][k][position] = sample_to_append               
-                        channel_loc_to_append = tuple(channel_loc[j])
-                        tuple_to_append = np.array(channel_loc_to_append)
-                        new_merged_channels[-1][position] = tuple_to_append          
-
-                merged_templates = new_merged_templates
-                merged_channel_loc = new_merged_channels
-                merged_count_at_channel_by_sample = new_merged_count_at_channel_by_sample                   
-      
-            else:
-                raise Exception("Something funky is going on")
-    if logger is not None: logger.debug('done merging')
-    else: print('done merging')
-        
-    if logger is not None: logger.debug(f'Total merged channels: {len(merged_channel_loc[-1])}')
-    else: print(f'Total merged channels: {len(merged_channel_loc[-1])}')
-        
-    for i in range(len(merged_templates[-1])): assert len(merged_templates[-1][i]) <= 26400
-    assert len(merged_channel_loc[-1]) <= 26400
-
-    merged_templates_filled, merged_channel_loc_filled, merged_count_at_channel_by_sample_filled = fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_by_sample, logger=logger)
-
-    if logger is not None: logger.debug(f'Total merged channels after fill: {len(merged_channel_loc_filled[-1])}')
-    else: print(f'Total merged channels after fill: {len(merged_channel_loc_filled[-1])}')
-        
-    for i in range(len(merged_templates_filled[-1])): assert len(merged_templates_filled[-1][i]) <= 26400
-    assert len(merged_channel_loc_filled[-1]) <= 26400
-    return merged_templates, merged_channel_loc, merged_templates_filled, merged_channel_loc_filled  
+    if logger is not None: logger.info(f'Finished extracting {len(template_segments)} template segments for unit {sel_unit_id}')
+    else: print(f'Finished extracting {len(template_segments)} template segments for unit {sel_unit_id}')
+    return template_segments, channel_locations  
 
 def merge_template_segments(unit_segments, channel_locations, logger=None):
     if logger is not None: logger.info(f'Merging partial templates')
@@ -324,11 +107,49 @@ def merge_template_segments(unit_segments, channel_locations, logger=None):
     template_list = [tmp['template'] for rec_name, tmp in unit_segments.items()]
     channel_locations_list = [ch_loc['channel_locations'] for rec_name, ch_loc in channel_locations.items()]
     merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = merge_templates(template_list, channel_locations_list, logger=logger)
+    
+    #aw20July2024 - This doesnt currently work. TODO: Fix this later. not important.
+    #merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = merge_templates_concurrent(template_list, channel_locations_list, logger=logger)
+    
     merged_template = merged_template[0]
     merged_channel_loc = merged_channel_loc[0]
     merged_template_filled = merged_template_filled[0]
     merged_channel_locs_filled = merged_channel_locs_filled[0]
     return merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled
+
+def get_time_derivative(merged_template, merged_template_filled, unit='seconds', sampling_rate=10000, axis=0):
+    """
+    Computes the time derivative of the input arrays along the specified axis.
+    
+    Parameters:
+    - merged_template: numpy.ndarray
+        The first input array where the y-axis describes channels and x-axis describes voltage(time) signals.
+    - merged_template_filled: numpy.ndarray
+        The second input array where the y-axis describes channels and x-axis describes voltage(time) signals.
+    - unit: str, optional
+        The time unit for the derivative, either 'seconds' or 'ms'. Default is 'seconds'.
+    - sampling_rate: int, optional
+        The sampling rate in samples per second. Default is 10000.
+    - axis: int, optional
+        The axis along which to compute the derivative. Default is 0 (assuming time signals along y-axis).
+    
+    Returns:
+    - d_merged_template: numpy.ndarray
+        The time derivative of merged_template.
+    - d_merged_template_filled: numpy.ndarray
+        The time derivative of merged_template_filled.
+    """
+    
+    if unit == 'seconds':
+        delta_t = 1.0 / sampling_rate
+    elif unit == 'ms':
+        delta_t = 1.0 / (sampling_rate / 1000)
+    else:
+        raise ValueError("Invalid unit. Choose either 'seconds' or 'ms'.")
+
+    d_merged_template = np.diff(merged_template, axis=axis) / delta_t
+    d_merged_template_filled = np.diff(merged_template_filled, axis=axis) / delta_t
+    return d_merged_template, d_merged_template_filled
 
 def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=None, unit_limit=None, logger=None, template_bypass=False):
     
@@ -340,16 +161,20 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             except ValueError: continue  # Skip files that don't start with an integer          
         return sel_unit_ids
     
-    def add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled, 
-                    template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill):
+    def add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, 
+                    merged_channel_locs_filled, template_save_file, channel_loc_save_file, template_save_file_fill, 
+                    channel_loc_save_file_fill, d_merged_template, d_merged_template_filled
+                    ):
         unit_templates[sel_unit_id] = {
             'template_segments': unit_segments, 
             'channel_locations': channel_locations,
             'merged_template_path': template_save_file,
             'merged_template': merged_template,
+            'dvdt_merged_template': d_merged_template,
             'merged_channel_loc_path': channel_loc_save_file,
             'merged_channel_loc': merged_channel_loc,
             'merged_template_filled_path': template_save_file_fill,
+            'dvdt_merged_template_filled': d_merged_template_filled,
             'merged_template_filled': merged_template_filled,
             'merged_channel_locs_filled_path': channel_loc_save_file_fill,
             'merged_channel_locs_filled': merged_channel_locs_filled, 
@@ -376,8 +201,10 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
     for sel_unit_id in tqdm(sel_unit_ids):
 
         template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '.npy')
+        dvdt_template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_dvdt.npy')
         channel_loc_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_channels.npy')
         template_save_file_fill = os.path.join(template_save_path, str(sel_unit_id) + '_filled.npy')
+        dvdt_template_save_file_fill = os.path.join(template_save_path, str(sel_unit_id) + '_dvdt_filled.npy')
         channel_loc_save_file_fill = os.path.join(template_save_path, str(sel_unit_id) + '_channels_filled.npy')
 
         try:
@@ -388,19 +215,23 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             if logger is not None: logger.info(f'Loading merged template for unit {sel_unit_id}')
             else: print(f'Loading merged template for unit {sel_unit_id}')                
             merged_template = np.load(template_save_file)
+            dvdt_template_save_file = np.load(dvdt_template_save_file)
             merged_channel_loc = np.load(channel_loc_save_file)
             merged_template_filled = np.load(template_save_file_fill)
+            dvdt_template_save_file_fill = np.load(dvdt_template_save_file_fill)
             merged_channel_locs_filled = np.load(channel_loc_save_file_fill)
             add_to_dict("loading segments is not currently supported", 
                         "loading segment channels is not currently supported", 
                         merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled,
-                        template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill)
+                        template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill,
+                        dvdt_template_save_file, dvdt_template_save_file_fill
+                        )
             unit_count += 1
             if unit_limit is not None and unit_count >= unit_limit: break
             continue 
             #else: raise Exception('load_merged_templates is set to False. Generating New Templates.')
         except Exception as e: 
-            if logger is not None: logger.info(f'Error loading template for unit {sel_unit_id}:\n{e}. Generating New Templates.')
+            if logger is not None: logger.warning(f'loading template for unit {sel_unit_id}:\n{e}. Generating New Templates.')
             else: print(f'Error loading template for unit {sel_unit_id}:\n{e}. Generating New Templates.'); pass 
 
         try:
@@ -413,12 +244,20 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             else: print(f'Merging partial templates for unit {sel_unit_id}')
                 
             merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = merge_template_segments(unit_segments, channel_locations, logger=logger)
-            add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled,
-                        template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill)
+            dvdt_merged_template, dvdt_merged_template_filled = get_time_derivative(merged_template, merged_template_filled)
+            
+            add_to_dict(
+                unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, 
+                merged_channel_locs_filled, template_save_file, channel_loc_save_file, template_save_file_fill, 
+                channel_loc_save_file_fill, dvdt_merged_template, dvdt_merged_template_filled
+                )
+            
             if te_params.get('save_merged_templates', False):
                 np.save(template_save_file, merged_template)
+                np.save(dvdt_template_save_file, dvdt_merged_template)
                 np.save(channel_loc_save_file, merged_channel_loc)
                 np.save(template_save_file_fill, merged_template_filled)
+                np.save(dvdt_template_save_file_fill, dvdt_merged_template_filled)
                 np.save(channel_loc_save_file_fill, merged_channel_locs_filled)
             if logger is not None: logger.info(f'Merged template saved to {save_root}/templates')
             else: print(f'Merged template saved to {save_root}/templates')
@@ -426,9 +265,7 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
             if unit_limit is not None and unit_count >= unit_limit: break                
         except Exception as e:
             if logger is not None: logger.error(f'Unit {sel_unit_id} encountered the following error: {e}')
-            else: print(f'Unit {sel_unit_id} encountered the following error:\n {e}')               
-        
-
+            else: print(f'Unit {sel_unit_id} encountered the following error:\n {e}')
     return unit_templates
 
 def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_root=None, te_params={}, qc_params={}, unit_limit=None, logger=None, template_bypass=False):
