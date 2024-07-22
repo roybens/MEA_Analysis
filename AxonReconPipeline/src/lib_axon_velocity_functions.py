@@ -110,16 +110,32 @@ def plot_template_propagation_wrapper(template, locations, selected_channels, pl
     save_figure(fig, fig_path)
 
 def select_and_plot_channels(gtr0, plot_dir, suffix=""):
+    
     gtr0.select_channels()
-    plot_selected_channels(f"Selected after detection threshold: {gtr0._detect_threshold} ms", 
-                        np.array(list(gtr0._selected_channels_detect)), gtr0.locations, f"detection_threshold{suffix}.png", plot_dir)
-    plot_selected_channels(f"Selected after detection threshold: {gtr0._kurt_threshold} ms", 
-                        np.array(list(gtr0._selected_channels_kurt)), gtr0.locations, f"kurt_threshold{suffix}.png", plot_dir)
-    plot_selected_channels(f"Selected after peak std threshold: {gtr0._peak_std_threhsold} ms", 
-                            np.array(list(gtr0._selected_channels_peakstd)), gtr0.locations, f"peak_std_threshold{suffix}.png", plot_dir)
-    plot_selected_channels(f"Selected after init delay threshold: {gtr0._init_delay} ms", 
-                            np.array(list(gtr0._selected_channels_init)), gtr0.locations, f"init_delay_threshold{suffix}.png", plot_dir)
-    plot_selected_channels("Selected after all thresholds", gtr0.selected_channels, gtr0.locations, f"all_thresholds{suffix}.png", plot_dir)
+    
+    plot_selected_channels(
+        f"Selected after detection threshold: {gtr0._detect_threshold} ms", 
+        np.array(list(gtr0._selected_channels_detect)), gtr0.locations, 
+        f"detection_threshold{suffix}.png", plot_dir)
+    
+    plot_selected_channels(
+        f"Selected after detection threshold: {gtr0._kurt_threshold} ms", 
+        np.array(list(gtr0._selected_channels_kurt)), 
+        gtr0.locations, f"kurt_threshold{suffix}.png", plot_dir)
+    
+    plot_selected_channels(
+        f"Selected after peak std threshold: {gtr0._peak_std_threhsold} ms", 
+        np.array(list(gtr0._selected_channels_peakstd)), gtr0.locations, 
+        f"peak_std_threshold{suffix}.png", plot_dir)
+    
+    plot_selected_channels(
+        f"Selected after init delay threshold: {gtr0._init_delay} ms", 
+        np.array(list(gtr0._selected_channels_init)), gtr0.locations,
+        f"init_delay_threshold{suffix}.png", plot_dir)
+    
+    plot_selected_channels(
+        "Selected after all thresholds", gtr0.selected_channels, 
+        gtr0.locations, f"all_thresholds{suffix}.png", plot_dir)
 
 def generate_axon_analytics(gtr0, units, branch_ids, velocities, path_lengths, r2s, extremums, unit_id, transformed_template, trans_loc):
     units.append(unit_id)
