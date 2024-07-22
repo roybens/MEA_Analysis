@@ -42,6 +42,9 @@ default_n_jobs = 4
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 def process_template_segment(sel_unit_id, rec_name, waveforms, save_root, sel_idx, logger):
     
     # Get the waveform extractor object
@@ -167,6 +170,7 @@ def extract_template_segments(sel_unit_id, h5_path, stream_id, waveforms, save_r
                 #debug
                 #break
 
+<<<<<<< HEAD
     return template_segments, channel_locations
 
 def fill_template(merged_templates, merged_channel_loc, merged_count_at_channel_by_sample, logger=None):
@@ -391,6 +395,11 @@ def merge_templates(templates, channel_locations, logger=None):
     assert len(merged_channel_loc_filled[-1]) <= 26400
     return merged_templates, merged_channel_loc, merged_templates_filled, merged_channel_loc_filled  
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+    if logger is not None: logger.info(f'Finished extracting {len(template_segments)} template segments for unit {sel_unit_id}')
+    else: print(f'Finished extracting {len(template_segments)} template segments for unit {sel_unit_id}')
+    return template_segments, channel_locations  
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 
 def merge_template_segments(unit_segments, channel_locations, logger=None):
     if logger is not None: logger.info(f'Merging partial templates')
@@ -409,6 +418,9 @@ def merge_template_segments(unit_segments, channel_locations, logger=None):
     return merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 def get_time_derivative(merged_template, merged_template_filled, unit='seconds', sampling_rate=10000, axis=0):
     """
     Computes the time derivative of the input arrays along the specified axis.
@@ -443,8 +455,11 @@ def get_time_derivative(merged_template, merged_template_filled, unit='seconds',
     d_merged_template_filled = np.diff(merged_template_filled, axis=axis) / delta_t
     return d_merged_template, d_merged_template_filled
 
+<<<<<<< HEAD
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=None, unit_limit=None, logger=None, template_bypass=False):
     
     def get_existing_unit_ids():
@@ -456,30 +471,42 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
         return sel_unit_ids
     
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     def add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, 
                     merged_channel_locs_filled, template_save_file, channel_loc_save_file, template_save_file_fill, 
                     channel_loc_save_file_fill, d_merged_template, d_merged_template_filled
                     ):
+<<<<<<< HEAD
 =======
     def add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled, 
                     template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill):
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         unit_templates[sel_unit_id] = {
             'template_segments': unit_segments, 
             'channel_locations': channel_locations,
             'merged_template_path': template_save_file,
             'merged_template': merged_template,
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             'dvdt_merged_template': d_merged_template,
             'merged_channel_loc_path': channel_loc_save_file,
             'merged_channel_loc': merged_channel_loc,
             'merged_template_filled_path': template_save_file_fill,
             'dvdt_merged_template_filled': d_merged_template_filled,
+<<<<<<< HEAD
 =======
             'merged_channel_loc_path': channel_loc_save_file,
             'merged_channel_loc': merged_channel_loc,
             'merged_template_filled_path': template_save_file_fill,
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             'merged_template_filled': merged_template_filled,
             'merged_channel_locs_filled_path': channel_loc_save_file_fill,
             'merged_channel_locs_filled': merged_channel_locs_filled, 
@@ -530,12 +557,18 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
                         "loading segment channels is not currently supported", 
                         merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled,
 <<<<<<< HEAD
+<<<<<<< HEAD
                         template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill,
                         dvdt_template_save_file, dvdt_template_save_file_fill
                         )
 =======
                         template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill)
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+                        template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill,
+                        dvdt_template_save_file, dvdt_template_save_file_fill
+                        )
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             unit_count += 1
             if unit_limit is not None and unit_count >= unit_limit: break
             continue 
@@ -559,6 +592,9 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
                 
             merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled = merge_template_segments(unit_segments, channel_locations, logger=logger)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             dvdt_merged_template, dvdt_merged_template_filled = get_time_derivative(merged_template, merged_template_filled)
             
             add_to_dict(
@@ -567,10 +603,13 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
                 channel_loc_save_file_fill, dvdt_merged_template, dvdt_merged_template_filled
                 )
             
+<<<<<<< HEAD
 =======
             add_to_dict(unit_segments, channel_locations, merged_template, merged_channel_loc, merged_template_filled, merged_channel_locs_filled,
                         template_save_file, channel_loc_save_file, template_save_file_fill, channel_loc_save_file_fill)
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             if te_params.get('save_merged_templates', False):
                 np.save(template_save_file, merged_template)
                 np.save(dvdt_template_save_file, dvdt_merged_template)
@@ -585,12 +624,16 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
         except Exception as e:
             if logger is not None: logger.error(f'Unit {sel_unit_id} encountered the following error: {e}')
 <<<<<<< HEAD
+<<<<<<< HEAD
             else: print(f'Unit {sel_unit_id} encountered the following error:\n {e}')
 =======
             else: print(f'Unit {sel_unit_id} encountered the following error:\n {e}')               
         
 
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+            else: print(f'Unit {sel_unit_id} encountered the following error:\n {e}')
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     return unit_templates
 
 def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_root=None, te_params={}, qc_params={}, unit_limit=None, logger=None, template_bypass=False):

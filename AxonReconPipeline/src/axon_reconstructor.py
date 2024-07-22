@@ -88,6 +88,9 @@ class AxonReconstructor:
         error_log_file = self.error_log_file
         logger = logging.getLogger('axon_reconstructor')
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 
         # Remove all existing handlers
         for handler in logger.handlers[:]:
@@ -145,6 +148,7 @@ class AxonReconstructor:
         logger.error('This is an error message')
         logger.critical('This is a critical message')
         
+<<<<<<< HEAD
 =======
         if not logger.handlers:
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
@@ -160,6 +164,8 @@ class AxonReconstructor:
             logger.error('This is an error message')
             logger.critical('This is a critical message')
 >>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         return logger
 
     def get_sorting_params(self, kwargs):
@@ -200,9 +206,13 @@ class AxonReconstructor:
             'load_merged_templates': True,
             'save_merged_templates': True,
 <<<<<<< HEAD
+<<<<<<< HEAD
             'time_derivative': False,
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+            'time_derivative': False,
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             #'template_bypass': False,
         }
         default_params.update(kwargs.get('te_params', {}))
@@ -415,14 +425,20 @@ class AxonReconstructor:
         return self.sortings[rec_key]['streams'][stream_id]
     
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     def _check_if_sorting_failed(self, rec_key, stream_id, streams):
         try: message = self.sortings[rec_key]['streams'][stream_id]['sorting']['message']
         except: return False # If no message found, older version of reconstructor object - try to load or generate new sorting as needed
         if 'Spike sorting' in message and 'failed' in message: return True
         else: return False
     
+<<<<<<< HEAD
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
     def spikesort_recordings(self):
         self.logger.info("Starting spike sorting process")
         sortings = {}
@@ -444,16 +460,22 @@ class AxonReconstructor:
                     assert self.reconstructor_load_options['load_reconstructor'], 'Load existing sortings option from reconstructor is set to False. Generating new sorting.'
                     sorting_dict = self._validate_sort(rec_key, stream_id, multirec['streams'])
 <<<<<<< HEAD
+<<<<<<< HEAD
                     if self._check_if_sorting_failed(rec_key, stream_id, multirec['streams']): 
                         self.logger.warning(f"Sorting previously failed for {rec_key} stream {stream_id}. Presumably it will fail again. Skipping well."); continue
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+                    if self._check_if_sorting_failed(rec_key, stream_id, multirec['streams']): 
+                        self.logger.warning(f"Sorting previously failed for {rec_key} stream {stream_id}. Presumably it will fail again. Skipping well."); continue
+>>>>>>> 8226c5e (added dv/dt derivative templating)
                     streams[stream_id] = sorting_dict
                 # If not, generate new sorting
                 except AssertionError as e:
                     self.logger.warning(e)
                     self.logger.info(f'Spike sorting stream {stream_id}')
                     mr = stream['multirecording']                    
+<<<<<<< HEAD
 <<<<<<< HEAD
                     sorting, stream_sort_path, message = sorter.sort_multirecording(mr, stream_id, save_root=spikesorting_root, sorting_params=self.sorting_params, logger=self.logger)
                     streams[stream_id] = {
@@ -466,6 +488,13 @@ class AxonReconstructor:
                         'sorting_path': stream_sort_path,
                         'sorting': sorting
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+                    sorting, stream_sort_path, message = sorter.sort_multirecording(mr, stream_id, save_root=spikesorting_root, sorting_params=self.sorting_params, logger=self.logger)
+                    streams[stream_id] = {
+                        'sorting_path': stream_sort_path,
+                        'sorting': sorting,
+                        'message': message
+>>>>>>> 8226c5e (added dv/dt derivative templating)
                     }
 
             sortings[f"{date}_{chip_id}_{run_id}"] = {
@@ -496,10 +525,13 @@ class AxonReconstructor:
         assert self.waveforms[rec_key]['streams'][stream_id], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
         #assert spiketiming.npy exists at path
         #assert os.path.exists(self.waveforms[rec_key]['streams'][stream_id]['path']), f"Waveform path not found for {stream_id}. Generating new waveforms as needed."
+<<<<<<< HEAD
 =======
         assert stream_id in self.waveforms[rec_key]['streams'], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
         assert self.waveforms[rec_key]['streams'][stream_id], f"No waveforms found in reconstructor for {stream_id}. Generating new waveforms."
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         for rec_name, waveform_seg in self.waveforms[rec_key]['streams'][stream_id].items():
             assert os.path.exists(self.waveforms[rec_key]['streams'][stream_id][rec_name]['path']), f"Waveform path not found for {stream_id}, segment {rec_name}. Generating new waveforms as needed."
         self.logger.info(f"Success! Using exisiting waveforms from reconstructor object for {stream_id}. Skipping waveform extraction.")
@@ -556,6 +588,9 @@ class AxonReconstructor:
 
     def _validate_templates(self, rec_key, stream_id, datum):
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         assert self.reconstructor_load_options['load_templates'], 'Load existing templates option is set to False. Generating new templates.'
         self.logger.info(f'Attempting to load templates {rec_key} stream {stream_id}')
         assert 'templates' in self.__dict__, "No templates found in reconstructor. Generating new templates."
@@ -580,12 +615,18 @@ class AxonReconstructor:
             assert isinstance(unit_template['merged_template'], np.ndarray), f"'merged_template' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
             assert isinstance(unit_template['merged_channel_loc'], np.ndarray), f"'merged_channel_loc' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
 <<<<<<< HEAD
+<<<<<<< HEAD
             assert isinstance(unit_template['dvdt_merged_template'], np.ndarray), f"'dvdt_merged_template' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
             assert isinstance(unit_template['merged_template_filled'], np.ndarray), f"'merged_template_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
             assert isinstance(unit_template['dvdt_merged_template_filled'], np.ndarray), f"'dvdt_merged_template_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
 =======
             assert isinstance(unit_template['merged_template_filled'], np.ndarray), f"'merged_template_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+            assert isinstance(unit_template['dvdt_merged_template'], np.ndarray), f"'dvdt_merged_template' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+            assert isinstance(unit_template['merged_template_filled'], np.ndarray), f"'merged_template_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+            assert isinstance(unit_template['dvdt_merged_template_filled'], np.ndarray), f"'dvdt_merged_template_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             assert isinstance(unit_template['merged_channel_locs_filled'], np.ndarray), f"'merged_channel_locs_filled' not found for stream_id {stream_id}, unit {unit}. Generating new templates as needed."
         self.logger.info(f"Success! Using exisiting templates from reconstructor object for {stream_id}. Skipping template extraction.")
         return self.templates[rec_key]['streams'][stream_id]
@@ -646,10 +687,14 @@ class AxonReconstructor:
         try: assert self.templates, "No templates found. Skipping analysis and reconstruction."
         except AssertionError as e: self.logger.error(e); return
 <<<<<<< HEAD
+<<<<<<< HEAD
         analyze_and_reconstruct(
 =======
         axoner.analyze_and_reconstruct(
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        analyze_and_reconstruct(
+>>>>>>> 8226c5e (added dv/dt derivative templating)
             self.templates,
             recon_dir=self.recon_dir,
             params=self.av_params,
@@ -662,6 +707,9 @@ class AxonReconstructor:
 
     def save_reconstructor(self):
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         self.logger.info("Saving reconstructor object")
         for rec_key, recording in self.recordings.items():
             h5_path = recording['h5_path']
@@ -673,6 +721,7 @@ class AxonReconstructor:
                 # Ensure the directory exists
                 if not os.path.exists(self.reconstructor_dir):
                     os.makedirs(self.reconstructor_dir)
+<<<<<<< HEAD
 
                 self.logger.info(f"Saving reconstructor object stream: {stream_id}")
 
@@ -699,32 +748,35 @@ class AxonReconstructor:
         # Ensure the directory exists
         if not os.path.exists(self.reconstructor_dir):
             os.makedirs(self.reconstructor_dir)
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 
-        #reconstructor_id = f"{self.recordings['date']}_{self.recordings['chip_id']}_{self.recordings['run_id']}"
-        reconstructor_id = self.reconstructor_id
-        
-        self.logger.info("Saving reconstructor object streams")
+                self.logger.info(f"Saving reconstructor object stream: {stream_id}")
 
-        # Capture pip requirements
-        self.requirements = subprocess.check_output(['pip', 'freeze']).decode().splitlines()
+                # Capture pip requirements
+                self.requirements = subprocess.check_output(['pip', 'freeze']).decode().splitlines()
 
-        # Capture git version
-        self.git_version = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()
+                # Capture git version
+                self.git_version = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()
 
-        #Optionally remove excess data
-        if not self.reconstructor_save_options['recordings']: del self.recordings
-        if not self.reconstructor_save_options['multirecordings']: del self.multirecordings
-        if not self.reconstructor_save_options['sortings']: del self.sortings
-        if not self.reconstructor_save_options['waveforms']: del self.waveforms
-        if not self.reconstructor_save_options['templates']: del self.templates
+                #Optionally remove excess data
+                if not self.reconstructor_save_options['recordings']: del self.recordings
+                if not self.reconstructor_save_options['multirecordings']: del self.multirecordings
+                if not self.reconstructor_save_options['sortings']: del self.sortings
+                if not self.reconstructor_save_options['waveforms']: del self.waveforms
+                if not self.reconstructor_save_options['templates']: del self.templates
 
-        # Save the entire object using dill        
-        dill_file_path = os.path.join(self.reconstructor_dir, f'{reconstructor_id}.dill')
-        with open(dill_file_path, 'wb') as f:
-            dill.dump(self, f)
+                # Save the entire object using dill        
+                dill_file_path = os.path.join(self.reconstructor_dir, f'{rec_key}_{stream_id}.dill')
+                with open(dill_file_path, 'wb') as f:
+                    dill.dump(self, f)
 
+<<<<<<< HEAD
         self.logger.info(f"Reconstructor object saved to {dill_file_path}")
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+                self.logger.info(f"Reconstructor object saved to {dill_file_path}")
+>>>>>>> 8226c5e (added dv/dt derivative templating)
 
     def update_nested_dict(self, target, source):
         """
@@ -743,6 +795,9 @@ class AxonReconstructor:
     def load_reconstructor(self):
         self.logger.info("Loading reconstructor object")
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         for rec_key, recording in self.recordings.items():
             h5_path = recording['h5_path']
             h5 = h5py.File(h5_path)
@@ -761,6 +816,7 @@ class AxonReconstructor:
                             for word in exclusions_key_words:
                                 if word in key: keys_to_delete.append(key) #del loaded_obj.__dict__[key]
                         for key in keys_to_delete: del loaded_obj.__dict__[key]
+<<<<<<< HEAD
 
                         #self.__dict__.update(loaded_obj.__dict__)
                         self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
@@ -804,6 +860,25 @@ class AxonReconstructor:
             self.reconstructor_load_options['load_reconstructor'] = False
 
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+
+                        #self.__dict__.update(loaded_obj.__dict__)
+                        self.update_nested_dict(self.__dict__, loaded_obj.__dict__)
+                        if self.reconstructor_load_options['restore_environment']: 
+                            #self._restore_environment() # TODO: Implement at some point. Not important.
+                            self.logger.warning("Environment restoration not yet implemented. Skipping.")
+                        # self.concatenate_switch = False
+                        # self.sort_switch = False
+                        # self.waveform_switch = False
+                        # self.template_switch = False
+                except Exception as e: 
+                    # Some error handling:
+                    error = '[Errno 2] No such file or directory'
+                    if error in str(e): self.logger.warning(f"Reconstructor object not found at {dill_file_path}.")
+                    else: self.logger.error(f"Error loading reconstructor object: {e}")       
+                    self.logger.warning(f"load_reconstructor option set to False. Generating new reconstructor object.")
+                    self.reconstructor_load_options['load_reconstructor'] = False
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         return self
 
     def _restore_environment(self):
@@ -844,10 +919,14 @@ class AxonReconstructor:
         self.logger.info("Starting pipeline execution")        
         self.load_recordings()
 <<<<<<< HEAD
+<<<<<<< HEAD
         if self.reconstructor_load_options['load_reconstructor']: self.load_reconstructor() #TODO: Finish implementing environment load at some point. Not important.
 =======
         if self.reconstructor_load_options['load_reconstructor']: self.load_reconstructor()
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        if self.reconstructor_load_options['load_reconstructor']: self.load_reconstructor() #TODO: Finish implementing environment load at some point. Not important.
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         if self.reconstructor_load_options['load_templates_bypass']: self.bypass_to_templates() #Useful if sorting and waveform temp data have been delteted but templates are still available
         if self.concatenate_switch: self.concatenate_recordings()
         if self.sort_switch: self.spikesort_recordings()
@@ -855,10 +934,14 @@ class AxonReconstructor:
         if self.template_switch: self.extract_templates()        
         if self.recon_switch: self.analyze_and_reconstruct()
 <<<<<<< HEAD
+<<<<<<< HEAD
         if self.save_reconstructor_object: self.save_reconstructor() 
 =======
         if self.save_reconstructor_object: self.save_reconstructor() #TODO: Finish implementing this
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        if self.save_reconstructor_object: self.save_reconstructor() 
+>>>>>>> 8226c5e (added dv/dt derivative templating)
         if self.run_lean: self.clean_up()
         self.logger.info("Pipeline execution completed")
 
