@@ -67,7 +67,8 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
     try:
         gtr0 = av.GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
         select_and_plot_channels(gtr0, plot_dir)
-        gtr0 = av.compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
+        gtr0.track_axons()
+        #gtr0 = av.compute_graph_propagation_velocity(transformed_template, trans_loc, 10000, **params)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to select and plot channels or compute_graph_propagation_velocity for merged_template, error: {e}")
         plt.close()
@@ -76,7 +77,8 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
     try:
         gtr1 = av.GraphAxonTracking(transformed_dvdt_template, trans_loc_dvdt, 10000, **params)
         select_and_plot_channels(gtr1, plot_dir, suffix="_dvdt")
-        gtr1 = av.compute_graph_propagation_velocity(transformed_dvdt_template, trans_loc_dvdt, 10000, **params)
+        gtr1.track_axons()
+        #gtr1 = av.compute_graph_propagation_velocity(transformed_dvdt_template, trans_loc_dvdt, 10000, **params)
     except Exception as e:
         logger.info(f"unit {unit_id} failed to select and plot channels or compute_graph_propagation_velocity for dvdt_merged_template, error: {e}")
         plt.close()
