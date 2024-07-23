@@ -51,35 +51,40 @@ def save_figure(fig, fig_path):
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=False):
+def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', log=False):
     fig_amp = plt.figure(figsize=(10, 5))
     ax_amp = fig_amp.add_subplot(111)
     fig_path = plot_dir / f"{title}_amplitude_map.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
-    ax_amp = av.plotting.plot_amplitude_map(template, locations, cmap='viridis', log=False,
-                       elec_size=8, alpha=0.9, ax=None, colorbar=False,
+    ax_amp = av.plotting.plot_amplitude_map(template, locations, cmap=cmap, log=log,
+                       elec_size=8, alpha=0.9, ax=None, colorbar=True,
                        colorbar_orientation="vertical", colorbar_shrink=0.5,
                        plot_image=True)
     ax_amp.set_title(f"Amplitude {title}", fontsize=20)
     save_figure(fig_amp, fig_path)
 
-def generate_peak_latency_map(gtr, plot_dir, title, fresh_plots=False):
+def generate_peak_latency_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', fs = 10000, log=False):
     fig_peaks = plt.figure(figsize=(10, 5))
     ax_peaks = fig_peaks.add_subplot(111)
     fig_path = plot_dir / f"{title}_peak_latency_map.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
-    ax_peaks = gtr.plot_peak_latency_map(fs=10000, log=False, ax=ax_peaks, colorbar=True, colorbar_orientation="horizontal")
+    ax_peaks = av.plotting.plot_peak_latency_map(template, locations, fs, cmap=cmap, log=log,
+                          elec_size=8, alpha=0.9, ax=None, colorbar=True,
+                          colorbar_orientation="vertical", colorbar_shrink=0.5,
+                          plot_image=True)
     ax_peaks.set_title(f"Peak latency {title}", fontsize=20)
     save_figure(fig_peaks, fig_path)
 
-def plot_selected_channels(gtr, plot_dir, suffix=""):
-    plot_selected_channels_helper(f"Selected after detection threshold: {gtr._detect_threshold} ms", np.array(list(gtr._selected_channels_detect)), gtr.locations, f"detection_threshold{suffix}.png", plot_dir)
-    plot_selected_channels_helper(f"Selected after kurtosis threshold: {gtr._kurt_threshold} ms", np.array(list(gtr._selected_channels_kurt)), gtr.locations, f"kurt_threshold{suffix}.png", plot_dir)
-    plot_selected_channels_helper(f"Selected after peak std threshold: {gtr._peak_std_threhsold} ms", np.array(list(gtr._selected_channels_peakstd)), gtr.locations, f"peak_std_threshold{suffix}.png", plot_dir)
-    plot_selected_channels_helper(f"Selected after init delay threshold: {gtr._init_delay} ms", np.array(list(gtr._selected_channels_init)), gtr.locations, f"init_delay_threshold{suffix}.png", plot_dir)
-    plot_selected_channels_helper("Selected after all thresholds", gtr.selected_channels, gtr.locations, f"all_thresholds{suffix}.png", plot_dir)
+def plot_selected_channels(gtr, plot_dir, suffix="", fresh_plots=False):
+    gtr.select_channels()
+    plot_selected_channels_helper(f"Selected after detection threshold: {gtr._detect_threshold} uV", np.array(list(gtr._selected_channels_detect)), gtr.locations, f"detection_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
+    plot_selected_channels_helper(f"Selected after kurtosis threshold: {gtr._kurt_threshold}", np.array(list(gtr._selected_channels_kurt)), gtr.locations, f"kurt_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
+    plot_selected_channels_helper(f"Selected after peak std threshold: {gtr._peak_std_threhsold} ms", np.array(list(gtr._selected_channels_peakstd)), gtr.locations, f"peak_std_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
+    plot_selected_channels_helper(f"Selected after init delay threshold: {gtr._init_delay} ms", np.array(list(gtr._selected_channels_init)), gtr.locations, f"init_delay_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
+    plot_selected_channels_helper("Selected after all thresholds", gtr.selected_channels, gtr.locations, f"all_thresholds{suffix}.png", plot_dir, fresh_plots=fresh_plots)
+    #return gtr
 
 def plot_selected_channels_helper(fig_title, selected_channels, locations, filename, plot_dir, fresh_plots=False):
     fig = plt.figure(figsize=(10, 5))
@@ -99,8 +104,14 @@ def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False):
     fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
-
-    ax = gtr.plot_template_propagation(ax=ax, sort_templates=True)
+    template = gtr.template
+    selected_channels = gtr.selected_channels
+    locations = gtr.locations
+    ax = av.plotting.plot_template_propagation(
+                                                #ax=ax, sort_templates=True
+                                                template, locations, selected_channels, sort_templates=True,
+                                                color=None, color_marker=None, ax=None
+                              )
     ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
     save_figure(fig, fig_path)
 
@@ -117,39 +128,47 @@ def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2
         r2s.append(r2)
     extremums.append(get_extremum(transformed_template, trans_loc))
 
-def generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, fresh_plots=False, suffix=""):
+def generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, fresh_plots=False, suffix="", figsize=(10, 7)):
     gtr.build_graph()
     gtr.find_paths()
     gtr._verbose = 1
-    fig_graph = plt.figure(figsize=(10, 7))
+    fig_graph = plt.figure(figsize=figsize)
     fig_path = plot_dir / f"axon_reconstruction_heuristics{suffix}.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
     fig_graph = gtr.plot_graph(node_search_labels=False, fig=fig_graph, cmap_nodes="viridis", cmap_edges="YlGn")
     save_figure(fig_graph, fig_path)
 
-def generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix=""):
+def generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix="", plot_full_template=False):
     fig_graph = plt.figure(figsize=(12, 7))
     ax_raw = fig_graph.add_subplot(111)
     axpaths_raw = ax_raw
     fig_path = plot_dir / f"axon_reconstruction_raw{suffix}.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
-    axpaths_raw = gtr.plot_raw_branches(cmap="tab20", plot_bp=True, plot_neighbors=True, plot_full_template=True, ax=axpaths_raw)
+    axpaths_raw = gtr.plot_raw_branches(
+                                        #cmap="tab20", plot_bp=True, plot_neighbors=True, plot_full_template=True, ax=axpaths_raw
+                                        plot_full_template=plot_full_template, ax=axpaths_raw, cmap="rainbow",
+                                        plot_labels=True, plot_bp=True, plot_neighbors=True
+                                        )
     axpaths_raw.legend(fontsize=6)
     axpaths_raw.set_title("Raw Branches")
     plt.savefig(fig_path, dpi=600, bbox_inches='tight')
     plt.close()
     successful_recons[str(recon_dir)]["successful_units"][str(unit_id)] = {}
 
-def generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix=""):
+def generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, fresh_plots=False, suffix="", plot_full_template=False):
     fig_graph = plt.figure(figsize=(12, 7))
     ax_raw = fig_graph.add_subplot(111)
     axpaths_raw = ax_raw
     fig_path = plot_dir / f"axon_reconstruction_clean{suffix}.png"
     if os.path.exists(fig_path) and not fresh_plots:
         return
-    axpaths_raw = gtr.plot_clean_branches(cmap="tab20", plot_bp=True, plot_full_template=True, ax=axpaths_raw)
+    axpaths_raw = gtr.plot_clean_branches(
+                                        #cmap="tab20", plot_bp=True, plot_full_template=True, ax=axpaths_raw
+                                        plot_full_template=plot_full_template, ax=axpaths_raw, cmap="rainbow",
+                                        plot_bp=True, branch_colors=None
+                                        )
     axpaths_raw.legend(fontsize=6)
     axpaths_raw.set_title("Clean Branches")
     save_figure(fig_graph, fig_path)
@@ -172,3 +191,74 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
     if not os.path.exists(recon_dir_parent):
         os.makedirs(recon_dir_parent)
     df_mea1k.to_csv(Path(recon_dir_parent) / f"{stream_id}_axon_analytics{suffix}.csv", index=False)
+
+# lib_plotting_and_analysis.py
+
+import AxonReconPipeline.axon_velocity.axon_velocity.plotting as av_plotting
+
+def plot_branch_neurites_wrapper(data, save_path, **kwargs):
+    """
+    Wrapper for axon_velocity.plotting.plot_branch_neurites.
+
+    Parameters:
+    data : Data required for plotting branch neurites.
+    save_path : Path where the plot will be saved.
+    **kwargs : Additional arguments for plot customization.
+    """
+    av_plotting.plot_branch_neurites(data, save_path, **kwargs)
+
+def play_template_map_wrapper(save_path, **kwargs):
+    """
+    Wrapper for axon_velocity.plotting.play_template_map.
+
+    Parameters:
+    data : Data required for playing the template map.
+    save_path : Path where the plot will be saved.
+    **kwargs : Additional arguments for plot customization.
+    """
+    #log = kwargs.pop('log', None)
+    log = kwargs.pop('log', False)
+    template = kwargs.pop('template', None)
+    locations = kwargs.pop('locations', None)
+    gtr = kwargs.pop('gtr', None)
+    elec_size = kwargs.pop('elec_size', 8)
+    cmap = kwargs.pop('cmap', 'viridis')
+    ax = kwargs.pop('ax', None)
+    skip_frames = kwargs.pop('skip_frames', 1)
+    interval = kwargs.pop('interval', 10)
+    skip_frames = kwargs.pop('skip_frames', 1)
+    ani = av_plotting.play_template_map(
+        template, locations, gtr=gtr, elec_size=elec_size, cmap=cmap, 
+        log=log, ax=ax, skip_frames=skip_frames, interval=interval, 
+        #**kwargs
+        )
+    ani.save(save_path, writer='ffmpeg')
+
+def plot_template_wrapper(**kwargs):
+    """
+    Wrapper for axon_velocity.plotting.plot_template.
+
+    Parameters:
+    data : Data required for plotting the template.
+    save_path : Path where the plot will be saved.
+    **kwargs : Additional arguments for plot customization.
+    """
+    template = kwargs.pop('template', None)
+    locations = kwargs.pop('locations', None)
+    channels = kwargs.pop('channels', None)
+    
+    av_plotting.plot_template(
+        template, locations, channels=None, ax=None, pitch=None, 
+        #**kwargs
+        )
+
+def plot_axon_summary_wrapper(data, save_path, **kwargs):
+    """
+    Wrapper for axon_velocity.plotting.plot_axon_summary.
+
+    Parameters:
+    data : Data required for plotting the axon summary.
+    save_path : Path where the plot will be saved.
+    **kwargs : Additional arguments for plot customization.
+    """
+    av_plotting.plot_axon_summary(data, save_path, **kwargs)

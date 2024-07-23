@@ -9,6 +9,13 @@ import logging
 from axon_velocity import GraphAxonTracking
 from axon_velocity import get_default_graph_velocity_params
 
+# from lib_plotting_and_analysis import (
+#     plot_branch_neurites_wrapper,
+#     play_template_map_wrapper,
+#     plot_template_wrapper,
+#     plot_axon_summary_wrapper
+# )
+
 def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, failed_recons, logger=None):
     if logger is not None: 
         logger.info(f'Processing unit {unit_id}')
@@ -50,42 +57,143 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
 
     for key, (transformed_template, transformed_template_filled, trans_loc, trans_loc_filled) in transformed_templates.items():
         suffix = key.split('_')[-1] if '_' in key else 'template'
+        if 'dvdt' in key: suffix = 'dvdt'
         try:
             gtr = GraphAxonTracking(transformed_template, trans_loc, 10000, **params)
             gtr_filled = GraphAxonTracking(transformed_template_filled, trans_loc_filled, 10000, **params)
         except Exception as e:
             if logger: 
-                logger.info(f"unit {unit_id} failed to initialize GraphAxonTracking for {key}, error: {e}")
+                logger.info(f"unit {unit_id}_{suffix} failed to initialize GraphAxonTracking for {key}, error: {e}")
             gtr = None
             gtr_filled = None
 
-        if gtr:
+        if gtr is not None:
             analytics_data[key]['num_channels_included'].append(len(unit_templates['merged_channel_loc']))
             analytics_data[key]['channel_density'].append(channel_density_value)
 
             try:
                 #generate_amplitude_map(gtr, plot_dir, title=key)
-                generate_amplitude_map(transformed_template_filled, trans_loc_filled, plot_dir, title=f'{key}_filled')
+                generate_amplitude_map(transformed_template_filled, trans_loc_filled, plot_dir, title=f'{key}_{suffix}', fresh_plots=True, log=False, 
+                                       #some color mapping options:
+                                       #cmap='cividis',
+                                       #cmap='Spectral',
+                                       #cmap='coolwarm',
+                                       #cmap='RdYlGn',
+                                       #cmap='tab20c',
+                                       
+                                       cmap='terrain',
+                                       #cmap='twilight',
+                                       )
             except Exception as e:
                 if logger: 
-                    logger.info(f"unit {unit_id} failed to generate amplitude_map for {key}, error: {e}")
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate amplitude_map for {key}, error: {e}")
                 plt.close()
 
             try:
                 #generate_peak_latency_map(gtr_filled, plot_dir, title=key)
                 #generate_peak_latency_map(gtr, plot_dir, title=key)
-                generate_peak_latency_map(gtr_filled, plot_dir, title=f'{key}_filled')
+                generate_peak_latency_map(transformed_template_filled, trans_loc_filled, plot_dir, title=f'{key}_{suffix}', fresh_plots=True, log=False, 
+                                       #some color mapping options:
+                                       #cmap='cividis',
+                                       #cmap='Spectral',
+                                       #cmap='coolwarm',
+                                       #cmap='RdYlGn',
+                                       
+                                       cmap='terrain',
+                                       #cmap='tab20c'
+                                       )
             except Exception as e:
                 if logger: 
-                    logger.info(f"unit {unit_id} failed to generate peak_latency_map for {key}, error: {e}")
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate peak_latency_map for {key}, error: {e}")
                 plt.close()
-
+            
             try:
-                plot_selected_channels(gtr_filled, plot_dir, suffix=f"_{suffix}")
+                plot_selected_channels(gtr, plot_dir, suffix=f"_{suffix}", fresh_plots=True)
                 gtr.track_axons()
             except Exception as e:
                 if logger: 
-                    logger.info(f"unit {unit_id} failed to select and plot channels or track axons for {key}, error: {e}")
+                    logger.info(f"unit {unit_id}_{suffix} failed to select and plot channels or track axons for {key}, error: {e}")
+                plt.close()
+
+            try:
+                plot_template_propagation(gtr, plot_dir, unit_id, title=key)
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to plot template propagation for {key}, error: {e}")
+                plt.close()
+
+            try:
+                generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, suffix=f"_{suffix}", fresh_plots=True, figsize=(20, 10))
+                #generate_axon_reconstruction_heuristics(gtr_filled, plot_dir, unit_id, suffix=f"_{suffix}_filled")
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate axon_reconstruction_heuristics for {key}, error: {e}")
+                plt.close()
+
+            try:
+                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False)
+                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True)
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate raw axon_reconstruction for {key}, error: {e}")
+                #failed_recons[unit_id].append(f"raw_{suffix}")
+                plt.close()
+
+            try:
+                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False)
+                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True)
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate clean axon_reconstruction for {key}, error: {e}")
+                #failed_recons[unit_id].append(f"clean_{suffix}")
+                plt.close()
+
+            try:
+                generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, suffix=f"_{suffix}")
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate axon_reconstruction_velocities for {key}, error: {e}")
+                plt.close()
+
+            # Call the new plotting functions
+            # try:
+            #     plot_branch_neurites_wrapper(gtr, f"{plot_dir}/branch_neurites_{unit_id}_{suffix}.png")
+            # except Exception as e:
+            #     if logger: 
+            #         logger.info(f"unit {unit_id}_{suffix} failed to plot branch neurites for {key}, error: {e}")
+            #     plt.close()
+
+            try:
+                kwargs = {
+                    'template': gtr.template,
+                    'locations': gtr.locations,
+                    'gtr': gtr,
+                    'elec_size':8, 
+                    'cmap':'viridis',
+                    'log': False,
+                    'save_path': f"{plot_dir}/template_map_{unit_id}_{suffix}.png",
+                    #'ax':None, 
+                    #'skip_frames':1,
+                    #'interval': 10
+                }
+                play_template_map_wrapper(**kwargs)
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to play template map for {key}, error: {e}")
+                plt.close()
+
+            try:
+                plot_template_wrapper(gtr, f"{plot_dir}/template_{unit_id}_{suffix}.png")
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to plot template for {key}, error: {e}")
+                plt.close()
+
+            try:
+                plot_axon_summary_wrapper(gtr, f"{plot_dir}/axon_summary_{unit_id}_{suffix}.png")
+            except Exception as e:
+                if logger: 
+                    logger.info(f"unit {unit_id}_{suffix} failed to plot axon summary for {key}, error: {e}")
                 plt.close()
 
             try:
@@ -99,45 +207,7 @@ def process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, 
                                         unit_id, transformed_template, trans_loc)
             except Exception as e:
                 if logger: 
-                    logger.info(f"unit {unit_id} failed to generate axon_analytics for {key}, error: {e}")
-
-            try:
-                generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, suffix=f"_{suffix}")
-                generate_axon_reconstruction_heuristics(gtr_filled, plot_dir, unit_id, suffix=f"_{suffix}_filled")
-            except Exception as e:
-                if logger: 
-                    logger.info(f"unit {unit_id} failed to generate axon_reconstruction_heuristics for {key}, error: {e}")
-                plt.close()
-
-            try:
-                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}")
-            except Exception as e:
-                if logger: 
-                    logger.info(f"unit {unit_id} failed to generate raw axon_reconstruction for {key}, error: {e}")
-                failed_recons[unit_id].append(f"raw_{suffix}")
-                plt.close()
-
-            try:
-                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}")
-            except Exception as e:
-                if logger: 
-                    logger.info(f"unit {unit_id} failed to generate clean axon_reconstruction for {key}, error: {e}")
-                failed_recons[unit_id].append(f"clean_{suffix}")
-                plt.close()
-
-            try:
-                generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, suffix=f"_{suffix}")
-            except Exception as e:
-                if logger: 
-                    logger.info(f"unit {unit_id} failed to generate axon_reconstruction_velocities for {key}, error: {e}")
-                plt.close()
-
-            try:
-                plot_template_propagation(gtr, plot_dir, unit_id, title=key)
-            except Exception as e:
-                if logger: 
-                    logger.info(f"unit {unit_id} failed to plot template propagation for {key}, error: {e}")
-                plt.close()
+                    logger.info(f"unit {unit_id}_{suffix} failed to generate axon_analytics for {key}, error: {e}")
 
     return analytics_data
 
