@@ -696,6 +696,7 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
                 with ProcessPoolExecutor(max_workers=n_jobs) as executor:
                     futures = [
                         executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger)
+<<<<<<< HEAD
 =======
             all_data = {key: [] for key in ['units', 'branch_ids', 'velocities', 'path_lengths', 'r2s', 'extremums', 'num_channels_included', 'channel_densities']}
             all_dvdt_data = {key: [] for key in ['units', 'branch_ids', 'velocities', 'path_lengths', 'r2s', 'extremums', 'num_channels_included', 'channel_densities']}
@@ -708,6 +709,8 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
                     futures = [
                         executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, successful_recons, logger)
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
                         for unit_id, unit_templates in unit_templates.items()
                     ]
                     for future in as_completed(futures):
@@ -726,6 +729,9 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
             else:
                 for unit_id, unit_templates in unit_templates.items():
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
                     result = process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=logger)
                     if result:
                         process_result(result, all_analytics)
@@ -738,6 +744,7 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
                     #     break
 
             save_results(stream_id, all_analytics, recon_dir, logger=logger)
+<<<<<<< HEAD
 =======
                     result = process_unit(unit_id, unit_templates, recon_dir, params, successful_recons, logger=logger)
                     if result:
@@ -745,3 +752,5 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
 
             save_results(stream_id, all_data, all_dvdt_data, recon_dir)
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)

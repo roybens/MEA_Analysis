@@ -14,6 +14,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 import sys
 =======
 import json
@@ -42,6 +43,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 # import sys
 # sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
 from MEAProcessingLibrary import mea_processing_library as MPL
 from AxonReconPipeline.axon_velocity.axon_velocity import GraphAxonTracking
 import AxonReconPipeline.axon_velocity.axon_velocity as av
@@ -93,6 +98,7 @@ def create_plot_dir(recon_dir, unit_id):
     return plot_dir
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def save_figure(fig, fig_path, dpi=300):
     plt.savefig(fig_path, dpi=dpi, bbox_inches='tight')
 =======
@@ -100,6 +106,10 @@ def save_figure(fig, fig_path, dpi=300):
 def save_figure(fig, fig_path):
     plt.savefig(fig_path, dpi=300, bbox_inches='tight')
 >>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
+=======
+def save_figure(fig, fig_path, dpi=300):
+    plt.savefig(fig_path, dpi=dpi, bbox_inches='tight')
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
     plt.close()
 
 <<<<<<< HEAD
@@ -223,6 +233,7 @@ def plot_template_propagation_wrapper(template, locations, selected_channels, pl
     fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
 
+<<<<<<< HEAD
     ax = av.plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)
     ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
     save_figure(fig, fig_path)
@@ -240,6 +251,8 @@ def select_and_plot_channels(gtr0, plot_dir, suffix=""):
     plot_selected_channels("Selected after all thresholds", gtr0.selected_channels, gtr0.locations, f"all_thresholds{suffix}.png", plot_dir)
 >>>>>>> 8226c5e (added dv/dt derivative templating)
 
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
 def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2s, extremums, init_chans, num_channels_included, 
                             channel_density, 
                             unit_id, transformed_template, trans_loc):
@@ -372,6 +385,9 @@ def generate_axon_reconstruction_velocities(gtr0, plot_dir, unit_id, fresh_plots
     save_figure(fvel, fig_path)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
 def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, init_chans, recon_dir, suffix=""):
     df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, 
                             "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, 
@@ -383,10 +399,13 @@ def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, pat
 
                             #  "length": str(path_lengths), "r2": str(r2s), "num_channels_included": str(num_channels_included), 
                             #  "channel_density": str(channel_density), "init_chan": str(init_chans)})
+<<<<<<< HEAD
 =======
 def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, recon_dir,  suffix=""):
     df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, "channel_density": channel_density})
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
     recon_dir_parent = os.path.dirname(recon_dir)
 <<<<<<< HEAD
     if not os.path.exists(recon_dir_parent):
@@ -545,6 +564,7 @@ def plot_axon_summary_wrapper(save_path, title, fresh_plots, **kwargs):
         fig, axes = av_plotting.plot_axon_summary(**kwargs)
         fig.set_title(title, fontsize=20)
         if save_path is not None: save_figure(fig, save_path, dpi=600)
+<<<<<<< HEAD
 =======
     num_channels_included.append(len(merged_channel_loc))
 
@@ -655,3 +675,5 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
     ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
     save_figure(fig, fig_path)
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
