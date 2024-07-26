@@ -32,6 +32,7 @@ slurm*.out
 **.zip
 **.log
 *.out
+<<<<<<< HEAD
 *.log
 =======
 **.zip
@@ -41,3 +42,6 @@ slurm*.out
 **.log
 **.out
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+*.log
+>>>>>>> d685d1a (updated gitignore)
