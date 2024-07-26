@@ -56,6 +56,7 @@ kwargs = {
         'generate_animation': True,
         'generate_summary': False,
     },
+<<<<<<< HEAD
     'save_reconstructor_object': True,
     'reconstructor_save_options': {
         'recordings': True, 
@@ -114,6 +115,8 @@ kwargs = {
         'min_outlier_tracking_error': 40.0,  # Minimum tracking error to consider a channel as an outlier (micrometers). Sets the error tolerance for tracking outliers.
     },
 
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
     'save_reconstructor_object': True,
     'reconstructor_save_options': {
         'recordings': True, 
