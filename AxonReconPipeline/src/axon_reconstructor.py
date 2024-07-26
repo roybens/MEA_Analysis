@@ -67,9 +67,13 @@ class AxonReconstructor:
         self.qc_params = self.get_qc_params(kwargs)
         self.av_params = self.get_av_params(kwargs)
 <<<<<<< HEAD
+<<<<<<< HEAD
         self.analysis_options = self.get_analysis_options(kwargs)
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+        self.analysis_options = self.get_analysis_options(kwargs)
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
         self.reconstructor_save_options, self.reconstructor_load_options = self.get_reconstructor_options(kwargs)
 
         self.continuous_h5_file_info = None
@@ -270,6 +274,9 @@ class AxonReconstructor:
         return av_params
     
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
     def get_analysis_options(self, kwargs):
         analysis_options = {
             'generate_animation': False
@@ -277,8 +284,11 @@ class AxonReconstructor:
         analysis_options.update(kwargs.get('analysis_options', {}))
         return analysis_options
     
+<<<<<<< HEAD
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+>>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
     def get_reconstructor_options(self, kwargs):
         reconstructor_save_options = {
             'recordings': False,
