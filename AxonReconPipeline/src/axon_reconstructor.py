@@ -66,6 +66,7 @@ class AxonReconstructor:
         self.te_params = self.get_te_params(kwargs)
         self.qc_params = self.get_qc_params(kwargs)
         self.av_params = self.get_av_params(kwargs)
+        self.analysis_options = self.get_analysis_options(kwargs)
         self.reconstructor_save_options, self.reconstructor_load_options = self.get_reconstructor_options(kwargs)
 
         self.continuous_h5_file_info = None
@@ -235,6 +236,13 @@ class AxonReconstructor:
         }
         av_params.update(kwargs.get('av_params', {}))
         return av_params
+    
+    def get_analysis_options(self, kwargs):
+        analysis_options = {
+            'generate_animation': False
+        }
+        analysis_options.update(kwargs.get('analysis_options', {}))
+        return analysis_options
     
     def get_reconstructor_options(self, kwargs):
         reconstructor_save_options = {
@@ -566,6 +574,7 @@ class AxonReconstructor:
             self.templates,
             recon_dir=self.recon_dir,
             params=self.av_params,
+            analysis_options=self.analysis_options,
             stream_select=self.stream_select,
             n_jobs=self.max_workers,
             logger=self.logger
