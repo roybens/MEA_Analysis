@@ -16,4 +16,5 @@ slurm*.out
 **.npz
 **.zip
 **.log
-**nohup.out
+*.out
+*.log
