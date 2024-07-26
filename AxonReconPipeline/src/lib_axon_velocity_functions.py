@@ -8,7 +8,8 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
 from AxonReconPipeline.axon_velocity.axon_velocity import GraphAxonTracking
 import AxonReconPipeline.axon_velocity.axon_velocity as av
@@ -34,11 +35,13 @@ def get_stream_ids(h5_file_path):
     h5 = h5py.File(h5_file_path, 'r')
     return list(h5['wells'].keys())
 
-def transform_data(merged_template, merged_channel_loc, merged_template_filled, merged_channel_filled_loc):
+def transform_data(merged_template, merged_channel_loc, merged_template_filled=None, merged_channel_filled_loc=None):
     transformed_template = merged_template.T #array with time samples and amplitude values (voltage or v/s)
-    transformed_template_filled = merged_template_filled.T #array with time samples and amplitude values (voltage or v/s)
+    if merged_template_filled is not None: transformed_template_filled = merged_template_filled.T #array with time samples and amplitude values (voltage or v/s)
+    else: transformed_template_filled = None
     trans_loc = np.array([[loc[0], loc[1]*-1] for loc in merged_channel_loc])
-    trans_loc_filled = np.array([[loc[0], loc[1]*-1] for loc in merged_channel_filled_loc])
+    if merged_channel_filled_loc is not None: trans_loc_filled = np.array([[loc[0], loc[1]*-1] for loc in merged_channel_filled_loc])
+    else: trans_loc_filled = None
     return transformed_template, transformed_template_filled, trans_loc, trans_loc_filled
 
 def create_plot_dir(recon_dir, unit_id):
@@ -47,8 +50,8 @@ def create_plot_dir(recon_dir, unit_id):
         os.makedirs(plot_dir)
     return plot_dir
 
-def save_figure(fig, fig_path):
-    plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+def save_figure(fig, fig_path, dpi=300):
+    plt.savefig(fig_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
 def generate_amplitude_map(template, locations, plot_dir, title, fresh_plots=False, cmap='viridis', log=False):
@@ -78,7 +81,6 @@ def generate_peak_latency_map(template, locations, plot_dir, title, fresh_plots=
     save_figure(fig_peaks, fig_path)
 
 def plot_selected_channels(gtr, plot_dir, suffix="", fresh_plots=False):
-    gtr.select_channels()
     plot_selected_channels_helper(f"Selected after detection threshold: {gtr._detect_threshold} uV", np.array(list(gtr._selected_channels_detect)), gtr.locations, f"detection_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
     plot_selected_channels_helper(f"Selected after kurtosis threshold: {gtr._kurt_threshold}", np.array(list(gtr._selected_channels_kurt)), gtr.locations, f"kurt_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
     plot_selected_channels_helper(f"Selected after peak std threshold: {gtr._peak_std_threhsold} ms", np.array(list(gtr._selected_channels_peakstd)), gtr.locations, f"peak_std_threshold{suffix}.png", plot_dir, fresh_plots=fresh_plots)
@@ -115,7 +117,9 @@ def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False):
     ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
     save_figure(fig, fig_path)
 
-def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2s, extremums, unit_id, transformed_template, trans_loc):
+def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2s, extremums, init_chans, num_channels_included, 
+                            channel_density, 
+                            unit_id, transformed_template, trans_loc):
     units.append(unit_id)
     for i, br in enumerate(gtr.branches):
         path = br["channels"]
@@ -126,6 +130,15 @@ def generate_axon_analytics(gtr, units, branch_ids, velocities, path_lengths, r2
         velocities.append(velocity)
         path_lengths.append(length)
         r2s.append(r2)
+    num_channels_included.append(len(trans_loc))
+    x_coords = trans_loc[:, 0]
+    y_coords = trans_loc[:, 1]
+    width = np.max(x_coords) - np.min(x_coords)
+    height = np.max(y_coords) - np.min(y_coords)
+    area = width * height
+    channel_density_value = len(trans_loc) / area  # channels / um^2
+    channel_density.append(channel_density_value)
+    init_chans.append(gtr.init_channel)
     extremums.append(get_extremum(transformed_template, trans_loc))
 
 def generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, fresh_plots=False, suffix="", figsize=(10, 7)):
@@ -185,8 +198,17 @@ def generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, fresh_plots=
     plt.yticks(fontsize=16)
     save_figure(fvel, fig_path)
 
-def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, recon_dir, suffix=""):
-    df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, "channel_density": channel_density})
+def save_axon_analytics(stream_id, units, extremums, branch_ids, velocities, path_lengths, r2s, num_channels_included, channel_density, init_chans, recon_dir, suffix=""):
+    df_mea1k = pd.DataFrame({"unit_ids": units, "unit location": extremums, 
+                            "branch_id": branch_ids, "velocity": velocities, "length": path_lengths, "r2": r2s, "num_channels_included": num_channels_included, 
+                            "channel_density": channel_density, "init_chan": init_chans})
+    
+    # df_mea1k = pd.DataFrame({"unit_ids": [units], "unit location": [extremums], 
+    #                          "branch_id": [branch_ids], "velocity": [velocities], "length": [path_lengths], "r2": [r2s], "num_channels_included": [num_channels_included], 
+    #                          "channel_density": [channel_density], "init_chan": [init_chans]})
+
+                            #  "length": str(path_lengths), "r2": str(r2s), "num_channels_included": str(num_channels_included), 
+                            #  "channel_density": str(channel_density), "init_chan": str(init_chans)})
     recon_dir_parent = os.path.dirname(recon_dir)
     if not os.path.exists(recon_dir_parent):
         os.makedirs(recon_dir_parent)
@@ -234,7 +256,7 @@ def play_template_map_wrapper(save_path, **kwargs):
         )
     ani.save(save_path, writer='ffmpeg')
 
-def plot_template_wrapper(**kwargs):
+def plot_template_wrapper(save_path, title, fresh_plots = False, **kwargs):
     """
     Wrapper for axon_velocity.plotting.plot_template.
 
@@ -243,16 +265,15 @@ def plot_template_wrapper(**kwargs):
     save_path : Path where the plot will be saved.
     **kwargs : Additional arguments for plot customization.
     """
-    template = kwargs.pop('template', None)
-    locations = kwargs.pop('locations', None)
-    channels = kwargs.pop('channels', None)
-    
-    av_plotting.plot_template(
-        template, locations, channels=None, ax=None, pitch=None, 
-        #**kwargs
-        )
+    if os.path.exists(save_path) and not fresh_plots: return
+    else:
+        fig = plt.figure(figsize=(100, 200))
+        ax = fig.add_subplot(111)
+        ax = av_plotting.plot_template(**kwargs)
+        ax.set_title(title, fontsize=20)
+        if save_path is not None: save_figure(ax, save_path, dpi=2400)
 
-def plot_axon_summary_wrapper(data, save_path, **kwargs):
+def plot_axon_summary_wrapper(save_path, title, fresh_plots, **kwargs):
     """
     Wrapper for axon_velocity.plotting.plot_axon_summary.
 
@@ -261,4 +282,8 @@ def plot_axon_summary_wrapper(data, save_path, **kwargs):
     save_path : Path where the plot will be saved.
     **kwargs : Additional arguments for plot customization.
     """
-    av_plotting.plot_axon_summary(data, save_path, **kwargs)
+    if os.path.exists(save_path) and not fresh_plots: return
+    else:
+        fig, axes = av_plotting.plot_axon_summary(**kwargs)
+        fig.set_title(title, fontsize=20)
+        if save_path is not None: save_figure(fig, save_path, dpi=600)
