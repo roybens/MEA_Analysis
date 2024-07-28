@@ -10,7 +10,7 @@ import sys
 import re
 
 ''' Local imports '''
-from file_selector import main as file_selector_main
+#from file_selector import main as file_selector_main
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
 
@@ -190,7 +190,10 @@ def isexists_folder_not_empty(folder_path):
 
     # If the folder is not empty, return True
     return len(items) > 0
-def get_list_of_h5_files(h5_parent_dirs, **kwargs):
+def get_list_of_h5_files(h5_parent_dirs, allowed_scan_types=None, **kwargs):
+    
+    if allowed_scan_types is None: allowed_scan_types=kwargs['sorting_params']['allowed_scan_types'][0]
+    #else: allowed_scan_types = ['AxonTracking']
     
     # walk through h5_parent_dirs, get all .h5 files make a list
     #mport os
@@ -198,11 +201,16 @@ def get_list_of_h5_files(h5_parent_dirs, **kwargs):
     for h5_parent_dir in h5_parent_dirs:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         if h5_parent_dir.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in h5_parent_dir: 
+=======
+        if h5_parent_dir.endswith('.h5') and allowed_scan_types in h5_parent_dir: 
+>>>>>>> f23996c (small error handling changes)
             h5_files.append(h5_parent_dir) #if h5_parent_dir is an .h5 file, add it to the list
             continue #if h5_parent_dir is an .h5 file, skip the loop
         for root, dirs, files in os.walk(h5_parent_dir):
             for file in files:
+<<<<<<< HEAD
                 if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root: 
 =======
         for root, dirs, files in os.walk(h5_parent_dir):
@@ -217,5 +225,8 @@ def get_list_of_h5_files(h5_parent_dirs, **kwargs):
             for file in files:
                 if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root: 
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+                if file.endswith('.h5') and allowed_scan_types in root: 
+>>>>>>> f23996c (small error handling changes)
                     h5_files.append(os.path.join(root, file))
     return h5_files
