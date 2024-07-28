@@ -325,7 +325,11 @@ class AxonReconstructor:
                 run_id = h5_details[0]['runID']
                 scan_type = h5_details[0]['scanType']
                 if scan_type in self.sorting_params['allowed_scan_types']:
-                    device, recording_segments, stream_count, rec_counts = MPL.load_recordings(h5_path, stream_select=self.stream_select, logger=self.logger)
+                    try: device, recording_segments, stream_count, rec_counts = MPL.load_recordings(h5_path, stream_select=self.stream_select, logger=self.logger)
+                    except Exception as e: 
+                        self.logger.error(f"Error loading recording segments from {h5_path}: {e}")
+                        self.logger.error(f"Skipping {h5_path}")
+                        continue
                     if self.reconstructor_id is None: self.reconstructor_id = f"{date}_{chip_id}_{run_id}" #TODO: This is a hacky way to set the reconstructor_id, need to fix such that there is one reconstructor per recording
                     recordings[f"{date}_{chip_id}_{run_id}"] = {
                         'h5_path': h5_path,
@@ -803,11 +807,15 @@ class AxonReconstructor:
                 target[key] = value
     
     def load_reconstructor(self):
+<<<<<<< HEAD
         self.logger.info("Loading reconstructor object")
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
 >>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+        self.logger.info("Loading reconstructor object(s)")
+>>>>>>> f23996c (small error handling changes)
         for rec_key, recording in self.recordings.items():
             h5_path = recording['h5_path']
             h5 = h5py.File(h5_path)
@@ -816,6 +824,7 @@ class AxonReconstructor:
             for stream_id in stream_ids:
                 dill_file_path = os.path.join(self.reconstructor_dir, f'{rec_key}_{stream_id}.dill')
                 try:
+                    self.logger.info(f"Attempting to load reconstructor object from {dill_file_path}")
                     with open(dill_file_path, 'rb') as f:
                         loaded_obj = dill.load(f)
                         

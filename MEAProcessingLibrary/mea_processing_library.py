@@ -225,7 +225,8 @@ def load_recordings(h5_file_path, stream_select=None, logger=None):
             MaxID = 1
         except:
             logger.error("Error: Unable to read recording. Cannot identify as MaxOne or MaxTwo.")
-            return 0, [], 0, []
+            raise Exception("Error: Unable to read recording. Cannot identify as MaxOne or MaxTwo.")
+            #return 0, [], 0, []
 
     if MaxID == 1:
         logger.info("MaxOne Detected.")
