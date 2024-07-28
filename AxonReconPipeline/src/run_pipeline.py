@@ -150,14 +150,43 @@ kwargs = {
 }
 
 h5_parent_dirs = [
-    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/',
+    
+    # KCNT1 Data for Ammara Posted
+    #27July2024 Started and Completed   
+    #T3
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240325/M07037/AxonTracking/000036/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240328/M07037/AxonTracking/000055/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/AxonTracking/000065/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240405/M07037/AxonTracking/000077/data.raw.h5',
+    #TODO: Missing two divs here. In NAS.
 
-    #20July2024 Run - KCNT1 Data for Ammara
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240325/M07037/AxonTracking/000036/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240328/M07037/AxonTracking/000055/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/AxonTracking/000065/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240405/M07037/AxonTracking/000077/data.raw.h5'
+    # 27July2024 Started
+    #T4
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240507/M08034/AxonTracking/000094/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240423/M08034/AxonTracking/000043/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240419/M08034/AxonTracking/000031/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240416/M08034/AxonTracking/000015/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240430/M08034/AxonTracking/000067/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240426/M08034/AxonTracking/000055/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240510/M08034/AxonTracking/000106/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240514/M08034/AxonTracking/000120/data.raw.h5',
+
+    #T5 - TODO: All in NAS...which means I may need to go figure this out on the weekend.
+
+
+    #CDKL5 Data:
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000037/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000031/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000029/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240520/M08018/AxonTracking/000014/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240614/M08018/AxonTracking/000128/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240607/M08018/AxonTracking/000096/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240528/M08018/AxonTracking/000050/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240531/M08018/AxonTracking/000064/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/None/AxonTracking/000082/data.raw.h5',
+    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240611/M08018/AxonTracking/000111/data.raw.h5',
 ]
 =======
     'n_jobs': 4,
