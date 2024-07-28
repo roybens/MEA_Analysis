@@ -15,6 +15,8 @@ logger.addHandler(stream_handler) # Add handlers to the logger
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s') # Create formatters and add it to handlers
 stream_handler.setFormatter(formatter)
 
+## Old fuctions
+
 # Function to extract lengths and categorize wells
 def test_oneway_ANOVA_and_annotate_plot(data):
     # Perform one-way ANOVA
@@ -192,3 +194,152 @@ def plot_velocities_by_gene(file_paths, min_branches=0, dense_percentile=0, ylim
     test_oneway_ANOVA_and_annotate_plot(data)
     #plt.legend(title='unit_ids', bbox_to_anchor=(1.05, 1), loc='upper left')  # Adjust legend position
     plt.show()
+
+## Data Extraction Functions
+def load_data(file_paths, categories, divs):
+    data = []
+    for file_path, category, div in zip(file_paths, categories, divs):
+        df = pd.read_csv(file_path)
+        df['Category'] = category
+        df['DIV'] = div
+        data.append(df)
+    return data
+
+def extract_branch_lengths(data):
+    lengths = []
+    categories = []
+    DIVs = []
+    for df in data:
+        category = df['Category'].iloc[0]
+        div = df['DIV'].iloc[0]
+        density_threshold = df['channel_density'].apply(eval).apply(lambda x: x[0]).quantile(0.95)
+        for length_list, velocity_list, density in zip(df['length'], df['velocity'], df['channel_density']):
+            if eval(density)[0] >= density_threshold:
+                filtered_lengths = [l for l, v in zip(eval(length_list), eval(velocity_list)) if v > 0]  # Filter out lengths with non-positive velocities
+                lengths.extend(filtered_lengths)
+                categories.extend([category] * len(filtered_lengths))
+                DIVs.extend([div] * len(filtered_lengths))
+    return pd.DataFrame({'Length': lengths, 'Category': categories, 'DIV': DIVs})
+
+def extract_branch_velocities(data):
+    velocities = []
+    categories = []
+    DIVs = []
+    for df in data:
+        category = df['Category'].iloc[0]
+        div = df['DIV'].iloc[0]
+        density_threshold = df['channel_density'].apply(eval).apply(lambda x: x[0]).quantile(0.95)
+        for velocity_list, density in zip(df['velocity'], df['channel_density']):
+            if eval(density)[0] >= density_threshold:
+                filtered_velocities = [v for v in eval(velocity_list) if v > 0]  # Filter out non-positive velocities
+                velocities.extend(filtered_velocities)
+                categories.extend([category] * len(filtered_velocities))
+                DIVs.extend([div] * len(filtered_velocities))
+    return pd.DataFrame({'Velocity': velocities, 'Category': categories, 'DIV': DIVs})
+
+def extract_number_of_branches(data):
+    branches = []
+    categories = []
+    DIVs = []
+    for df in data:
+        category = df['Category'].iloc[0]
+        div = df['DIV'].iloc[0]
+        density_threshold = df['channel_density'].apply(eval).apply(lambda x: x[0]).quantile(0.95)
+        for branches_list, velocity_list, density in zip(df['branch_id'], df['velocity'], df['channel_density']):
+            if eval(density)[0] >= density_threshold:
+                num_valid_branches = len([v for v in eval(velocity_list) if v > 0])  # Count branches with positive velocities
+                branches.append(num_valid_branches)
+                categories.append(category)
+                DIVs.append(div)
+    return pd.DataFrame({'Branches': branches, 'Category': categories, 'DIV': DIVs})
+
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import sem, ttest_ind
+import statsmodels.stats.multitest as mt
+
+def add_significance_annotations(ax, data, y, group_by):
+    pairs = []
+    p_values = []
+    
+    # Compare WT vs HET within each DIV
+    divs = data['DIV'].unique()
+    for div in divs:
+        data_div = data[data['DIV'] == div]
+        categories = data_div[group_by].unique()
+        if len(categories) == 2:  # Ensure there are exactly two categories to compare
+            cat1, cat2 = categories
+            data1 = data_div[data_div[group_by] == cat1][y]
+            data2 = data_div[data_div[group_by] == cat2][y]
+            t_stat, p_val = ttest_ind(data1, data2)
+            pairs.append((div, cat1, cat2))
+            p_values.append(p_val)
+            print(f'Comparing {cat1} vs {cat2} at DIV {div}: t-statistic={t_stat}, p-value={p_val}')
+    
+    # Adjust p-values for multiple comparisons
+    reject, p_vals_corrected, _, _ = mt.multipletests(p_values, alpha=0.05, method='bonferroni')
+    
+    # Annotate plot with significance lines and stars
+    for (div, cat1, cat2), p_val, reject_h0 in zip(pairs, p_vals_corrected, reject):
+        if reject_h0:
+            x1 = divs.tolist().index(div)
+            y_max = data[data['DIV'] == div][y].max()
+            y, h, col = y_max + 1, 1, 'k'
+            ax.plot([x1 - 0.2, x1 + 0.2], [y + h, y + h], lw=1.5, c=col)
+            ax.text(x1, y + h, "*", ha='center', va='bottom', color=col)
+            print(f'Significant difference between {cat1} and {cat2} at DIV {div} after Bonferroni correction: adjusted p-value={p_val}')
+
+def plot_with_significance(data, y, title, ylabel):
+    plt.figure(figsize=(12, 8))
+    ax = sns.barplot(x='DIV', y=y, hue='Category', data=data, palette=['#FF0000', '#0000FF'], alpha=0.6, errorbar='sd')
+    
+    sns.stripplot(x='DIV', y=y, hue='Category', data=data, jitter=True, dodge=True, marker='o', alpha=0.6, palette=['#FF0000', '#0000FF'], ax=ax, edgecolor='gray')
+    
+    # means = data.groupby(['DIV', 'Category'])[y].mean().unstack()
+    # errors = data.groupby(['DIV', 'Category'])[y].apply(sem).unstack()
+    
+    # for i, div in enumerate(means.index):
+    #     for j, category in enumerate(means.columns):
+    #         ax.errorbar(x=i + (j - 0.5) * 0.25, y=means.loc[div, category], yerr=errors.loc[div, category], fmt='none', c='black', capsize=5)
+    
+    add_significance_annotations(ax, data, y, 'Category')
+    
+    plt.title(title)
+    plt.ylabel(ylabel)
+    plt.xlabel('DIV')
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[0:2], labels[0:2], title='Category')
+    plt.show()
+
+    return ax
+
+def count_units_and_branches(data):
+    unit_counts = data.groupby(['DIV', 'Category']).size().unstack()
+    branch_counts = data.groupby(['DIV', 'Category']).sum().unstack()
+    return unit_counts, branch_counts
+
+# # Count units and branches included in each DIV for WT and HET
+# unit_counts_lengths, branch_counts_lengths = count_units_and_branches(branch_lengths_data)
+# unit_counts_velocities, branch_counts_velocities = count_units_and_branches(branch_velocities_data)
+
+# print("Unit counts (Lengths):")
+# print(unit_counts_lengths)
+
+# print("\nBranch counts (Lengths):")
+# print(branch_counts_lengths)
+
+# print("\nUnit counts (Velocities):")
+# print(unit_counts_velocities)
+
+# print("\nBranch counts (Velocities):")
+# print(branch_counts_velocities)
+
+# print("\nUnit counts (Number of Branches):")
+# print(unit_counts_branches)
+
+# print("\nBranch counts (Number of Branches):")
+# print(branch_counts_branches)
+
+
