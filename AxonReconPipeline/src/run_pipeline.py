@@ -1,4 +1,9 @@
 # run_pipeline.py
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from MEAProcessingLibrary import mea_processing_library as MPL
 import lib_helper_functions as helper
 from axon_reconstructor import AxonReconstructor
 
@@ -145,8 +150,12 @@ kwargs = {
 <<<<<<< HEAD
     'logger_level': 'DEBUG',
     'run_lean': True,
-    'log_file': 'axon_reconstruction.log',
-    'error_log_file': 'axon_reconstruction_error.log',
+    
+    #custom pathing
+    'recon_dir':'./AxonReconPipeline/data/reconstructions_KCNT1',
+    'reconstructor_dir' : './AxonReconPipeline/data/reconstructors_KCNT1',
+    # 'log_file': 'axon_reconstruction.log',
+    # 'error_log_file': 'axon_reconstruction_error.log',
 }
 
 h5_parent_dirs = [
@@ -163,10 +172,10 @@ h5_parent_dirs = [
 
     # 27July2024 Started
     #T4
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240507/M08034/AxonTracking/000094/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240423/M08034/AxonTracking/000043/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240419/M08034/AxonTracking/000031/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240507/M08034/AxonTracking/000094/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240423/M08034/AxonTracking/000043/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240419/M08034/AxonTracking/000031/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240416/M08034/AxonTracking/000015/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240430/M08034/AxonTracking/000067/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240426/M08034/AxonTracking/000055/data.raw.h5',
@@ -177,16 +186,16 @@ h5_parent_dirs = [
 
 
     #CDKL5 Data:
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000037/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000031/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000029/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240520/M08018/AxonTracking/000014/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240614/M08018/AxonTracking/000128/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240607/M08018/AxonTracking/000096/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240528/M08018/AxonTracking/000050/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240531/M08018/AxonTracking/000064/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/None/AxonTracking/000082/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240611/M08018/AxonTracking/000111/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000037/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000031/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000029/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240520/M08018/AxonTracking/000014/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240614/M08018/AxonTracking/000128/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240607/M08018/AxonTracking/000096/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240528/M08018/AxonTracking/000050/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240531/M08018/AxonTracking/000064/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/None/AxonTracking/000082/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240611/M08018/AxonTracking/000111/data.raw.h5',
 ]
 =======
     'n_jobs': 4,
@@ -238,7 +247,23 @@ for h5_file in h5_files:
     while max_two_wells_analyzed < max_two_wells:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+                
+        #Get reconstructor ID
+        h5_details = MPL.extract_recording_details([h5_file])
+        date = h5_details[0]['date']
+        chipID = h5_details[0]['chipID']
+        runID = h5_details[0]['runID']        
+>>>>>>> 7495353 (changes to logger handling)
         kwargs['stream_select'] = max_two_wells_analyzed # should go 0 through 5
+        reconstructorID = f'{date}_{chipID}_{runID}_well00{kwargs["stream_select"]}'
+
+        #Set log files to be unique for each reconstructor
+        kwargs['log_file'] = f'{kwargs["reconstructor_dir"]}/{reconstructorID}_axon_reconstruction.log'
+        kwargs['error_log_file'] = f'{kwargs["reconstructor_dir"]}/{reconstructorID}_axon_reconstruction_error.log'
+
+        #Run the pipeline
         reconstructor = AxonReconstructor([h5_file], **kwargs)
         reconstructor.run_pipeline(**kwargs)
         max_two_wells_analyzed += 1
