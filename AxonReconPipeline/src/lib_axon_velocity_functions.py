@@ -210,10 +210,17 @@ def plot_selected_channels_helper(fig_title, selected_channels, locations, filen
     save_figure(fig, fig_path)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False):
     fig = plt.figure(figsize=(8, 40))
+=======
+def plot_template_propagation(gtr, fig_dir, unit_id, title, fresh_plots=False, figsize=(8, 40), 
+                              linewidth=1, markerfacecolor='r', markersize=5, dpi=300, max_overlapped_lines=1, 
+                              color_marker = 'none', marker = '.'):
+    fig = plt.figure(figsize=figsize)
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
     ax = fig.add_subplot(111)
-    fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
+    fig_path = fig_dir
     if os.path.exists(fig_path) and not fresh_plots:
         return
     template = gtr.template
@@ -222,8 +229,13 @@ def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False):
     ax = av.plotting.plot_template_propagation(
                                                 #ax=ax, sort_templates=True
                                                 template, locations, selected_channels, sort_templates=True,
-                                                color=None, color_marker=None, ax=None
+                                                color=None, color_marker=color_marker, ax=None, 
+                                                linewidth=linewidth, markerfacecolor=markerfacecolor, 
+                                                markersize=markersize, max_overlapped_lines=max_overlapped_lines, marker=marker
+                                                #color_marker=color_marker
+
                               )
+<<<<<<< HEAD
     ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=16)
     save_figure(fig, fig_path)
 =======
@@ -232,6 +244,10 @@ def plot_template_propagation_wrapper(template, locations, selected_channels, pl
     ax = fig.add_subplot(111)
     fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
     if os.path.exists(fig_path) and fresh_plots == False: return
+=======
+    ax.set_title(f'Template Propagation for Unit {unit_id} {title}', fontsize=4)
+    save_figure(fig, fig_path, dpi=dpi)
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
 
 <<<<<<< HEAD
     ax = av.plot_template_propagation(template, locations, selected_channels, ax=ax, sort_templates=True)

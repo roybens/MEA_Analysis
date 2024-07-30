@@ -31,6 +31,7 @@ slurm*.out
 <<<<<<< HEAD
 **.zip
 **.log
+<<<<<<< HEAD
 *.out
 <<<<<<< HEAD
 *.log
@@ -45,3 +46,9 @@ slurm*.out
 =======
 *.log
 >>>>>>> d685d1a (updated gitignore)
+=======
+**.out
+**.log
+nohup.out
+**.svg
+>>>>>>> 101e312 (updated analysis notebooks and plotting)

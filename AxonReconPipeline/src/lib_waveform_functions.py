@@ -10,7 +10,7 @@ from MEAProcessingLibrary import mea_processing_library as MPL
 import AxonReconPipeline.src.lib_sorting_functions as sorter
 
 # Function to extract waveforms for a specific unit
-def extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=None, logger=None, te_params={}):
+def extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=None, logger=None, te_params={}, **wf_kwargs):
     n_jobs = te_params.get('n_jobs', 4)
     overwrite_wf = te_params.get('overwrite_wf', False)
     
