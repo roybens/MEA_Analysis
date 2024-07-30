@@ -1,4 +1,4 @@
-from lib_template_functions import *
+from AxonReconPipeline.src.lib_template_functions import *
 import concurrent.futures
 import numpy as np
 from tqdm import tqdm

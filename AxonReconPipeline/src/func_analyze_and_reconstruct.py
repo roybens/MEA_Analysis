@@ -1,7 +1,11 @@
 '''process each unit template, generate axon reconstructions and analytics'''
 
+<<<<<<< HEAD
 from lib_axon_velocity_functions import *
 <<<<<<< HEAD
+=======
+from AxonReconPipeline.src.lib_axon_velocity_functions import *
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -341,8 +345,15 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
             # Template Propagation - show signal propagation through channels selected
             try:
                 title = key
-                plot_template_propagation(gtr, plot_dir, unit_id, title=key)
-                paths_files_generated.append(plot_dir / f"{title}_template_propagation_unit_{unit_id}.png") #TODO: Lazy coding. Fix this by changing the funciton to accept a full path. Add that same path here.
+                fig_dir = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
+                plot_template_propagation(gtr, fig_dir, unit_id, title=key, figsize = (200, 50), 
+                                          fresh_plots=True, linewidth=0.1, markersize=0.1, color_marker = 'r', markerfacecolor='none', 
+                                          dpi=1000, max_overlapped_lines=10)
+                #fig_dir = plot_dir / f"{title}_template_propagation_unit_{unit_id}.svg"
+                #plot_template_propagation(gtr, fig_dir, unit_id, title=key, figsize = (40, 20), fresh_plots=True)
+                paths_files_generated.append(fig_dir)
+                #paths_files_generated.append(plot_dir / f"{title}_template_propagation_unit_{unit_id}.svg") #TODO: Lazy coding. Fix this by changing the funciton to accept a full path. Add that same path here.
+
             except Exception as e:
                 if logger: 
                     logger.info(f"unit {unit_id}_{suffix} failed to plot template propagation for {key}, error: {e}")
@@ -444,7 +455,7 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
 
     return analytics_data
 
-def analyze_and_reconstruct(templates, params=None, analysis_options=None, recon_dir=None, stream_select=None, n_jobs=8, logger=None):
+def analyze_and_reconstruct(templates, params=None, analysis_options=None, recon_dir=None, stream_select=None, n_jobs=8, logger=None, unit_select=None, **recon_kwargs):
     if params is None:
         params = get_default_graph_velocity_params()
 
@@ -691,7 +702,10 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
                 'merged_template', 'dvdt_merged_template', 
             ]}
             
-            #n_jobs = 1 #debug setting            
+            #n_jobs = 1 #debug setting
+            
+            
+            if unit_select is not None: n_jobs = 1 #manage unit select option
             if n_jobs > 1:
                 with ProcessPoolExecutor(max_workers=n_jobs) as executor:
                     futures = [
@@ -730,8 +744,12 @@ def analyze_and_reconstruct(templates, params=av.get_default_graph_velocity_para
                 for unit_id, unit_templates in unit_templates.items():
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 536a8d1 (delegated tasks and toy data for TK and SG)
+=======
+                    if unit_select is not None and unit_id != unit_select: continue #manage unit select option
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
                     result = process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=logger)
                     if result:
                         process_result(result, all_analytics)
