@@ -24,17 +24,21 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
 import AxonReconPipeline.src.lib_sorting_functions as sorter
+<<<<<<< HEAD
 import lib_waveform_functions as waveformer
 <<<<<<< HEAD
 =======
 #import reconstruct_axons as ra
 >>>>>>> 57c3339 (updating memory handling)
+=======
+import AxonReconPipeline.src.lib_waveform_functions as waveformer
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
 
 ''' Template merging functions '''
-from func_merge_templates import merge_templates
+from AxonReconPipeline.src.func_merge_templates import merge_templates
 #aw 20July2024 - this should be faster
 #aw20July2024 - This doesnt currently work. TODO: Fix this later. not important.
-from func_merge_templates import merge_templates_concurrent 
+from AxonReconPipeline.src.func_merge_templates import merge_templates_concurrent 
 
 default_n_jobs = 4
 
@@ -456,11 +460,15 @@ def get_time_derivative(merged_template, merged_template_filled, unit='seconds',
     return d_merged_template, d_merged_template_filled
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
 =======
 >>>>>>> 8226c5e (added dv/dt derivative templating)
 def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=None, unit_limit=None, logger=None, template_bypass=False):
+=======
+def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=None, unit_limit=None, logger=None, template_bypass=False, unit_select=None, **temp_kwargs):
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
     
     def get_existing_unit_ids():
         template_files = os.listdir(template_save_path)
@@ -531,7 +539,9 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
     unit_templates = {}
     unit_count = 0
     for sel_unit_id in tqdm(sel_unit_ids):
-
+         
+        if unit_select is not None and sel_unit_id != unit_select: continue #manage unit selection option
+        
         template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '.npy')
         dvdt_template_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_dvdt.npy')
         channel_loc_save_file = os.path.join(template_save_path, str(sel_unit_id) + '_channels.npy')
@@ -636,12 +646,12 @@ def extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_
 >>>>>>> 8226c5e (added dv/dt derivative templating)
     return unit_templates
 
-def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_root=None, te_params={}, qc_params={}, unit_limit=None, logger=None, template_bypass=False):
+def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_root=None, te_params={}, qc_params={}, unit_limit=None, logger=None, template_bypass=False, **temp_kwargs):
     if logger is not None: logger.info(f'Extracting templates for {h5_path}')
     else:print(f'Extracting templates for {h5_path}')
     if template_bypass:
         try: 
-            unit_templates = extract_merged_templates(h5_path, stream_id, None, None, te_params, save_root=save_root, unit_limit=unit_limit, logger=logger, template_bypass=True)
+            unit_templates = extract_merged_templates(h5_path, stream_id, None, None, te_params, save_root=save_root, unit_limit=unit_limit, logger=logger, template_bypass=True, **temp_kwargs)
             return unit_templates
         except Exception as e: 
             if logger is not None: logger.error(f'Error loading templates via bypass:\n{e}')
@@ -650,5 +660,5 @@ def extract_templates(multirec, sorting, waveforms, h5_path, stream_id, save_roo
     cleaned_sorting = si.remove_excess_spikes(cleaned_sorting, multirec) 
     cleaned_sorting.register_recording(multirec)
     segment_sorting = si.SplitSegmentSorting(cleaned_sorting, multirec)
-    unit_templates = extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=save_root, unit_limit=unit_limit, logger=logger)
+    unit_templates = extract_merged_templates(h5_path, stream_id, segment_sorting, waveforms, te_params, save_root=save_root, unit_limit=unit_limit, logger=logger, **temp_kwargs)
     return unit_templates
