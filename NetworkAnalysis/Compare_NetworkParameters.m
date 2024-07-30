@@ -668,7 +668,7 @@ p.addRequired('parameter');
 p.addParameter('BaseParameters', {0.3, 0.1, 1.0, 1.2, 'Fixed', 0.3,1.0});
 p.addParameter('VarParameter', [0, 0.2, 2]);
 p.addParameter('Assay', 'today')
-
+%p.addParameter('Assay')
 p.parse(fileDir, refDir, outDir, parameter, varargin{:});
 args = p.Results;
 
@@ -727,7 +727,10 @@ error_l = [];
 
 % extract run ids based on the desired assay type
 %to do: check if only for network today/best it needs to be done.
-assay_T = T(contains(T.("Assay"),'network today',IgnoreCase=true) & contains(T.("Assay"), args.Assay, IgnoreCase=true),:);
+%assay_T = T(contains(T.("Assay"),'network today',IgnoreCase=true) & contains(T.("Assay"), args.Assay, IgnoreCase=true),:);
+%assay_T = T(contains(T.("Assay"),'network',IgnoreCase=true) & contains(T.("Assay"), args.Assay, IgnoreCase=true),:);
+assay_T = T(contains(T.("Assay"),'network',IgnoreCase=true),:);
+
 asssy_runIDs = unique(assay_T.("Run_")).';
 
 % Get a list of all files in the folder with the desired file name pattern.
@@ -1062,7 +1065,27 @@ for f = 1 : length(theFiles)
 end
 
 
-
+for f = 1 : length(theFiles)
+    baseFileName = theFiles(f).name;
+    pathFileNetwork = fullfile(theFiles(f).folder, baseFileName);
+    fprintf(1, 'Now reading %s\n', pathFileNetwork);
+    
+    datafile = (pathFileNetwork);
+    data = readtable(datafile,'PreserveVariableNames',true);
+    
+    % Check if the column '# Bursts' contains only zeros
+    if all(data.("# Bursts") == 0)
+        % Extract ChipID and WellID for logging
+        ChipID = data.("ChipID")(1);
+        WellID = data.("WellID")(1);
+        
+        % Print the removal message
+        fprintf('File %s has been removed. ChipID: %s, WellID: %s\n', baseFileName, ChipID, WellID);
+        
+        % Delete the file
+        delete(pathFileNetwork);
+    end
+end
 
 %% Plot all lines on one plot
 fig2 =figure('color','w','Position',[0 0 800 800],'Visible','off');
@@ -1092,9 +1115,9 @@ for k = 1 : iterations
     datafile = (pathFileNetwork);
     data = readtable(datafile,'PreserveVariableNames',true);
     
-    extractChipID=data.("ChipID")(1);
+    %extractChipID=data.("ChipID")(1);
     WellID=data.("WellID")(1);
-    %extractChipID = regexp(pathFileNetwork,'\d{5}?','match');
+    extractChipID = regexp(pathFileNetwork,'\d{5}?','match');
 
     %idDouble = str2double(extractChipIDWellID);
 %     if ismember(idDouble,wt)
@@ -1271,7 +1294,6 @@ for i = 1:length(uniqueGenoTypes)
     lowerLimitSPB = prctile(iqrSPB, 5, 2);
 
     
-
     grid on;
     hold on;
 
