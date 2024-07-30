@@ -4,9 +4,10 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from MEAProcessingLibrary import mea_processing_library as MPL
-import lib_helper_functions as helper
-from axon_reconstructor import AxonReconstructor
+import AxonReconPipeline.src.lib_helper_functions as helper
+from AxonReconPipeline.src.axon_reconstructor import AxonReconstructor
 
+<<<<<<< HEAD
 # Set up kwargs with default reconstruction parameters from the paper
 kwargs = {
     # runtime options
@@ -280,3 +281,37 @@ for h5_file in h5_files:
         reconstructor.run_pipeline(**kwargs)
         max_two_wells_analyzed += 1
 >>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
+=======
+def run_pipeline(h5_parent_dirs, mode = 'normal', **kwargs):
+
+    if mode == 'normal':
+        '''Run the pipeline normally'''
+        h5_files = helper.get_list_of_h5_files(h5_parent_dirs, **kwargs)
+        reconstructor = AxonReconstructor(h5_files, **kwargs)
+        reconstructor.run_pipeline(**kwargs)
+        #raise NotImplementedError('This mode is currently not supported. Please use the "lean" mode instead.')
+    elif mode == 'lean':
+        '''hacky way to run the pipeline on maxtwo, one well at a time to minimize size of temp data'''
+        h5_files = helper.get_list_of_h5_files(h5_parent_dirs, **kwargs)
+        for h5_file in h5_files:
+            max_two_wells = 6 # 6 wells total
+            max_two_wells_analyzed = 0
+            while max_two_wells_analyzed < max_two_wells:
+                        
+                #Get reconstructor ID
+                h5_details = MPL.extract_recording_details([h5_file])
+                date = h5_details[0]['date']
+                chipID = h5_details[0]['chipID']
+                runID = h5_details[0]['runID']        
+                kwargs['stream_select'] = max_two_wells_analyzed # should go 0 through 5
+                reconstructorID = f'{date}_{chipID}_{runID}_well00{kwargs["stream_select"]}'
+
+                #Set log files to be unique for each reconstructor
+                kwargs['log_file'] = f'{kwargs["reconstructor_dir"]}/{reconstructorID}_axon_reconstruction.log'
+                kwargs['error_log_file'] = f'{kwargs["reconstructor_dir"]}/{reconstructorID}_axon_reconstruction_error.log'
+
+                #Run the pipeline
+                reconstructor = AxonReconstructor([h5_file], **kwargs)
+                reconstructor.run_pipeline(**kwargs)
+                max_two_wells_analyzed += 1
+>>>>>>> 101e312 (updated analysis notebooks and plotting)

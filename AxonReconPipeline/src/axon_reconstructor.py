@@ -4,11 +4,13 @@ import logging
 import spikeinterface.sorters as ss
 # import lib_helper_functions as helper
 # import lib_axon_velocity_functions as axoner
-import lib_sorting_functions as sorter
-import lib_waveform_functions as waveformer
-import lib_template_functions as templater
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+import AxonReconPipeline.src.lib_sorting_functions as sorter
+import AxonReconPipeline.src.lib_waveform_functions as waveformer
+import AxonReconPipeline.src.lib_template_functions as templater
 
-from func_analyze_and_reconstruct import analyze_and_reconstruct
+from AxonReconPipeline.src.func_analyze_and_reconstruct import analyze_and_reconstruct
 import spikeinterface.full as si
 
 #import pickle
@@ -30,7 +32,7 @@ class SingleLevelFilter(logging.Filter):
         return record.levelno == self.level
 
 class AxonReconstructor:
-    def __init__(self, h5_parent_dirs, allowed_scan_types=['AxonTracking'], stream_select=None, **kwargs):
+    def __init__(self, h5_parent_dirs, **kwargs):
         self.log_file = kwargs.get('log_file', 'axon_reconstruction.log')
         self.error_log_file = kwargs.get('error_log_file', 'axon_reconstruction_error.log')
         self.logger_level = kwargs.get('logger_level', 'INFO')
@@ -38,8 +40,9 @@ class AxonReconstructor:
         self.logger.info("Initializing AxonReconstructor")
 
         self.h5_parent_dirs = h5_parent_dirs
-        self.allowed_scan_types = allowed_scan_types
-        self.stream_select = stream_select
+        self.allowed_scan_types = kwargs.get('allowed_scan_types', ['AxonTracking'])
+        self.stream_select = kwargs.get('stream_select', None)
+        self.unit_select = kwargs.get('unit_select', None)
         self.unit_limit = kwargs.get('unit_limit', None)
         self.save_reconstructor_object = kwargs.get('save_reconstructor_object', False)
 
@@ -373,7 +376,7 @@ class AxonReconstructor:
         self.logger.info("Concatenating recordings")
         multirecordings = {}
         try: assert self.recordings, "No recordings found. Skipping concatenation."
-        except AssertionError as e: self.logger.error(e); return
+        except Exception as e: self.logger.error(e); return
         for rec_key, recording in self.recordings.items():
             date = recording['date']
             chip_id = recording['chip_id']
@@ -457,7 +460,7 @@ class AxonReconstructor:
         self.logger.info("Starting spike sorting process")
         sortings = {}
         try: assert self.multirecordings, "No multirecordings found. Skipping spike sorting." 
-        except AssertionError as e: self.logger.error(e); return 
+        except Exception as e: self.logger.error(e); return 
         for rec_key, multirec in self.multirecordings.items():
             date = multirec['date']
             chip_id = multirec['chip_id']
@@ -555,7 +558,7 @@ class AxonReconstructor:
         waveforms = {}
         self.logger.info("Extracting waveforms")
         try: assert self.sortings, "No sortings found. Skipping waveform extraction."
-        except AssertionError as e: self.logger.error(e); return
+        except Exception as e: self.logger.error(e); return
         for key, sorting in self.sortings.items():
             multirecs = self.multirecordings[key]
             streams = {}
@@ -578,7 +581,14 @@ class AxonReconstructor:
                     segment_sorting = si.SplitSegmentSorting(cleaned_sorting, mr)
                     self.logger.info(f'Extracting waveforms from stream: {stream_id}')
                     h5_path = self.recordings[key]['h5_path']
-                    stream_wfs = waveformer.extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=self.waveforms_dir, logger=self.logger, te_params = self.te_params) # TODO: make distinct wf_params
+                    wf_kwargs = {
+                        'save_root': self.waveforms_dir,
+                        'logger': self.logger,
+                        'te_params': self.te_params,
+                        'unit_limit': self.unit_limit,
+                        'unit_select': self.unit_select,
+                    }
+                    stream_wfs = waveformer.extract_unit_waveforms(h5_path, stream_id, segment_sorting, **wf_kwargs) # TODO: make distinct wf_params
                     streams[stream_id] = stream_wfs
 
                 if self.stream_select is not None:
@@ -654,7 +664,7 @@ class AxonReconstructor:
         #     data = self.recordings
         # else: 
         try: assert self.waveforms, "No waveforms found. Skipping template extraction."
-        except AssertionError as e: self.logger.error(e); return
+        except Exception as e: self.logger.error(e); return
         data = self.waveforms
         for key, datum in data.items():
             streams = {}
@@ -676,10 +686,13 @@ class AxonReconstructor:
                     else: 
                         sorting = self.sortings[key]['streams'][stream_id]['sorting']
                         multirec = self.multirecordings[key]['streams'][stream_id]['multirecording']
+                    temp_kwargs = {
+                        'unit_select': self.unit_select,
+                    }
                     unit_templates = templater.extract_templates(
                         multirec, sorting, wfs, h5_path, stream_id, save_root=self.templates_dir, 
                         te_params=self.te_params, qc_params=self.qc_params, unit_limit=self.unit_limit, 
-                        logger=self.logger, template_bypass=template_bypass)
+                        logger=self.logger, template_bypass=template_bypass, **temp_kwargs)
                     streams[stream_id] = {'units': unit_templates}
             templates[key] = {
                 'h5_path': datum['h5_path'],
@@ -699,9 +712,16 @@ class AxonReconstructor:
     def analyze_and_reconstruct(self, load_existing_templates=False):
         self.logger.info("Reconstructing Axonal Morphology")
         try: assert self.templates, "No templates found. Skipping analysis and reconstruction."
+<<<<<<< HEAD
         except AssertionError as e: self.logger.error(e); return
 <<<<<<< HEAD
 <<<<<<< HEAD
+=======
+        except Exception as e: self.logger.error(e); return
+        recon_kwargs = {
+            'unit_select': self.unit_select,
+        }
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
         analyze_and_reconstruct(
 =======
         axoner.analyze_and_reconstruct(
@@ -715,7 +735,8 @@ class AxonReconstructor:
             analysis_options=self.analysis_options,
             stream_select=self.stream_select,
             n_jobs=self.max_workers,
-            logger=self.logger
+            logger=self.logger,
+            **recon_kwargs,
         )
         self.logger.debug("Completed analysis and reconstruction")
 
