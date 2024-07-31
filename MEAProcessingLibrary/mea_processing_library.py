@@ -127,68 +127,68 @@ def extract_recording_details(h5_dirs):
 
     return records
 
-def test_continuity(h5_file_path, verbose=False, stream_select = None, recordings = None, MaxID = None):
-    """
-    This function tests the continuity of a given h5 file by attempting to read recordings from the file until an error occurs.
-    It also counts the number of successful reads (recordings).
+# def test_continuity(h5_file_path, verbose=False, stream_select = None, recordings = None, MaxID = None):
+#     """
+#     This function tests the continuity of a given h5 file by attempting to read recordings from the file until an error occurs.
+#     It also counts the number of successful reads (recordings).
 
-    If the verbose flag is set to True, the function logs the number of recordings detected.
+#     If the verbose flag is set to True, the function logs the number of recordings detected.
 
-    If a recording is an exception object, an error has occurred. The function logs the error and appends False to a list.
-    If the recording is successfully read, the function logs the success and appends True to the list.
+#     If a recording is an exception object, an error has occurred. The function logs the error and appends False to a list.
+#     If the recording is successfully read, the function logs the success and appends True to the list.
 
-    After attempting to read all recordings, the function checks if all items in the list are True. If they are, all recordings are continuous, and the function logs this and returns True. If not all items are True, the data is not continuous, and the function logs this and returns False.
+#     After attempting to read all recordings, the function checks if all items in the list are True. If they are, all recordings are continuous, and the function logs this and returns True. If not all items are True, the data is not continuous, and the function logs this and returns False.
 
-    Parameters:
-    h5_file_path (str): The path to the h5 file to read from.
-    verbose (bool): If True, log detailed output. Default is False.
+#     Parameters:
+#     h5_file_path (str): The path to the h5 file to read from.
+#     verbose (bool): If True, log detailed output. Default is False.
 
-    Returns:
-    bool: True if all recordings are continuous, False otherwise.
-    """
-    logger.info(f"Testing continuity of {h5_file_path}:")
-    stream_count, rec_count = count_wells_and_recs(h5_file_path, verbose = verbose, stream_select = stream_select)
-    if stream_count == 0:
-        logger.error("No recordings detected, none are continuous.")
-        return False  
-    #This part of the function might be entirely unnecessary:
-    TrueorFalse_list = []
-    recordings = []
-   # if MaxID is None and recordings is None: MaxID, recordings = load_recordings(h5_file_path, stream_select)
+#     Returns:
+#     bool: True if all recordings are continuous, False otherwise.
+#     """
+#     logger.info(f"Testing continuity of {h5_file_path}:")
+#     stream_count, rec_count = count_wells_and_recs(h5_file_path, verbose = verbose, stream_select = stream_select)
+#     if stream_count == 0:
+#         logger.error("No recordings detected, none are continuous.")
+#         return False  
+#     #This part of the function might be entirely unnecessary:
+#     TrueorFalse_list = []
+#     recordings = []
+#    # if MaxID is None and recordings is None: MaxID, recordings = load_recordings(h5_file_path, stream_select)
 
-    for stream_num in range(stream_count):
-        if stream_select is not None and stream_num != stream_select: 
-            logger.info(f"Skipping stream {stream_num}.")
-            continue #skip if stream_select is not None and stream_num is not stream_select, saves time on loading and verifying data
-        #for rec_num in range(rec_count[stream_num]):
-        for recording in recordings:
-            # try: 
-            #     recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, well_num = stream_num, verbose = verbose)
-            #     recordings = recordings.append(recording)
-            # except: recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, verbose = verbose)
-            if isinstance(recording, BaseException):
-                e = recording
-                if "Unable to open object (object 'routed' doesn't exist)" in str(e):
-                    logger.error("This error indicates that 'RecordSpikesOnly' was active during this recording. Data are not continuous.")
-                else:
-                    logger.error("Unknown error")
-                    logger.error(e)
-                    logger.error("This error is unexpected. Please check the error message and try to resolve it.")
-                TrueorFalse_list.append(False)
-            else:
-                logger.info(f"Successfully read Stream ID: {stream_id}, Recording: {rec_name}, indicating continuity.")
-                TrueorFalse_list.append(True)
-    #if all items in TrueorFalse_list are True, then the data is continuous
-    if all(TrueorFalse_list) and TrueorFalse_list != []:
-        logger.info("All recordings are continuous.")
-        return True, recordings
-    elif TrueorFalse_list == []:
-        logger.error("No recordings detected, none are continuous.")
-        return False, None
-    else:
-        logger.error("Data are not continuous.")
-        return False, None
-    #This part of the function might be entirely unnecessary:
+#     for stream_num in range(stream_count):
+#         if stream_select is not None and stream_num != stream_select: 
+#             logger.info(f"Skipping stream {stream_num}.")
+#             continue #skip if stream_select is not None and stream_num is not stream_select, saves time on loading and verifying data
+#         #for rec_num in range(rec_count[stream_num]):
+#         for recording in recordings:
+#             # try: 
+#             #     recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, well_num = stream_num, verbose = verbose)
+#             #     recordings = recordings.append(recording)
+#             # except: recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, verbose = verbose)
+#             if isinstance(recording, BaseException):
+#                 e = recording
+#                 if "Unable to open object (object 'routed' doesn't exist)" in str(e):
+#                     logger.error("This error indicates that 'RecordSpikesOnly' was active during this recording. Data are not continuous.")
+#                 else:
+#                     logger.error("Unknown error")
+#                     logger.error(e)
+#                     logger.error("This error is unexpected. Please check the error message and try to resolve it.")
+#                 TrueorFalse_list.append(False)
+#             else:
+#                 logger.info(f"Successfully read Stream ID: {stream_id}, Recording: {rec_name}, indicating continuity.")
+#                 TrueorFalse_list.append(True)
+#     #if all items in TrueorFalse_list are True, then the data is continuous
+#     if all(TrueorFalse_list) and TrueorFalse_list != []:
+#         logger.info("All recordings are continuous.")
+#         return True, recordings
+#     elif TrueorFalse_list == []:
+#         logger.error("No recordings detected, none are continuous.")
+#         return False, None
+#     else:
+#         logger.error("Data are not continuous.")
+#         return False, None
+#     #This part of the function might be entirely unnecessary:
 
 def load_recordings(h5_file_path, stream_select=None, logger=None):
     """
@@ -225,7 +225,8 @@ def load_recordings(h5_file_path, stream_select=None, logger=None):
             MaxID = 1
         except:
             logger.error("Error: Unable to read recording. Cannot identify as MaxOne or MaxTwo.")
-            return 0, [], 0, []
+            raise Exception("Error: Unable to read recording. Cannot identify as MaxOne or MaxTwo.")
+            #return 0, [], 0, []
 
     if MaxID == 1:
         logger.info("MaxOne Detected.")

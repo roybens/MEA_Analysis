@@ -7,14 +7,48 @@ IPNAnalysis/Sorting_Intermediate_files/*
 IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
+<<<<<<< HEAD
+<<<<<<< HEAD
 AxonReconPipeline/data/*
+=======
+AxonReconPipeline/data*
+AxonReconPipeline/data/temp_data/recordings/*
+AxonReconPipeline/data/temp_data/sortings/*
+AxonReconPipeline/data/temp_data/waveforms/*
+AxonReconPipeline/data/temp_data/templates/*
+#AxonReconPipeline/data/temp_data/reconstructions/*
+>>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
+=======
+AxonReconPipeline/data/*
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
 **.mat
 .vscode
 **.pkl
 slurm*.out
 **.png
 **.npz
+<<<<<<< HEAD
+<<<<<<< HEAD
 **.zip
 **.log
+<<<<<<< HEAD
 *.out
+<<<<<<< HEAD
 *.log
+=======
+**.zip
+>>>>>>> 82357b0 (Pipeline is functional. Modificaitons to plot generated underway.)
+=======
+**.zip
+**.log
+**.out
+>>>>>>> 8226c5e (added dv/dt derivative templating)
+=======
+*.log
+>>>>>>> d685d1a (updated gitignore)
+=======
+**.out
+**.log
+nohup.out
+**.svg
+>>>>>>> 101e312 (updated analysis notebooks and plotting)
