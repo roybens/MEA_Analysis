@@ -190,43 +190,19 @@ def isexists_folder_not_empty(folder_path):
 
     # If the folder is not empty, return True
     return len(items) > 0
+
 def get_list_of_h5_files(h5_parent_dirs, allowed_scan_types=None, **kwargs):
+    if allowed_scan_types is None:
+        allowed_scan_types = kwargs['sorting_params']['allowed_scan_types'][0]
     
-    if allowed_scan_types is None: allowed_scan_types=kwargs['sorting_params']['allowed_scan_types'][0]
-    #else: allowed_scan_types = ['AxonTracking']
-    
-    # walk through h5_parent_dirs, get all .h5 files make a list
-    #mport os
+    # Walk through h5_parent_dirs, get all .h5 files and make a list
     h5_files = []
     for h5_parent_dir in h5_parent_dirs:
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-        if h5_parent_dir.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in h5_parent_dir: 
-=======
-        if h5_parent_dir.endswith('.h5') and allowed_scan_types in h5_parent_dir: 
->>>>>>> f23996c (small error handling changes)
-            h5_files.append(h5_parent_dir) #if h5_parent_dir is an .h5 file, add it to the list
-            continue #if h5_parent_dir is an .h5 file, skip the loop
+        if h5_parent_dir.endswith('.h5') and allowed_scan_types in h5_parent_dir:
+            h5_files.append(h5_parent_dir)  # if h5_parent_dir is an .h5 file, add it to the list
+            continue  # if h5_parent_dir is an .h5 file, skip the loop
         for root, dirs, files in os.walk(h5_parent_dir):
             for file in files:
-<<<<<<< HEAD
-                if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root: 
-=======
-        for root, dirs, files in os.walk(h5_parent_dir):
-            for file in files:
-                if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root:
->>>>>>> 1f4fae2 (Major changes to pipeline logic + axon_velocity submod for TK project.)
-=======
-        if h5_parent_dir.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in h5_parent_dir: 
-            h5_files.append(h5_parent_dir) #if h5_parent_dir is an .h5 file, add it to the list
-            continue #if h5_parent_dir is an .h5 file, skip the loop
-        for root, dirs, files in os.walk(h5_parent_dir):
-            for file in files:
-                if file.endswith('.h5') and kwargs['sorting_params']['allowed_scan_types'][0] in root: 
->>>>>>> 8226c5e (added dv/dt derivative templating)
-=======
-                if file.endswith('.h5') and allowed_scan_types in root: 
->>>>>>> f23996c (small error handling changes)
+                if file.endswith('.h5') and allowed_scan_types in root:
                     h5_files.append(os.path.join(root, file))
     return h5_files

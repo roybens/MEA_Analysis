@@ -3,8 +3,8 @@ import sys
 import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from MEAProcessingLibrary import mea_processing_library as MPL
-import AxonReconPipeline.src.lib_helper_functions as helper
+# from MEAProcessingLibrary import mea_processing_library as MPL
+# import AxonReconPipeline.src.lib_helper_functions as helper
 from AxonReconPipeline.src.axon_reconstructor import AxonReconstructor
 from AxonReconPipeline.src.run_pipeline import run_pipeline
 
@@ -77,7 +77,8 @@ kwargs = {
         'load_sortings': True,
         'load_wfs': False,
         'load_templates': True,
-        'load_templates_bypass': False,
+        'load_templates_bypass': True,  # This is a new parameter that allows the user to bypass pre-processing steps and load the templates directly. 
+                                        # Useful if there isn't any need to reprocess the templates.
         'restore_environment': False,
     },
     'verbose': True,
@@ -132,6 +133,8 @@ h5_parent_dirs = [
     #T6 - TODO: Ongoing, DIV 5 is available - aw28July2024
     # Nevermind this trial failed apparently.
 
+    # TODO: Human E Neurons??
+
 ]
 
 '''Run the pipeline '''
@@ -155,8 +158,6 @@ h5_parent_dirs = [
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240531/M08018/AxonTracking/000064/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/None/AxonTracking/000082/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240611/M08018/AxonTracking/000111/data.raw.h5',
-
-    # TODO: Human E Neurons??
 ]
 
 '''Run the pipeline '''
