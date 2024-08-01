@@ -445,6 +445,7 @@ def analyze_and_reconstruct(templates, params=None, analysis_options=None, recon
                 'merged_template', 'dvdt_merged_template', 
             ]}
             
+            #n_jobs = 1
             if unit_select is not None: n_jobs = 1
             if n_jobs > 1:
                 with ProcessPoolExecutor(max_workers=n_jobs) as executor:

@@ -509,9 +509,20 @@ class AxonReconstructor:
     def extract_templates(self, template_bypass=False):
         self.logger.info("Extracting templates")
         templates = {}
-        try: assert self.waveforms, "No waveforms found. Skipping template extraction."
-        except Exception as e: self.logger.error(e); return
-        data = self.waveforms
+        # if template_bypass is False:
+        try: 
+            assert self.waveforms, "No waveforms found."
+            data = self.waveforms
+        except Exception as e: 
+            self.logger.error(e)
+            if template_bypass: 
+                self.logger.warning("Template bypass is enabled. Will attempt to validate templates in loaded reconstructor without waveforms.")      
+                data = self.recordings                 
+                pass
+            else: 
+                logging.error("No waveforms found. Skipping template extraction.")
+                return
+
         for key, datum in data.items():
             streams = {}
             for stream_id, wfs in datum['streams'].items():
@@ -522,16 +533,16 @@ class AxonReconstructor:
                     assert self.reconstructor_load_options['load_reconstructor'], 'Load existing templates option from reconstructor is set to False. Generating new templates.'
                     stream_templates = self._validate_templates(key, stream_id, datum)
                     streams[stream_id] = stream_templates
-                except AssertionError as e:
+                except Exception as e:
+                    if template_bypass:
+                        self.logger.error(f"Error encountered during template validation: {e}")
+                        self.logger.error(f"Error will be raised and pipeline will return to non-bypass mode.")
+                        raise e
                     self.logger.warning(e)
                     self.logger.info(f'Extracting templates from stream: {stream_id}')
                     h5_path = self.recordings[key]['h5_path']
-                    if template_bypass: 
-                        sorting = None
-                        multirec = None
-                    else: 
-                        sorting = self.sortings[key]['streams'][stream_id]['sorting']
-                        multirec = self.multirecordings[key]['streams'][stream_id]['multirecording']
+                    sorting = self.sortings[key]['streams'][stream_id]['sorting']
+                    multirec = self.multirecordings[key]['streams'][stream_id]['multirecording']
                     temp_kwargs = {
                         'unit_select': self.unit_select,
                     }
@@ -676,6 +687,7 @@ class AxonReconstructor:
         try:
             assert self.reconstructor_load_options['load_reconstructor'], "Load reconstructor option is set to False. Cannot bypass to templates without reconstructor object."
             self.extract_templates(template_bypass=True)
+            #self.extract_templates()
             self.logger.info("Bypass to templates successful")
             self.concatenate_switch = False
             self.sort_switch = False
