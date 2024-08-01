@@ -641,8 +641,8 @@ class AxonReconstructor:
             if self.stream_select is not None: stream_ids = [stream_ids[self.stream_select]] if isinstance(stream_ids[self.stream_select], str) else stream_ids[self.stream_select]
             for stream_id in stream_ids:
                 dill_file_path = os.path.join(self.reconstructor_dir, f'{rec_key}_{stream_id}.dill')
-                assert os.path.exists(dill_file_path), f"Reconstructor object not found at {dill_file_path}. Generating new reconstructor object."
                 try:
+                    assert os.path.exists(dill_file_path), f"Reconstructor object not found at {dill_file_path}. Generating new reconstructor object."
                     self.logger.info(f"Attempting to load reconstructor object from {dill_file_path}")
                     with open(dill_file_path, 'rb') as f:
                         loaded_obj = dill.load(f)
@@ -663,8 +663,8 @@ class AxonReconstructor:
                     # error = '[Errno 2] No such file or directory'
                     # if error in str(e): self.logger.warning(f"Reconstructor object not found at {dill_file_path}.")
                     # else: 
-                    self.logger.error(f"Error loading reconstructor object: {e}")       
-                    self.logger.warning(f"load_reconstructor option set to False. Generating new reconstructor object.")
+                    self.logger.warning(f"Error loading reconstructor object: {e}.")       
+                    self.logger.warning(f"load_reconstructor option will be set to False for this run. Generating new reconstructor object.")
                     self.reconstructor_load_options['load_reconstructor'] = False
         return self
 
