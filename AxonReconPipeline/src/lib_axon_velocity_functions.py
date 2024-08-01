@@ -113,12 +113,12 @@ def plot_selected_channels_helper(fig_title, selected_channels, locations, filen
     ax.axis("off")
     save_figure(fig, fig_path)
 
-def plot_template_propagation(gtr, plot_dir, unit_id, title, fresh_plots=False, figsize=(8, 40), 
+def plot_template_propagation(gtr, fig_dir, unit_id, title, fresh_plots=False, figsize=(8, 40), 
                               linewidth=1, markerfacecolor='r', markersize=5, dpi=300, 
                               max_overlapped_lines=1, color_marker='none', marker='.'):
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
-    fig_path = plot_dir / f"{title}_template_propagation_unit_{unit_id}.png"
+    fig_path = fig_dir
     if os.path.exists(fig_path) and not fresh_plots:
         return
     template = gtr.template
