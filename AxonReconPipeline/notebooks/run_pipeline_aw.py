@@ -107,9 +107,10 @@ h5_parent_dirs = [
     # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240405/M07037/AxonTracking/000077/data.raw.h5',
 
     #TODO: Missing two divs here. In NAS.
+    #Done - 02Aug2024
     #Found
-    '/mnt/disk20tb/KCNT1_T3_aw/240409/M07037/AxonTracking/000095/data.raw.h5',
-    '/mnt/disk20tb/KCNT1_T3_aw/240412/M07037/AxonTracking/000107/data.raw.h5',
+    # '/mnt/disk20tb/KCNT1_T3_aw/240409/M07037/AxonTracking/000095/data.raw.h5',
+    # '/mnt/disk20tb/KCNT1_T3_aw/240412/M07037/AxonTracking/000107/data.raw.h5',
 
     # 27July2024 Started, TODO: Finish
     # TODO: Rerun this next week, aw01Aug2024
@@ -136,7 +137,7 @@ h5_parent_dirs = [
 
 '''Run the pipeline '''
 mode = 'lean'
-run_pipeline(h5_parent_dirs, mode = mode, **kwargs) # Run the pipeline in lean mode (usually)
+#run_pipeline(h5_parent_dirs, mode = mode, **kwargs) # Run the pipeline in lean mode (usually)
 
 kwargs['recon_dir'] = './AxonReconPipeline/data/reconstructions_CDKL5'
 kwargs['reconstructor_dir'] = './AxonReconPipeline/data/reconstructors_CDKL5'
