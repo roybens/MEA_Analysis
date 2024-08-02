@@ -86,8 +86,10 @@ class AxonReconstructor:
             logger.removeHandler(handler)
 
         # Clear the log files by opening them in write mode
-        open(log_file, 'w').close()
-        open(error_log_file, 'w').close()
+        reconstructor_path = os.path.dirname(log_file)
+        if not os.path.exists(reconstructor_path): os.makedirs(reconstructor_path)
+        if os.path.exists(log_file): open(log_file, 'w').close()
+        if os.path.exists(error_log_file): open(error_log_file, 'w').close()
 
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
         logger.setLevel(logger_level.upper())
