@@ -29,7 +29,6 @@ def extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=None, 
     # Helper function to load waveforms
     def load_waveforms(wf_path, seg_sort):
         try:
-<<<<<<< HEAD
             seg_we = si.WaveformExtractor.load(wf_path, with_recording=True, sorting=seg_sort)
             if len(seg_sort.get_unit_ids()) == len(seg_we.unit_ids):
                 if logger is not None: logger.debug(f'Waveforms loaded from {wf_path} already exist')
@@ -47,22 +46,6 @@ def extract_unit_waveforms(h5_path, stream_id, segment_sorting, save_root=None, 
         cutout = [x / (segment_sorting.get_sampling_frequency() / 1000) for x in get_assay_information(h5_path)]
         h5_details = MPL.extract_recording_details(h5_path)
         date, chip_id, scanType, run_id = h5_details[0]['date'], h5_details[0]['chipID'], h5_details[0]['scanType'], h5_details[0]['runID']
-=======
-            save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._kwargs['parent_recording']._kwargs['recording']._kwargs['file_path']
-            save_root = os.path.dirname(save_root)
-        except:
-            save_root = segment_sorting._kwargs['recording_or_recording_list'][0]._parent_recording._kwargs['folder_path']
-            #segment_sorting._kwargs['recording_list'][0]._kwargs['parent_recording']._kwargs['folder_path']
-            #get parent folder instead of file path
-            save_root = os.path.dirname(save_root)
-            #replace 'recordings' with waveforms
-            save_root = save_root.replace('recordings', 'waveforms')
-        full_path = h5_file_path
-        cutout = [x / (segment_sorting.get_sampling_frequency()/1000) for x in get_assay_information(full_path)] #convert cutout to ms
-        h5 = h5py.File(full_path)
-        rec_names = list(h5['wells'][stream_id].keys())
-        #logger.info(f'Extracting waveforms. Stream: {stream_id}, {len(rec_names)} segments')
->>>>>>> 57c3339 (updating memory handling)
         
         segment_waveforms = {}
         with h5py.File(h5_path, 'r') as h5:
