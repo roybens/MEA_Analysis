@@ -1,11 +1,7 @@
-# run_pipeline.py
-import sys
+# run_pipeline.py with custom params as needed.
 import os
-
+import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from MEAProcessingLibrary import mea_processing_library as MPL
-import AxonReconPipeline.src.lib_helper_functions as helper
-from AxonReconPipeline.src.axon_reconstructor import AxonReconstructor
 from AxonReconPipeline.src.run_pipeline import run_pipeline
 
 # Reconstructor parameters
@@ -77,7 +73,8 @@ kwargs = {
         'load_sortings': True,
         'load_wfs': False,
         'load_templates': True,
-        'load_templates_bypass': False,
+        'load_templates_bypass': True,  # This is a new parameter that allows the user to bypass pre-processing steps and load the templates directly. 
+                                        # Useful if there isn't any need to reprocess the templates.
         'restore_environment': False,
     },
     'verbose': True,
@@ -86,45 +83,57 @@ kwargs = {
     'max_workers': 8,
     'logger_level': 'DEBUG',
     'run_lean': True,
-    
-    #custom pathing
-    # 'recon_dir':'./AxonReconPipeline/data/reconstructions_KCNT1',
-    # 'reconstructor_dir' : './AxonReconPipeline/data/reconstructors_KCNT1',
-    # 'log_file': 'axon_reconstruction.log',
-    # 'error_log_file': 'axon_reconstruction_error.log',    
 }
 
-kwargs['recon_dir'] = './AxonReconPipeline/data/reconstructions_KCNT1'
-kwargs['reconstructor_dir'] = './AxonReconPipeline/data/reconstructors_KCNT1'
+kwargs['recon_dir'] = './AxonReconPipeline/data/reconstructions_KCNT1_T3_C1_03122024'
+kwargs['reconstructor_dir'] = './AxonReconPipeline/data/reconstructors_KCNT1_T3_C1_03122024'
 
 h5_parent_dirs = [
-    
     # KCNT1 Data for Ammara Posted
     #27July2024 Started and Completed  
-    #30July2024 Re-run for new plots 
+    #TODO: Rerun this next week, aw01Aug2024
     #T3
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240325/M07037/AxonTracking/000036/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240328/M07037/AxonTracking/000055/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/AxonTracking/000065/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240405/M07037/AxonTracking/000077/data.raw.h5',
-    #TODO: Missing two divs here. In NAS.
-    #Found
-    '/mnt/disk20tb/KCNT1_T3_aw/240409/M07037/AxonTracking/000095/data.raw.h5',
-    '/mnt/disk20tb/KCNT1_T3_aw/240412/M07037/AxonTracking/000107/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240322/M07037/AxonTracking/000025/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240325/M07037/AxonTracking/000036/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240328/M07037/AxonTracking/000055/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/AxonTracking/000065/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240405/M07037/AxonTracking/000077/data.raw.h5',
 
+    #TODO: Missing two divs here. In NAS.
+    #Done - 02Aug2024
+    #Found
+    # '/mnt/disk20tb/KCNT1_T3_aw/240409/M07037/AxonTracking/000095/data.raw.h5',
+    # '/mnt/disk20tb/KCNT1_T3_aw/240412/M07037/AxonTracking/000107/data.raw.h5',
+
+]
+
+'''Run the pipeline '''
+mode = 'lean'
+#run_pipeline(h5_parent_dirs, mode = mode, **kwargs) # Run the pipeline in lean mode (usually)
+
+kwargs['recon_dir'] = './AxonReconPipeline/data/reconstructions_KCNT1_T4_C1_0412202'
+kwargs['reconstructor_dir'] = './AxonReconPipeline/data/reconstructors_KCNT1_T4_C1_0412202'
+
+h5_parent_dirs = [
     # 27July2024 Started, TODO: Finish
-    # 30July2024 Re-run for new plots
+    # TODO: Rerun this next week, aw01Aug2024
     #T4
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240507/M08034/AxonTracking/000094/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240423/M08034/AxonTracking/000043/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240419/M08034/AxonTracking/000031/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240416/M08034/AxonTracking/000015/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240430/M08034/AxonTracking/000067/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240426/M08034/AxonTracking/000055/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240510/M08034/AxonTracking/000106/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240514/M08034/AxonTracking/000120/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240507/M08034/AxonTracking/000094/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240423/M08034/AxonTracking/000043/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240419/M08034/AxonTracking/000031/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240503/M08034/AxonTracking/000082/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240416/M08034/AxonTracking/000015/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240430/M08034/AxonTracking/000067/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240426/M08034/AxonTracking/000055/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240510/M08034/AxonTracking/000106/data.raw.h5',
+    # '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T4_C1_04122024/KCNT1_T4_C1_04122024/240514/M08034/AxonTracking/000120/data.raw.h5',
+]
+
+'''Run the pipeline '''
+mode = 'lean'
+#run_pipeline(h5_parent_dirs, mode = mode, **kwargs) # Run the pipeline in lean mode (usually)
+
+h5_parent_dirs = [
 
     #T5 - TODO: All in NAS...which means I may need to go figure this out on the weekend.
     # Nevermind, no axon tracking data for T5.
@@ -132,31 +141,31 @@ h5_parent_dirs = [
     #T6 - TODO: Ongoing, DIV 5 is available - aw28July2024
     # Nevermind this trial failed apparently.
 
+    # TODO: Human E Neurons??
+
 ]
 
 '''Run the pipeline '''
 mode = 'lean'
-run_pipeline(h5_parent_dirs, mode = mode, **kwargs) # Run the pipeline in lean mode (usually)
+#run_pipeline(h5_parent_dirs, mode = mode, **kwargs) # Run the pipeline in lean mode (usually)
 
-kwargs['recon_dir'] = './AxonReconPipeline/data/reconstructions_CDKL5'
-kwargs['reconstructor_dir'] = './AxonReconPipeline/data/reconstructors_CDKL5'
+kwargs['recon_dir'] = './AxonReconPipeline/data/reconstructions_CDKL5_E6D_T1_C1_05152024'
+kwargs['reconstructor_dir'] = './AxonReconPipeline/data/reconstructors_CDKL5_E6D_T1_C1_05152024'
 
 h5_parent_dirs = [
 
     # Should run 30July2024 - after rerun above
     # TODO: CDKL5 Data:
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000037/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000031/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000029/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240520/M08018/AxonTracking/000014/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000037/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000031/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000029/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240520/M08018/AxonTracking/000014/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240614/M08018/AxonTracking/000128/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240607/M08018/AxonTracking/000096/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240528/M08018/AxonTracking/000050/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240531/M08018/AxonTracking/000064/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/None/AxonTracking/000082/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240611/M08018/AxonTracking/000111/data.raw.h5',
-
-    # TODO: Human E Neurons??
 ]
 
 '''Run the pipeline '''
