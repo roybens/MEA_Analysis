@@ -163,8 +163,8 @@ h5_parent_dirs = [
     #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240523/M08018/AxonTracking/000029/data.raw.h5',
     # - Why did we do so many axon_tracking scans in one day? is this a mistake?
     #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240520/M08018/AxonTracking/000014/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240614/M08018/AxonTracking/000128/data.raw.h5',
-    '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240607/M08018/AxonTracking/000096/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240614/M08018/AxonTracking/000128/data.raw.h5',
+    #'/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240607/M08018/AxonTracking/000096/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240528/M08018/AxonTracking/000050/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240531/M08018/AxonTracking/000064/data.raw.h5',
     '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/None/AxonTracking/000082/data.raw.h5',
