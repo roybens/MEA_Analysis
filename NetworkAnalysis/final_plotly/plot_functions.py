@@ -255,10 +255,11 @@ def plot_bar_with_p_values(data, divs, metrics, ordered_genotypes, selected_colo
         plt.close(fig)
 
     return images, svg_bytes_list, png_bytes_list
-def plot_isi_graph(data_df, selected_divs, metric):
+
+def plot_isi_graph(data_df, selected_divs, metric, selected_colors):
+    all_svg_bytes_list = []
     filtered_df = data_df[data_df['DIV'].isin(selected_divs)]
     neuron_types = filtered_df['NeuronType'].unique()
-    colors = {neuron_type: plt.cm.tab10(i) for i, neuron_type in enumerate(neuron_types)}
     max_edges = None
     for item in filtered_df.to_dict('records'):
         if max_edges is None or len(item['networkAPFreqEdges']) > len(max_edges):
@@ -275,11 +276,11 @@ def plot_isi_graph(data_df, selected_divs, metric):
         mask = bins != 0
         filtered_bins = bins[mask]
         try:
-                filtered_edges = edges[:-1][mask]
+            filtered_edges = edges[:-1][mask]
         except:
-                print("error mask and edges length don't match")
-                print("edges here", len(edges[:-1]), "mask length", len(mask))
-                continue
+            print("Error: mask and edges length don't match")
+            print("Edges length:", len(edges[:-1]), "Mask length:", len(mask))
+            continue
 
         normalized_bins = min_max_normalize(filtered_bins)
         smoothed_bins = gaussian_filter1d(normalized_bins, sigma=1)
@@ -294,8 +295,9 @@ def plot_isi_graph(data_df, selected_divs, metric):
             mean_bins = np.mean(bins_array, axis=0)
             stderr_bins = sem(bins_array, axis=0)
 
-            plt.plot(max_edges[:-1], mean_bins, color=colors[neuron_type], label=neuron_type)
-            plt.fill_between(max_edges[:-1], mean_bins - stderr_bins, mean_bins + stderr_bins, color=colors[neuron_type], alpha=0.3)
+            color = selected_colors.get(neuron_type, 'black')
+            plt.plot(max_edges[:-1], mean_bins, color=color, label=neuron_type)
+            plt.fill_between(max_edges[:-1], mean_bins - stderr_bins, mean_bins + stderr_bins, color=color, alpha=0.3)
 
     plt.xscale('log')
     plt.xlabel('Frequency (Hz)')
@@ -315,10 +317,11 @@ def plot_isi_graph(data_df, selected_divs, metric):
     plt.savefig(svg_bytes, format='svg')
     svg_bytes.seek(0)
     svg_data = svg_bytes.getvalue()
+    all_svg_bytes_list.append((f"{metric}_plot.svg", svg_data))
 
     plt.close()
 
-    return img_element, svg_bytes, img_bytes.getvalue()
+    return img_element, svg_bytes, img_bytes.getvalue(), all_svg_bytes_list
 
 def min_max_normalize(data):
     min_val = np.min(data)

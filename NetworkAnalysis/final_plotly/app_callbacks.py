@@ -2,8 +2,10 @@ from dash import dcc, html, callback_context
 from dash.dependencies import Input, Output, State, ALL
 from data_processing import parse_contents, parse_mat
 from plot_functions import plot_activity_graphs, plot_isi_graph, plot_bar_with_p_values
-import io, zipfile,base64
+import io, zipfile, base64
+
 default_colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
+
 def register_callbacks(app):
     @app.callback(
         Output('tabs-content-example', 'children'),
@@ -34,7 +36,11 @@ def register_callbacks(app):
                         multiple=False
                     )
                 ),
-                html.Div(id='output-data-upload'),
+                dcc.Loading(
+                    id='loading-output',
+                    type='circle',
+                    children=html.Div(id='output-data-upload')
+                ),
                 html.Div(id='neuron-options-container'),
                 dcc.Checklist(
                     id='div-checklist',
@@ -49,22 +55,23 @@ def register_callbacks(app):
                     inline=True
                 ),
                 html.Div(id='color-inputs-container'),  # Color inputs
-                html.Button('Submit', id='submit-button', n_clicks=0),  # Single Submit Button
+                dcc.Loading(
+                    id='submit-button-loading',
+                    type='circle',
+                    children=html.Button('Submit', id='submit-button', n_clicks=0)
+                ),
                 dcc.Store(id='hidden-hex-codes'),  # Store for updated hex codes
                 dcc.Store(id='neuron-order-store'),  # Store for neuron order
                 dcc.Loading(
-                    id='downloading-graphs',
+                    id='downloading-graphs-svg',
                     type='circle',
                     children=html.Button("Download as SVG", id="download-svg-button")
-                    
                 ),
                 dcc.Loading(
-                    id='downloading-graphs',
+                    id='downloading-graphs-png',
                     type='circle',
                     children=html.Button("Download as PNG", id="download-png-button")
-                    
                 ),
-                
                 dcc.Download(id="download-svg"),
                 dcc.Download(id="download-png"),
                 html.Div(id='color-dropdown-container'),
@@ -101,6 +108,7 @@ def register_callbacks(app):
                     value=[],
                     inline=True
                 ),
+                html.Div(id='color-inputs-container-isi'),  # Color inputs for ISI
                 dcc.Dropdown(
                     id='metric-dropdown',
                     options=[],  # No default options
@@ -108,9 +116,11 @@ def register_callbacks(app):
                     clearable=False
                 ),
                 html.Button('Submit', id='submit-isi', n_clicks=0),
-                dcc.Loading(id='loading-isi', type='circle', children=html.Div(id='isi-graph-container')),
                 html.Button("Download All as SVG", id="download-all-isi-svg-button"),
                 html.Button("Download All as PNG", id="download-all-isi-png-button"),
+                dcc.Store(id='hidden-hex-codes-isi'),  # Store for updated hex codes for ISI
+                dcc.Loading(id='loading-isi', type='circle', children=html.Div(id='isi-graph-container')),
+
                 dcc.Download(id="download-isi-svg"),
                 dcc.Download(id="download-isi-png")
             ])
@@ -209,69 +219,17 @@ def register_callbacks(app):
         return div_options, unique_divs, chip_well_options, unique_chip_wells, color_inputs, neuron_checklist_items, html.Div([])
 
     @app.callback(
-        Output('hidden-hex-codes', 'data'),
-        Input('submit-button', 'n_clicks'),
-        State({'type': 'color-hex', 'index': ALL}, 'value'),
-        State('upload-data', 'contents'),
-        State('upload-data', 'filename'),
-        prevent_initial_call=True  # Add this to prevent initial call
-    )
-    def update_colors_on_submit(n_clicks, hex_codes, contents, filename):
-        if contents is None:
-            return {}
-        
-        if n_clicks<=1:
-            return {}
-
-        df = parse_contents(contents, filename)
-        if isinstance(df, html.Div):
-            return {}
-
-        unique_genotypes = df['NeuronType'].str.strip().unique()
-        selected_colors_dict = {genotype: hex_codes[i] for i, genotype in enumerate(unique_genotypes)}
-        return selected_colors_dict
-
-
-    @app.callback(
-        Output('neuron-order-store', 'data'),
-        Input('submit-button', 'n_clicks'),
-        Input({'type': 'neuron-order', 'index': ALL}, 'value'),
-        State('upload-data', 'contents'),
-        State('upload-data', 'filename'),
-        prevent_initial_call=True  # Add this to prevent initial call
-    )
-    def update_neuron_order(n_clicks, selected_orders, contents, filename):
-        if contents is None:
-            return []
-        if n_clicks==0:
-            return []
-        if selected_orders is None or len(selected_orders) == 0:
-            return []
-        if ((len(selected_orders) != len(set(selected_orders))) and n_clicks==0):
-            raise ValueError("Duplicate neuron orders found. Please assign unique orders to each neuron.")
-
-        df = parse_contents(contents, filename)
-        if isinstance(df, html.Div):
-            return []
-
-        unique_genotypes = df['NeuronType'].str.strip().unique()
-        genotype_order_dict = {genotype: selected_orders[i] for i, genotype in enumerate(unique_genotypes)}
-        sorted_genotypes = [genotype for genotype, order in sorted(genotype_order_dict.items(), key=lambda item: item[1])]
-        return sorted_genotypes
-
-    @app.callback(
         [Output('graphs-container', 'children', allow_duplicate=True),
          Output('download-svg', 'data', allow_duplicate=True),
          Output('download-png', 'data', allow_duplicate=True)],
         [Input('submit-button', 'n_clicks'),
          Input('download-svg-button', 'n_clicks'),
-         
          Input('download-png-button', 'n_clicks')],
         [State('upload-data', 'contents'),
          State('upload-data', 'filename'),
          State('div-checklist', 'value'),
          State('chip-well-checklist', 'value'),
-         State('hidden-hex-codes', 'data'),
+         State({'type': 'color-hex', 'index': ALL}, 'value'),
          State('neuron-order-store', 'data'),
          State({'type': 'neuron-checklist', 'index': ALL}, 'value')],
         prevent_initial_call=True  # Add this to prevent initial call
@@ -291,13 +249,11 @@ def register_callbacks(app):
         selected_neuron_types = [item for sublist in selected_neuron_types_lists for item in sublist]  # Flatten list of lists
         df = df[df['NeuronType'].isin(selected_neuron_types)]
         df = df[df['Chip_Well'].isin(selected_chip_wells)]
-        #print(df)
         unique_genotypes = df['NeuronType'].unique()
 
         hex_codes = hex_codes or {}
-        selected_colors_dict = {genotype: hex_codes.get(genotype, default_colors[i % len(default_colors)]) for i, genotype in enumerate(unique_genotypes)}
+        selected_colors_dict = {genotype: hex_codes[i] for i, genotype in enumerate(unique_genotypes)}
         ordered_genotypes = neuron_order if neuron_order else unique_genotypes
-
         ordered_genotypes = [genotype for genotype in ordered_genotypes if genotype in selected_neuron_types]
         if not ordered_genotypes:
             ordered_genotypes = unique_genotypes
@@ -314,8 +270,8 @@ def register_callbacks(app):
                 images, svg_bytes_list, png_bytes_list = plot_activity_graphs(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
             elif 'networks' in filename.lower():
                 images, svg_bytes_list, png_bytes_list = plot_bar_with_p_values(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
-            else: 
-                raise(TypeError("no file of name activity or network found"))
+            else:
+                raise(TypeError("No file of name activity or network found"))
             graphs.extend(images)
             for i, svg_data in enumerate(svg_bytes_list):
                 all_svg_bytes_list.append((f"{metric}_plot.svg", svg_data))
@@ -334,51 +290,63 @@ def register_callbacks(app):
 
         table = html.Table(table_rows, style={'width': '100%', 'borderCollapse': 'collapse'})
 
-        if triggered_id == 'download-svg-button':
-            if all_svg_bytes_list:
-                # Create a ZIP file in memory
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w') as zf:
-                    for filename, svg_data in all_svg_bytes_list:
-                        zf.writestr(filename, svg_data)
-                zip_buffer.seek(0)
-                zip_base64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
-                return table, dict(content=zip_base64, base64=True, filename="plots.zip", type="application/zip"), None
+        if triggered_id == 'download-svg-button' and all_svg_bytes_list:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w') as zf:
+                for filename, svg_data in all_svg_bytes_list:
+                    zf.writestr(filename, svg_data)
+            zip_buffer.seek(0)
+            zip_base64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+            return table, dict(content=zip_base64, base64=True, filename="plots.zip", type="application/zip"), None
 
-        if triggered_id == 'download-png-button':
-            if all_png_bytes_list:
-                # Create a ZIP file in memory
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w') as zf:
-                    for filename, png_data in all_png_bytes_list:
-                        zf.writestr(filename, png_data)
-                zip_buffer.seek(0)
-                zip_base64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
-                return table, None, dict(content=zip_base64, base64=True, filename="plots.zip", type="application/zip")
+        if triggered_id == 'download-png-button' and all_png_bytes_list:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w') as zf:
+                for filename, png_data in all_png_bytes_list:
+                    zf.writestr(filename, png_data)
+            zip_buffer.seek(0)
+            zip_base64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+            return table, None, dict(content=zip_base64, base64=True, filename="plots.zip", type="application/zip")
 
         return table, None, None
 
     @app.callback(
         [Output('div-checklist-isi', 'options'),
          Output('div-checklist-isi', 'value'),
+         Output('color-inputs-container-isi', 'children'),
          Output('metric-dropdown', 'options'),
          Output('isi-graph-container', 'children', allow_duplicate=True)],
         Input('upload-mat-file', 'contents'),
         State('upload-mat-file', 'filename'),
         prevent_initial_call=True  # Add this to prevent initial call
     )
-    def update_div_options(contents, filename):
+    def update_div_options_isi(contents, filename):
         if contents is None:
-            return [], [], [], []
+            return [], [], [], [], []
         
         data_df, available_metrics = parse_mat(contents)
         
         divs = sorted(data_df['DIV'].unique())
         div_options = [{'label': f'DIV {div}', 'value': div} for div in divs]
-        
+
+        default_color_values = {}
+        unique_genotypes = data_df['NeuronType'].str.strip().unique()
+        for i, neuron in enumerate(unique_genotypes):
+            default_color_values[neuron] = default_colors[i % len(default_colors)]
+
+        color_inputs = []
+        for i, (neuron, default_color) in enumerate(default_color_values.items()):
+            color_inputs.append(html.Label(f'Color for {neuron}'))
+            color_inputs.append(dcc.Input(
+                id={'type': 'color-hex-isi', 'index': neuron},
+                type='text',
+                placeholder='Enter hex code',
+                value=default_color  # Set the initial value to the default color
+            ))
+
         metric_options = [{'label': metric.replace('APFreqBins', ' AP Frequency'), 'value': metric} for metric in available_metrics]
         
-        return div_options, [], metric_options, []  # Do not select any DIV initially
+        return div_options, [], color_inputs, metric_options, []  # Do not select any DIV initially
 
     @app.callback(
         [Output('isi-graph-container', 'children'),
@@ -390,29 +358,31 @@ def register_callbacks(app):
         [State('upload-mat-file', 'contents'),
          State('upload-mat-file', 'filename'),
          State('div-checklist-isi', 'value'),
-         State('metric-dropdown', 'value')],
+         State('metric-dropdown', 'value'),
+         State({'type': 'color-hex-isi', 'index': ALL}, 'value')],
         prevent_initial_call=True  # Add this to prevent initial call
     )
-    def plot_isi_graph_callback(n_clicks, n_clicks_svg, n_clicks_png, contents, filename, selected_divs, selected_metric):
+    def plot_isi_graph_callback(n_clicks, n_clicks_svg, n_clicks_png, contents, filename, selected_divs, selected_metric, hex_codes):
         triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0]
 
         if contents is None or not selected_divs or not selected_metric:
             return html.Div('Please upload a file and select DIVs and a metric.'), None, None
-        
+
         data_df, available_metrics = parse_mat(contents)
-        img_element, svg_bytes, png_bytes, all_svg_bytes = plot_isi_graph(data_df, selected_divs, selected_metric)  # changes done here
+        hex_codes = hex_codes or {}
+        unique_genotypes = data_df['NeuronType'].str.strip().unique()
+        selected_colors_dict = {genotype: hex_codes[i] for i, genotype in enumerate(unique_genotypes)}
+
+        img_element, svg_bytes, png_bytes, all_svg_bytes = plot_isi_graph(data_df, selected_divs, selected_metric, selected_colors_dict)
         svg_bytes.seek(0)
-        #png_bytes.seek(0)
-        if triggered_id == 'download-all-isi-svg-button':
-            if all_svg_bytes:
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w') as zf:
-                    # for filename, svg_data in all_svg_bytes:
-                        # zf.writestr(filename, svg_data)
-                    zf.writestr(f"{selected_metric}_plot.svg", svg_bytes.read())
-                zip_buffer.seek(0)
-                zip_base64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
-                return None, dict(content=zip_base64, base64=True, filename="isi_plots.zip", type="application/zip"), None
+        
+        if triggered_id == 'download-all-isi-svg-button' and all_svg_bytes:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w') as zf:
+                zf.writestr(f"{selected_metric}_plot.svg", svg_bytes.read())
+            zip_buffer.seek(0)
+            zip_base64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+            return None, dict(content=zip_base64, base64=True, filename="isi_plots.zip", type="application/zip"), None
 
         if triggered_id == 'download-all-isi-png-button':
             zip_buffer = io.BytesIO()
@@ -517,6 +487,3 @@ def register_callbacks(app):
             return img_element, None, dict(content=png_data, base64=True, filename="lda_plot.png")
 
         return img_element, None, None
-
-
-       
