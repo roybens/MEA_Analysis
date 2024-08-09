@@ -33,7 +33,21 @@ toy_template = numpy.load(toy_data_dir + '/template.npy')
 toy_template_dvdt = numpy.load(toy_data_dir + '/template_dvdt.npy')
 toy_locs = numpy.load(toy_data_dir + '/locations.npy')
 
+#Milos recon debugging
 from func_analyze_and_reconstruct import approx_milos_tracking, transform_data
 transformed_template, _, trans_loc, _ = transform_data(toy_template, toy_locs)
 transformed_template_dvdt, _, trans_loc, _ = transform_data(toy_template_dvdt, toy_locs)
 approx_milos_tracking(transformed_template_dvdt, trans_loc, input_params, output_dir, fresh_plots=True)
+
+#Channel density analysis
+#basic objecitves:
+#1. Reconstruct axons and plot them
+#2. Collect a few examples of low and high channel density reconstructions, put them on slides to qualitatively compare
+
+from func_analyze_and_reconstruct import analyze_and_reconstruct
+#update kwargs as needed
+kwargs = {
+    'n_jobs': 4,
+}
+#this probably wont work right away, need to debug
+analyze_and_reconstruct(toy_template, toy_locs, output_dir, **kwargs)
