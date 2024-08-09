@@ -119,7 +119,10 @@ def run_pipeline(h5_parent_dirs, mode = 'normal', **kwargs):
                 date = h5_details[0]['date']
                 chipID = h5_details[0]['chipID']
                 runID = h5_details[0]['runID']        
-                kwargs['stream_select'] = max_two_wells_analyzed # should go 0 through 5
+                if 'stream_select' not in kwargs: kwargs['stream_select'] = max_two_wells_analyzed # should go 0 through 5
+                else: # keep 'stream_select' in kwargs as it is
+                    if max_two_wells_analyzed == kwargs['stream_select']: pass
+                    else: max_two_wells_analyzed += 1; continue
                 reconstructorID = f'{date}_{chipID}_{runID}_well00{kwargs["stream_select"]}'
 
                 #Set log files to be unique for each reconstructor
