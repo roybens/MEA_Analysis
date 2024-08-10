@@ -1,6 +1,6 @@
 '''process each unit template, generate axon reconstructions and analytics'''
 
-from AxonReconPipeline.src.lib_axon_velocity_functions import *
+from lib_axon_velocity_functions import *
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -167,7 +167,7 @@ def approx_milos_tracking(template_dvdt, locations, params, plot_dir, fresh_plot
     plot_selected_channels_helper("Selected after all thresholds", gtr9.selected_channels, gtr9.locations, f"all_thresholds{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
     print()
 
-def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=None):
+def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=None, density_dict=None):
     if logger is not None: 
         logger.info(f'Processing unit {unit_id}')
     else: 
@@ -202,6 +202,11 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
     area = width * height
     channel_density_value = len(unit_templates['merged_channel_loc']) / area  # channels / um^2
 
+    # Store the channel density value in the dictionary
+    if density_dict is not None:
+        density_dict[unit_id] = channel_density_value
+        print(f"Stored channel density for unit {unit_id}: {channel_density_value}")
+    
     failed_recons[unit_id] = []
 
     for key, (transformed_template, transformed_template_filled, trans_loc, trans_loc_filled) in transformed_templates.items():
@@ -421,52 +426,55 @@ def analyze_and_reconstruct(templates, params=None, analysis_options=None, recon
             for ext in ['png', 'svg', 'jpg']:
                 for file in plot_dir.glob(f"*{suffix}*.{ext}"):
                     file.unlink()
+
+    # Accessing the 'streams' dictionary directly
+    streams = templates['streams']
     
-    for key, tmps in templates.items():
-        for stream_id, stream_templates in tmps['streams'].items():
-            if stream_select is not None and stream_id != f'well{stream_select:03}':
-                continue
-            
-            unit_templates = stream_templates['units']
-            date = tmps['date']
-            chip_id = tmps['chip_id']
-            scanType = tmps['scanType']
-            run_id = tmps['run_id']
-            recon_dir = Path(recon_dir) / date / chip_id / scanType / run_id / stream_id
-            successful_recons = {str(recon_dir): {"successful_units": {}}}
-            failed_recons = {}
-            
+    for stream_id, stream_templates in streams.items():
+        if stream_select is not None and stream_id != f'well{stream_select:03}':
+            continue
+
+        unit_templates = stream_templates['units']
+        date = templates['date']
+        chip_id = templates['chip_id']
+        scanType = templates['scanType']
+        run_id = templates['run_id']
+        recon_dir = Path(recon_dir) / date / chip_id / scanType / run_id / stream_id
+        successful_recons = {str(recon_dir): {"successful_units": {}}}
+        failed_recons = {}
+
+        if logger:
             logger.info(f'Processing {len(unit_templates)} units, with {n_jobs} workers')
 
-            all_analytics = {key: {metric: [] for metric in [
-                'units', 'branch_ids', 'velocities', 'path_lengths', 'r2s', 'extremums', 
-                'num_channels_included', 'channel_density', 'init_chans'
-            ]} for key in [
-                'merged_template', 'dvdt_merged_template', 
-            ]}
-            
-            #n_jobs = 1
-            if unit_select is not None: n_jobs = 1
-            if n_jobs > 1:
-                with ProcessPoolExecutor(max_workers=n_jobs) as executor:
-                    futures = [
-                        executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger)
-                        for unit_id, unit_templates in unit_templates.items()
-                    ]
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
-                            if result:
-                                process_result(result, all_analytics)
-                        except Exception as exc:
+        all_analytics = {key: {metric: [] for metric in [
+            'units', 'branch_ids', 'velocities', 'path_lengths', 'r2s', 'extremums', 
+            'num_channels_included', 'channel_density', 'init_chans'
+        ]} for key in [
+            'merged_template', 'dvdt_merged_template', 
+        ]}
+
+        if unit_select is not None: n_jobs = 1
+        if n_jobs > 1:
+            with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+                futures = [
+                    executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger)
+                    for unit_id, unit_templates in unit_templates.items()
+                ]
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        if result:
+                            process_result(result, all_analytics)
+                    except Exception as exc:
+                        if logger:
                             logger.info(f'Unit generated an exception: {exc}')
-                            if 'A process in the process pool was terminated abruptly' in str(exc):
-                                raise exc
-            else:
-                for unit_id, unit_templates in unit_templates.items():
-                    if unit_select is not None and unit_id != unit_select: continue
-                    result = process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=logger)
-                    if result:
-                        process_result(result, all_analytics)
-                    
-            save_results(stream_id, all_analytics, recon_dir, logger=logger)
+                        if 'A process in the process pool was terminated abruptly' in str(exc):
+                            raise exc
+        else:
+            for unit_id, unit_templates in unit_templates.items():
+                if unit_select is not None and unit_id != unit_select: continue
+                result = process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=logger)
+                if result:
+                    process_result(result, all_analytics)
+
+        save_results(stream_id, all_analytics, recon_dir, logger=logger)
