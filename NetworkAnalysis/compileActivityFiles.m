@@ -61,7 +61,7 @@ results = cell(numFiles, 1);
 skippedFiles = cell(numFiles, 1); 
 
 % Specify the exact number of cores to use
-numCores = 10;  % Adjust this number based on your needs and resource availability
+numCores = 6;  % Adjust this number based on your needs and resource availability
 
 % Initialize or modify the existing parallel pool
 currentPool = gcp('nocreate');  % Check for existing parallel pool
