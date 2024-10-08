@@ -14,3 +14,4 @@ slurm*.out
 **.png
 **.npz
 **.zip
+.DS_Store
