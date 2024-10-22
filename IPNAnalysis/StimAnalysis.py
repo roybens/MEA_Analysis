@@ -1,4 +1,3 @@
-import numpy as np
 import spikeinterface
 import spikeinterface.full as si
 import spikeinterface.extractors as se
@@ -7,29 +6,37 @@ import matplotlib.pyplot as plt
 
 from helper_functions import detect_peaks
 import pandas as pd
+import numpy as np
 import time
 from multiprocessing import Pool
 
 import helper_functions as helper
 
 class StimulationAnalysis:
-    def __init__(self, file_path, recording_electrode=None, stim_electrode=None, artifact_electrode=None):
+    def __init__(self, file_path, recording_electrode, stim_electrode, artifact_electrode=None):
         self.file_path = file_path
         self.rec_electrode = recording_electrode
         self.stim_electrode = stim_electrode
         self.artifact_electrode = artifact_electrode
-        self.channel_list = []
-        if self.rec_electrode is not None:
-            self.get_channel_id('recording')
-        if self.stim_electrode is not None:
-            self.get_channel_id('stim')
+        self.rec_channel = self.get_channel_id(recording_electrode)
+        self.stim_channel = self.get_channel_id(stim_electrode)
+
+        self.channel_dict = {'Stim Channel': self.stim_channel,
+                             'Recording Channel': self.rec_channel
+                             }
+        self.electrode_dict = {'Stim Electrode': self.stim_electrode,
+                               'Recording Electrode': self.rec_electrode}
+        
         if self.artifact_electrode is not None:
-            self.get_channel_id('artifact')
+            self.artifact_channel = self.get_channel_id(artifact_electrode)
+            self.channel_dict['Artifact Channel'] = self.artifact_channel
+            self.electrode_dict['Artifact Electrode'] = self.artifact_electrode
+        
         
         self.recording = se.read_maxwell(self.file_path)
         self.recording_bp = si.bandpass_filter(self.recording, freq_min=300, freq_max=3000)
 
-        self.channel_ids = self.recording.get_channel_ids()
+        self.all_channel_ids = self.recording.get_channel_ids()
         self.fs = self.recording.get_sampling_frequency()
         self.num_chan = self.recording.get_num_channels()
         self.num_seg = self.recording.get_num_segments()
@@ -50,47 +57,15 @@ class StimulationAnalysis:
 
         return
 
-    def get_channel_id(self, electrode_type):
+    def get_channel_id(self, electrode_id):
         # get the corresponding channel ID of an electrode 
-        # electrode_type = 'stim', 'recording', 'artifact' 
     
         with h5py.File(self.file_path, 'r') as h5file:
 
             mapping = h5file['data_store/data0000/settings/mapping']
 
-            if electrode_type == 'stim':
-                electrode_id = self.stim_electrode
-                self.stim_channel = [entry for entry in mapping if entry[1] == electrode_id][0][0]
-
-                self.channel_list.append(self.stim_channel)
-            elif electrode_type == 'recording':
-                electrode_id = self.rec_electrode
-                self.rec_channel = [entry for entry in mapping if entry[1] == electrode_id][0][0]
-
-                self.channel_list.append(self.rec_channel)
-            elif electrode_type == 'artifact':
-                electrode_id = self.artifact_electrode
-                self.artifact_channel = [entry for entry in mapping if entry[1] == electrode_id][0][0]
-
-                self.channel_list.append(self.artifact_channel)
-            else:
-                raise ValueError("Invalid input parameter for electrode_type, must be 'stim', 'recording', or 'artifact'.")
-
-
-
-    def get_channel_ids(self, reading_electrode, stim_electrode, artifact_electrode):
-        self.rec_electrode = reading_electrode
-        self.stim_electrode = stim_electrode
-        self.artifact_electrode = artifact_electrode
-        with h5py.File(self.file_path, 'r') as h5file:
-            mapping = h5file['data_store/data0000/settings/mapping']
-
-            self.rec_channel = [entry for entry in mapping if entry[1] == reading_electrode][0][0]
-            self.stim_channel = [entry for entry in mapping if entry[1] == stim_electrode][0][0]
-            self.artifact_channel = [entry for entry in mapping if entry[1] == artifact_electrode][0][0]
-
-            self.channel_list = [self.rec_channel, self.stim_channel, self.artifact_channel]
-
+            return [entry for entry in mapping if entry[1] == electrode_id][0][0]
+        
     def process_batch(self, time_range):
             start_frame, end_frame = time_range
 
@@ -102,19 +77,25 @@ class StimulationAnalysis:
 
                 # Collect peaks for each channel in this batch
                 batch_peaks = {'Time Range': f"{start_frame} to {end_frame}"}
-                for channel in self.channel_list:
-                    channel_indices = np.where(self.channel_ids == str(channel))[0]
+                batch_peak_counts = {'Time Range': f"{start_frame} to {end_frame}"}
+                for channel_type,channel in self.channel_dict.items():
+                    channel_indices = np.where(self.all_channel_ids == str(channel))[0]
 
                     channel_index = channel_indices[0]
+                    if channel_type == 'Recording Channel':
+                        threshold = 10
+                    else:
+                        threshold = 200
 
-                    x, y = detect_peaks(traces[:, channel_index], peak_sign="neg", abs_threshold=9)
-                    batch_peaks[f'Channel {channel}'] = len(x)
+                    x, y = detect_peaks(traces[:, channel_index], peak_sign="neg", abs_threshold=threshold)
+                    batch_peaks[f'Channel {channel}'] = list(x)
 
                 return batch_peaks
 
             except ValueError as e:
                 print(f"Skipping range {start_frame} to {end_frame} due to error: {e}")
                 return None # Skip this batch if an error occurs
+
 
     def get_spike_counts(self):
         # Returns dataframe with spike counts for stim and recording electrodes
@@ -138,6 +119,47 @@ class StimulationAnalysis:
         self.peak_counts_df = pd.DataFrame(valid_results) 
 
         return self.peak_counts_df
+    
+    def get_spike_counts_in_range(self, start_time=0, end_time=None):
+        """
+        Returns a DataFrame with spike counts for stim and recording electrodes within a specific time range.
+
+        Parameters:
+            start_time (float): The start time in seconds (default 0).
+            end_time (float): The end time in seconds (default None, which means the entire duration).
+
+        Returns:
+            pd.DataFrame: A DataFrame with spike counts for the specified time range.
+        """
+        # If end_time is not provided, use the total recording duration
+        if end_time is None:
+            end_time = self.num_samples / self.fs
+
+        # Convert time to frames
+        start_frame = int(start_time * self.fs)
+        end_frame = int(end_time * self.fs)
+
+        # Define the batch size (10 seconds of data at a time)
+        batch_size = int(self.fs * 10)
+        total_frames = end_frame - start_frame
+
+        # Prepare time ranges for multiprocessing
+        time_ranges = [(start, min(start + batch_size, total_frames + start_frame)) 
+                    for start in range(start_frame, end_frame, batch_size)]
+
+        # Use multiprocessing to process batches in parallel
+        with Pool(16) as pool:
+            results = pool.map(self.process_batch, time_ranges)
+
+        # Filter out None results and extract valid results
+        valid_results = [result for result in results if result is not None]
+
+        # Convert the valid results to a DataFrame
+        self.peak_counts_df = pd.DataFrame(valid_results)
+
+        return self.peak_counts_df
+
+
 
     def plot_spike_counts_bar_graph(self, electrode_type, trial_no):
         # electrode_type: 'stim', 'recording', 'artifact'
@@ -310,33 +332,63 @@ class StimulationAnalysis:
 
         stim_start = samples_per_chunk 
         stim_end = stim_start + samples_per_chunk 
+        channels = [str(self.rec_channel), str(self.stim_channel)]
+        if self.artifact_electrode is not None:
+            channels.append(str(self.artifact_channel))
         stim_data = recording_data.get_traces(
-            channel_ids=[str(channel) for channel in self.channel_list], 
+            channel_ids=channels, 
             start_frame=stim_start, 
             end_frame=stim_end
         ) 
 
         time_during_stim = np.arange(0, len(stim_data)) / self.fs
 
+        # start and end times of the graph
+        start_time = stim_start / self.fs + start_at
+        end_time = start_time + time_range
+
+        peaks = self.get_spike_counts_in_range(start_time, end_time)
+
+        print(type(peaks[f'Channel {self.stim_channel}']))
+        print(peaks[f'Channel {self.stim_channel}'])
+
+        stim_peaks = np.hstack(peaks[f'Channel {self.stim_channel}']) / self.fs + start_at
+        rec_peaks = np.hstack(peaks[f'Channel {self.rec_channel}']) / self.fs + start_at
+        artifact_peaks = np.hstack(peaks[f'Channel {self.artifact_channel}']) / self.fs + start_at
+
+        print(rec_peaks)
+
+
+        # plot artifact electrode trace if it exists
         if self.artifact_electrode is not None:
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(20,4))
         else:
             fig, (ax1, ax3) = plt.subplots(2, 1, sharex=True, figsize=(20,4))
 
+
+        # plot stim electrode trace
         ax1.plot(time_during_stim, stim_data[:,1], 'b-')
         ax1.set_ylabel('Stim ')
         ax1.set_title(f'Trial {trial_no} Traces')
 
+        # plot recording electrode trace
         ax3.plot(time_during_stim, stim_data[:,0], 'b-')
         ax3.set_ylabel('Recording')
         ax3.set_xlabel('Time (s)')
+
+        # add stim lines
+        for t in rec_peaks:
+            ax3.axvline(x=t, color='r', linestyle='--', linewidth=1)
 
         if self.artifact_electrode is not None:
             ax2.plot(time_during_stim, stim_data[:,2], 'b-')
             ax2.set_ylabel('Artifact ')
 
         plt.xlim(start_at, start_at + time_range)
-       
 
         plt.show()
+
+        print(f"Start time: {start_time}")
+        print(f"End Time: {end_time}")
+        return start_time, end_time
     
