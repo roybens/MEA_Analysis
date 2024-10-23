@@ -14,6 +14,7 @@ import helper_functions as helper
 
 class StimulationAnalysis:
     def __init__(self, file_path, recording_electrode, stim_electrode, artifact_electrode=None):
+        self.visible_artifact = False
         self.file_path = file_path
         self.rec_electrode = recording_electrode
         self.stim_electrode = stim_electrode
@@ -42,6 +43,7 @@ class StimulationAnalysis:
         self.num_seg = self.recording.get_num_segments()
         self.num_samples = self.recording.get_num_samples(segment_index=0)
         self.total_recording = self.recording.get_total_duration()
+    
 
     def print_file_structure(self):
         with h5py.File(self.file_path, 'r') as h5file:
@@ -83,7 +85,7 @@ class StimulationAnalysis:
 
                     channel_index = channel_indices[0]
                     if channel_type == 'Recording Channel':
-                        threshold = 10
+                        threshold = 9
                     else:
                         threshold = 200
 
@@ -217,12 +219,15 @@ class StimulationAnalysis:
         else:
             raise ValueError("Invalid input parameter for plot_spike_counts(). electrode_type must be 'stim', 'recording', or 'artifact'" )
 
+        spike_counts = spike_counts.apply(len)
+
         # Calculate spike counts for each third 
         first_third_spike_count = spike_counts[time_values <= first_third].sum() 
         second_third_spike_count = spike_counts[(time_values > first_third) & (time_values <= second_third)].sum() 
         third_third_spike_count = spike_counts[time_values > second_third].sum() 
         
-        # Print the total spike count for each third 
+        
+        
         print(f"Pre-stim total spike count: {first_third_spike_count}") 
         print(f"Stim total spike count: {second_third_spike_count}") 
         print(f"Post-stim spike count: {third_third_spike_count}") 
@@ -354,13 +359,12 @@ class StimulationAnalysis:
 
         stim_peaks = np.hstack(peaks[f'Channel {self.stim_channel}']) / self.fs + start_at
         rec_peaks = np.hstack(peaks[f'Channel {self.rec_channel}']) / self.fs + start_at
-        artifact_peaks = np.hstack(peaks[f'Channel {self.artifact_channel}']) / self.fs + start_at
-
-        print(rec_peaks)
+        
 
 
         # plot artifact electrode trace if it exists
         if self.artifact_electrode is not None:
+            artifact_peaks = np.hstack(peaks[f'Channel {self.artifact_channel}']) / self.fs + start_at
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(20,4))
         else:
             fig, (ax1, ax3) = plt.subplots(2, 1, sharex=True, figsize=(20,4))
