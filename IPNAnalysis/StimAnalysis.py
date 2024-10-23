@@ -13,7 +13,7 @@ from multiprocessing import Pool
 import helper_functions as helper
 
 class StimulationAnalysis:
-    def __init__(self, file_path, recording_electrode, stim_electrode, artifact_electrode=None):
+    def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None):
         self.visible_artifact = False
         self.file_path = file_path
         self.rec_electrode = recording_electrode
@@ -43,6 +43,10 @@ class StimulationAnalysis:
         self.num_seg = self.recording.get_num_segments()
         self.num_samples = self.recording.get_num_samples(segment_index=0)
         self.total_recording = self.recording.get_total_duration()
+        self.pre_stim_length = None
+        self.stim_length = None
+        self.post_stim_length = None
+        self.stim_freq = stim_frequency 
     
 
     def print_file_structure(self):
@@ -162,7 +166,6 @@ class StimulationAnalysis:
         return self.peak_counts_df
 
 
-
     def plot_spike_counts_bar_graph(self, electrode_type, trial_no):
         # electrode_type: 'stim', 'recording', 'artifact'
 
@@ -221,16 +224,18 @@ class StimulationAnalysis:
 
         spike_counts = spike_counts.apply(len)
 
-        # Calculate spike counts for each third 
-        first_third_spike_count = spike_counts[time_values <= first_third].sum() 
-        second_third_spike_count = spike_counts[(time_values > first_third) & (time_values <= second_third)].sum() 
-        third_third_spike_count = spike_counts[time_values > second_third].sum() 
+        # Calculate spike counts for each phase
+        pre_stim_sc = spike_counts[time_values <= self.pre_stim_length].sum() 
+        stim_sc = spike_counts[(time_values > self.pre_stim_length) & (time_values <= (self.pre_stim_length + self.stim_length))].sum() 
+        post_stim_sc = spike_counts[time_values > (self.pre_stim_length + self.stim_length)].sum() 
         
+        if electrode_type == 'recording' and self.visible_artifact == True:
+            stim_sc -= (self.stim_length / self.stim_freq)
+            print(stim_sc)
         
-        
-        print(f"Pre-stim total spike count: {first_third_spike_count}") 
-        print(f"Stim total spike count: {second_third_spike_count}") 
-        print(f"Post-stim spike count: {third_third_spike_count}") 
+        print(f"Pre-stim total spike count: {pre_stim_sc}") 
+        print(f"Stim total spike count: {stim_sc}") 
+        print(f"Post-stim spike count: {post_stim_sc}") 
 
 
         plt.figure(figsize=(10,6))
@@ -246,6 +251,8 @@ class StimulationAnalysis:
         plt.grid(True)
 
         plt.show()
+
+
 
     def plot_individual_traces(self, electrode_type, trial_no, bp_filter=True, time_range=None, start_at=0):
         # electrode_type: 'Stim', 'recording', 'artifact'
@@ -395,4 +402,5 @@ class StimulationAnalysis:
         print(f"Start time: {start_time}")
         print(f"End Time: {end_time}")
         return start_time, end_time
+
     
