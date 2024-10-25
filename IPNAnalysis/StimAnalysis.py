@@ -13,8 +13,9 @@ from multiprocessing import Pool
 import helper_functions as helper
 
 class StimulationAnalysis:
-    def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None):
+    def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9):
         self.visible_artifact = False
+        self.spike_threshold = spike_threshold
         self.file_path = file_path
         self.rec_electrode = recording_electrode
         self.stim_electrode = stim_electrode
@@ -89,7 +90,7 @@ class StimulationAnalysis:
 
                     channel_index = channel_indices[0]
                     if channel_type == 'Recording Channel':
-                        threshold = 9
+                        threshold = self.spike_threshold
                     else:
                         threshold = 200
 
@@ -161,9 +162,42 @@ class StimulationAnalysis:
         valid_results = [result for result in results if result is not None]
 
         # Convert the valid results to a DataFrame
-        self.peak_counts_df = pd.DataFrame(valid_results)
+        peaks_df = pd.DataFrame(valid_results)
 
-        return self.peak_counts_df
+        return peaks_df
+
+    def filter_artifacts(self):
+        print("Before filtering artifacts (list lengths):")
+        print(self.peak_counts_df.applymap(lambda x: len(x) if isinstance(x, list) else x)[[f"Channel {self.channel_dict['Recording Channel']}", f"Channel {self.channel_dict['Stim Channel']}"]])
+
+        total_artifacts = 0
+        for index, row in self.peak_counts_df.iterrows():
+            rec_electrode_channel = f"Channel {self.channel_dict['Recording Channel']}"
+            rec_electrode_peaks = row[rec_electrode_channel]
+
+            stim_electrode_channel = f"Channel {self.channel_dict['Stim Channel']}"
+            stim_electrode_peaks = row[stim_electrode_channel]
+
+            rec_electrode_peaks = [int(value) for value in rec_electrode_peaks]
+            stim_electrode_peaks = [int(value) for value in stim_electrode_peaks]
+            
+            artifact_indices = [
+                index for index, value in enumerate(rec_electrode_peaks)
+                if any(abs(value - artifact) <= 2 for artifact in stim_electrode_peaks)
+            ]
+
+            total_artifacts += len(artifact_indices)
+
+            filtered_peaks = [
+                value for idx, value in enumerate(rec_electrode_peaks) if idx not in artifact_indices
+            ]
+
+            self.peak_counts_df.at[index, rec_electrode_channel] = filtered_peaks
+        
+        print("After filtering artifacts (list lengths):")
+        print(self.peak_counts_df.applymap(lambda x: len(x) if isinstance(x, list) else x)[[f"Channel {self.channel_dict['Recording Channel']}", f"Channel {self.channel_dict['Stim Channel']}"]])
+
+        return total_artifacts
 
 
     def plot_spike_counts_bar_graph(self, electrode_type, trial_no):
@@ -208,10 +242,9 @@ class StimulationAnalysis:
 
         # convert time values to seconds by dividing by sample frequency
         time_values = pd.Series([int(time.split(' ')[0]) / self.fs for time in self.peak_counts_df['Time Range']]) 
-            
-        total_time_range = max(time_values) - min(time_values)
-        first_third = min(time_values) + total_time_range / 3
-        second_third = min(time_values) + 2 * total_time_range / 3
+        
+        if electrode_type == 'recording' and self.visible_artifact == True:
+            self.filter_artifacts()
 
         if electrode_type == 'recording':
             spike_counts = self.peak_counts_df[f'Channel {self.rec_channel}']
@@ -222,16 +255,14 @@ class StimulationAnalysis:
         else:
             raise ValueError("Invalid input parameter for plot_spike_counts(). electrode_type must be 'stim', 'recording', or 'artifact'" )
 
+
         spike_counts = spike_counts.apply(len)
 
         # Calculate spike counts for each phase
-        pre_stim_sc = spike_counts[time_values <= self.pre_stim_length].sum() 
-        stim_sc = spike_counts[(time_values > self.pre_stim_length) & (time_values <= (self.pre_stim_length + self.stim_length))].sum() 
+        pre_stim_sc = spike_counts[time_values < self.pre_stim_length].sum() 
+        stim_sc = spike_counts[(time_values >= self.pre_stim_length) & (time_values <= (self.pre_stim_length + self.stim_length))].sum()
         post_stim_sc = spike_counts[time_values > (self.pre_stim_length + self.stim_length)].sum() 
         
-        if electrode_type == 'recording' and self.visible_artifact == True:
-            stim_sc -= (self.stim_length / self.stim_freq)
-            print(stim_sc)
         
         print(f"Pre-stim total spike count: {pre_stim_sc}") 
         print(f"Stim total spike count: {stim_sc}") 
@@ -241,8 +272,8 @@ class StimulationAnalysis:
         plt.figure(figsize=(10,6))
         plt.plot(time_values, spike_counts, marker='o', linestyle='-', color='b')
 
-        plt.axvline(x=first_third, color='g', linestyle='--')
-        plt.axvline(x=second_third, color='g', linestyle='--')
+        plt.axvline(x=self.pre_stim_length, color='g', linestyle='--')
+        plt.axvline(x=(self.pre_stim_length + self.stim_length), color='g', linestyle='--')
 
 
         plt.title(f'Spike Counts Over Time - Trial {trial_no} {electrode_type.capitalize()} Electrode')
@@ -361,8 +392,6 @@ class StimulationAnalysis:
 
         peaks = self.get_spike_counts_in_range(start_time, end_time)
 
-        print(type(peaks[f'Channel {self.stim_channel}']))
-        print(peaks[f'Channel {self.stim_channel}'])
 
         stim_peaks = np.hstack(peaks[f'Channel {self.stim_channel}']) / self.fs + start_at
         rec_peaks = np.hstack(peaks[f'Channel {self.rec_channel}']) / self.fs + start_at
@@ -402,5 +431,6 @@ class StimulationAnalysis:
         print(f"Start time: {start_time}")
         print(f"End Time: {end_time}")
         return start_time, end_time
+
 
     
