@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 **.asv
 **.txt
 **__pycache__**
@@ -19,3 +20,22 @@ slurm*.out
 **.out
 nohup.out
 **.svg
+=======
+**.asv
+**.txt
+**__pycache__**
+IPNAnalysis/AnalyzedData/*
+IPNAnalysis/sorting_intermediate/*
+IPNAnalysis/Sorting_Intermediate_files/*
+IPNAnalysis/sorting/*
+IPNAnalysis/Electrodes/*
+AnalyzedData/*
+**.mat
+.vscode
+**.pkl
+slurm*.out
+**.png
+**.npz
+**.zip
+.DS_Store
+>>>>>>> upstream/dev_branch
