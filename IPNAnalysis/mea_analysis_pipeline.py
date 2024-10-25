@@ -1,3 +1,4 @@
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
@@ -27,9 +28,15 @@ import scipy.io as sio
 import argparse
 import pandas as pd
 from spikeinterface.curation import CurationSorting
-import pdb
+import pdb, traceback
 from collections import defaultdict
 import yaml
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import convolve, find_peaks
+from scipy.stats import norm
+import json
+
 #os.environ['HDF5_PLUGIN_PATH']='/home/mmp/Documents/Maxlab/so/'
 # Configure the logger
 # Manually clear the log file
@@ -38,7 +45,7 @@ with open('./application.log', 'w'):
 logging.basicConfig(
     filename='./application.log',  # Log file name
     level=logging.DEBUG,  # Log level
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(module)s - %(lineno)d', # Log format
     datefmt='%Y-%m-%d %H:%M:%S' # Timestamp format
 )
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -49,6 +56,9 @@ BASE_FILE_PATH =  os.path.dirname(os.path.abspath(__file__))
 
 
 job_kwargs = dict(n_jobs=32, chunk_duration="1s", progress_bar=False)
+
+
+
 
 #breakpoint()    
 def save_to_zarr(filepath,op_folder):
@@ -116,8 +126,10 @@ def get_waveforms_result(folder,with_recording= True,sorter = None):
     return waveforms
 
 def run_kilosort(recording,output_folder):
-    logging.debug("run_kilosort_output folder:"+output_folder) #rohan made changes here
+    logging.debug("run_kilosort_output folder:"+output_folder) 
     default_KS2_params = ss.get_default_sorter_params('kilosort2')
+
+    #current papers are using these default parameters.
     #default_KS2_params['keep_good_only'] = True
     # default_KS2_params['detect_threshold'] = 12
     # default_KS2_params['projection_threshold']=[18, 10]
@@ -162,22 +174,41 @@ def get_quality_metrics(waveforms):
     return metrics
 
 
-def remove_violated_units(metrics, num_spikes=100, presence_ratio_thresh=0.98, isi_violations_ratio_thresh=0.98, firing_rate=0.01, amplitude_median_thresh=100):
-
+def remove_violated_units(metrics, thresholds=None):
     """
-    Removing based on Refractory violations, Firing_rate , snr_ratio
-    amplitude_cutoff_thresh = 0.1
-    isi_violations_ratio_thresh = 1
-    presence_ratio_thresh = 0.9
-    firing_rate = 0.1
-    num_spikes = 200
-
-    Returns an updated metrics dataframe
+    Removing based on provided thresholds or default values.
     """
-   
-    our_query = f"(presence_ratio > {presence_ratio_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) &(firing_rate > {firing_rate}) &(num_spikes > {num_spikes}) &(amplitude_median > {amplitude_median_thresh})"
-    #our_query = f"(presence_ratio > {presence_ratio_thresh}) & (isi_violations_ratio < {isi_violations_ratio_thresh}) & (firing_rate > {firing_rate}) & (num_spikes > {num_spikes})"
-                # Perfor
+    # Default thresholds
+    default_thresholds = {
+        'num_spikes': 100,
+        'presence_ratio': 0.98,
+        'isi_violations_ratio': 0.98,
+        'firing_rate': 0.01,
+        'amplitude_median': 20
+    }
+
+    # Update default thresholds with provided values
+    if thresholds:
+        default_thresholds.update(thresholds)
+
+    # Function to get query based on key and value
+    def get_query_condition(key, value):
+        conditions = {
+            'num_spikes': f"({key} > {value})",
+            'presence_ratio': f"({key} > {value})",
+            'isi_violations_ratio': f"({key} < {value})",
+            'firing_rate': f"({key} > {value})",
+            'amplitude_median': f"({key} > {value})"
+        }
+        # Return the appropriate condition or a default condition if key is not found
+        return conditions.get(key, f"({key} > {value})")
+
+    # Build the query string dynamically using the get_query_condition function
+    query_conditions = [get_query_condition(key, value) for key, value in default_thresholds.items()]
+
+    # Join all conditions with ' & '
+    our_query = ' & '.join(query_conditions)
+
     metrics = metrics.query(our_query)
     return metrics
 
@@ -327,13 +358,14 @@ def get_data_maxwell(file_path,stream_id,rec_num):
 
 
 
-def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, sorting_folder = f"{BASE_FILE_PATH}/Sorting_Intermediate_files",clear_temp_files=True):
+def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, sorting_folder = f"{BASE_FILE_PATH}/Sorting_Intermediate_files",clear_temp_files=True,thresholds=None):
     
     
     #check if sorting_folder exists and empty
     if helper.isexists_folder_not_empty(sorting_folder):
         logging.info("clearing sorting folder")
         helper.empty_directory(sorting_folder)
+
     #breakpoint()
     recording,rec_name = get_data_maxwell(file_path,stream_id,recnumber)
     logging.info(f"Processing recording: {rec_name}")
@@ -347,7 +379,7 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
     recording_chunk = preprocess(recording_chunk)
     
     
-    logging.debug("current directory of the file.:"+ BASE_FILE_PATH) #chanages made here 
+    logging.debug("current directory of the file.:"+ BASE_FILE_PATH)
     try:
         pattern = r"/(\d+)/data.raw.h5"
         run_id = int(re.search(pattern, file_path).group(1))
@@ -357,24 +389,24 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         parts = file_pattern.split('/')
 
         # Extract the desired pattern
-        desired_pattern = '/'.join(parts[-6:])  # Assuming you want the last 6 parts
+        desired_pattern = '/'.join(parts[-6:])  #  # this is a hardcoding TODO Assuming you want the last 6 parts 
         logging.debug(f"pattern of the file: {desired_pattern}")
         dir_name = sorting_folder
-        #os.mkdir(dir_name,0o777,)
-        logging.debug(f"Sorting directory: {dir_name}") #changes made here
+        
+        logging.debug(f"Sorting directory: {dir_name}") 
         os.chdir(dir_name)
-        logging.debug(f"CUrrent directory after change: {os.getcwd()}") #changes made here 
-        #rohan made changes here 
+        logging.debug(f"CUrrent directory after change: {os.getcwd()}") 
+        
         os.makedirs(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}",mode=0o777, exist_ok=True)
         kilosort_output_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/kilosort2__{rec_name}"
-        logging.info("ks folder:"+ kilosort_output_folder) #changes made here 
+        logging.info("ks folder:"+ kilosort_output_folder)
         start = timer()
-        sortingKS3 = run_kilosort(recording_chunk,output_folder='./Kilosort_tmp')
+        sortingKS3 = run_kilosort(recording_chunk,output_folder=f'{kilosort_output_folder}')
         logging.debug("Sorting complete")
         sortingKS3 = sortingKS3.remove_empty_units()
         sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk) #Sometimes KS returns spikes outside the number of samples. < https://github.com/SpikeInterface/spikeinterface/pull/1378>
         
-        sortingKS3= sortingKS3.save(folder = kilosort_output_folder, overwrite=True)
+        sortingKS3= sortingKS3.save(folder = f"{kilosort_output_folder}_2", overwrite=True)
 
         # sorting_analyzer = spikeinterface.create_sorting_analyzer(sortingKS3, recording,
         #                                       format="binary_folder", folder="/my_sorting_analyzer",
@@ -398,8 +430,10 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         logging.debug(f"Sort and extract waveforms takes: { end - start}")
         
         start = timer()
+        #TODO need to see what is the differnce in the export folder and the kilosort output folder
         #export_to_phy(waveform_extractor=waveforms, output_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/phy",**job_kwargs)
         qual_metrics = get_quality_metrics(waveforms)  
+        qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics_unfiltered.xlsx")
         sp.compute_spike_amplitudes(waveforms,load_if_exists=True,**job_kwargs)
         update_qual_metrics = remove_violated_units(qual_metrics)
         non_violated_units  = update_qual_metrics.index.values
@@ -426,6 +460,7 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         #qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
          #                                              'isi_violation', 'amplitude_cutoff','amplitude_median'])  ## to do : have to deal with NAN values
         #rohan made change here
+        template_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/template_metrics_unfiltered.xlsx")
         template_metrics = template_metrics.loc[non_violated_units]
         template_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/template_metrics.xlsx")
         locations = si.compute_unit_locations(waveforms)
@@ -435,17 +470,30 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         #rohan made change here 
         qual_metrics = qual_metrics.loc[non_violated_units]
         qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics.xlsx")
-        fig,ax1 = plt.subplots(figsize=(10.5,6.5))
+       
         unit_ids = waveforms.unit_ids
+        
+        unit_locations =dict(zip(unit_ids,locations))
+        fig1,ax1 = plt.subplots(figsize=(10.5,6.5))
         sw.plot_probe_map(recording_chunk,ax=ax1,with_channel_ids=False)
+        for unit_id, (x,y,z) in unit_locations.items() :  # in new si 1.00 they are returning three points.
+            ax1.scatter(x,y,s=10,c='blue')
+        ax1.invert_yaxis()    
+        #rohan made changes here
+        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/locations_unfiltered_units.pdf")
+        plt.clf()
+        fig2,ax2 = plt.subplots(figsize=(10.5,6.5))
+        sw.plot_probe_map(recording_chunk,ax=ax2,with_channel_ids=False)
         unit_locations =dict(zip(unit_ids,locations))
         for unit_id, (x,y,z) in unit_locations.items() :  # in new si 1.00 they are returning three points.
             if unit_id in non_violated_units:
-                ax1.scatter(x,y,s=10,c='blue')
-        ax1.invert_yaxis()    
+                ax2.scatter(x,y,s=10,c='blue')
+        ax2.invert_yaxis()    
         #rohan made changes here
         plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/locations_{numunits}_units.pdf")
         plt.clf()
+
+
         #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
         #non_redundant_templates = list(template_channel_dict.keys())
         # extremum_channel_dict = 
@@ -535,64 +583,94 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         t_end = int(300 * fs)
         dt = 1
         frame_numbers = t_end
-        spike_array = np.zeros((len(non_violated_units),frame_numbers), dtype= int)
+        spike_times = {}    
+        #spike_array = np.zeros((len(non_violated_units),frame_numbers), dtype= int)
         for idx, unit_id in enumerate(non_violated_units):
             spike_train = sortingKS3.get_unit_spike_train(unit_id,start_frame=t_start,end_frame=t_end)
-            for spike_time in spike_train:
-                spike_array[idx,spike_time] = 1
+            # for spike_time in spike_train:
+            #     spike_array[idx,spike_time] = 1
+            if len(spike_train) > 0:
+                spike_times[idx] = spike_train / float(fs)
 
-        # Save the spike array to a npz file
-        np.savez(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/spike_array_uncompressed.npz", spike_array=spike_array)
-
-        # Assuming spike_array is your original array and original_fs is the original sampling frequency
-
-        # Define the target sampling frequency
-        target_fs = 100
-
-        # Calculate the resampling factor
-        resampling_factor = int(fs / target_fs)
-
-        # Calculate the number of bins needed
-        num_bins = spike_array.shape[1] // resampling_factor
-
-        # Reshape the array to the number of bins and check for any spike in each bin
-        downsampled_spike_array = np.any(spike_array[:, :num_bins * resampling_factor].reshape(spike_array.shape[0], num_bins, resampling_factor), axis=2).astype(int)
-
-        # Save the downsampled spike array to a npz file
-        np.savez(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/spike_array_downsampled.npz", spike_array=downsampled_spike_array)
-
-        # os.makedirs(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/Spike_trains/",mode=0o777, exist_ok=True)   #need to think of a better optimize d way to save. compare with export to phy
-        # for idx, unit_id in enumerate(non_violated_units):
-        #     #print(unit_id)
-        #     spike_train = sortingKS3.get_unit_spike_train(unit_id,start_frame=0*fs,end_frame=time_end*fs)
-        #     #print(spike_train)
-        #     if len(spike_train) > 0:
-        #         spike_times = spike_train / float(fs)
-        #         #rohan made change here
-        #         mat_filename = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/Spike_trains/{unit_id}.mat"
-        #         sio.savemat(mat_filename,{'spike_times':spike_times,'units':[unit_id]*len(spike_times)})
         
-        
-        # channel_location_dict = get_channel_locations_mapping(recording_chunk)
-        # # file_name = '/mnt/disk15tb/mmpatil/MEA_Analysis/Python/Electrodes/Electrodes_'+rec_name
-        # # helper.dumpdicttofile(new_dict,file_name)
-        # electrodes = []
+        np.save(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/spike_times.npy", spike_times)
+       
+        fig, axs = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
+        # Define the ISI threshold for burst detection (e.g., 0.1 seconds)
+        isi_threshold = 0.1
+        # Detect bursts for each unit
+        burst_statistics = helper.detect_bursts_statistics(spike_times, isi_threshold)
+        bursts = [unit_stats['bursts'] for unit_stats in burst_statistics.values()]
+        # Extracting ISIs as combined arrays
+        all_isis_within_bursts = np.concatenate([stats['isis_within_bursts'] for stats in burst_statistics.values() if stats['isis_within_bursts'].size > 0])
+        all_isis_outside_bursts = np.concatenate([stats['isis_outside_bursts'] for stats in burst_statistics.values() if stats['isis_outside_bursts'].size > 0])
+        all_isis = np.concatenate([stats['isis_all'] for stats in burst_statistics.values() if stats['isis_all'].size > 0])
 
-        # # Iterate over each template in the template_channel_dict dictionary
-        # for template, channel in unit_extremum_channel.items():
-        #     # Add an entry for this template and its corresponding location to the new dictionary
-        #     electrodes.append(220* int(channel_location_dict[channel][1]/17.5)+int(channel_location_dict[channel][0]/17.5))
-        # electrode_data = {'electrodes':electrodes}
-        # #helper.dumpdicttofile(electrode_data,f"{current_directory}/../AnalyzedData/{desired_pattern}/associated_electrodes.json")
-        # #rohan made change here
-        # sio.savemat(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/associated_electrodes.mat",electrode_data)
+        # Calculate combined statistics
+        mean_isi_within_combined = np.mean(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+        cov_isi_within_combined = np.cov(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+
+        mean_isi_outside_combined = np.mean(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
+        cov_isi_outside_combined = np.cov(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
+
+        mean_isi_all_combined = np.mean(all_isis) if all_isis.size > 0 else np.nan
+        cov_isi_all_combined = np.cov(all_isis) if all_isis.size > 0 else np.nan
+
+        # Calculate spike counts for each unit
+        spike_counts = {unit: len(times) for unit, times in spike_times.items()}
+
+        # Sort units by ascending spike counts
+        sorted_units = sorted(spike_counts, key=spike_counts.get)
+
+        axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
+
+        # Call the plot_network_activity function and pass the SpikeTimes dictionary
+        axs[1],network_data= helper.plot_network_activity(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
+
+        network_data['MeanWithinBurstISI'] = mean_isi_within_combined
+        network_data['CoVWithinBurstISI'] = cov_isi_within_combined
+        network_data['MeanOutsideBurstISI'] = mean_isi_outside_combined   
+        network_data['CoVOutsideBurstISI'] = cov_isi_outside_combined
+        network_data['MeanNetworkISI'] = mean_isi_all_combined
+        network_data['CoVNetworkISI'] = cov_isi_all_combined
+        network_data['NumUnits'] = len(non_violated_units)
+        network_data["fileName"]=f"{desired_pattern}/{stream_id}"
+
+       
+
+
+        plt.tight_layout()
+        plt.xlim(0, 60)
+        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/sorted_raster_plot.eps", format="eps")
+     
+        #fig2, axs2 = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
+        #axs2[0] = helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=None, title_suffix="(Origininal Raster Order)")
+        # Copy the second plot to the new figure
+        #fig2._axstack.add(fig2._make_key(axs2[1]), axs[1])
+        #plt.tight_layout()
+        #plt.xlim(0, 60)
+        #plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/original_raster_plot.eps", format="eps")
+        # Save the network data to a JSON file
+        helper.save_json(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/network_data.json", network_data)
+        
+        compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
+        file_exists = os.path.isfile(compiledNetworkData)
+        with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
+            fieldnames = network_data.keys()
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(network_data)
+
+
+    
         
         electrodes = None
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
         return electrodes, len(update_qual_metrics)
     except Exception as e:
-        logging.info(e)
+        logger.info(f"ERROR :{e}\n TRACEBACK: {traceback.format_exc()}")
         logging.info(f"Error in {rec_name} processing. Continuing to the next block")
         if clear_temp_files:
             helper.empty_directory(sorting_folder)
@@ -630,7 +708,7 @@ def routine_parallel(file_path,number_of_configurations,time_in_s):
 def main():
 
     """
-    This direct main function run would be silent run..on server.
+    This direct main function run would be silent run on server.
 
     """
     
@@ -644,6 +722,7 @@ def main():
 
     parser.add_argument('-t','--type',nargs='+',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
     
+    parser.add_argument('-p', '--params', type=str, help='JSON string of parameters for remove_violated_units (optional)')
     
     #parser.add_argument('-d','--docker',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
     args = parser.parse_args()
@@ -660,6 +739,16 @@ def main():
     if not os.path.exists(path):
         logger.info(f"The specified data path '{path}' does not exist.")
         sys.exit(1)
+
+
+    thresholds = None
+    if args.params:
+        try:
+            thresholds = json.loads(args.params)
+        except json.JSONDecodeError:
+            logger.info("Invalid JSON string provided for parameters.")
+            sys.exit(1)
+
     #pdb.set_trace()
     # Check if the path is a file
     if os.path.isfile(path):
@@ -681,6 +770,7 @@ def main():
             
             data_f = args.reference
             array_types = args.type
+
             data_df = pd.read_excel(data_f)
             network_today_runs = data_df[data_df['Assay'].str.lower().isin(array_types)]
             network_today_run_numbers = network_today_runs['Run #'].to_list()
@@ -692,10 +782,10 @@ def main():
 
                         import h5py
                     
-                        h5 = h5py.File(path, mode="r")
+                        h5 = h5py.File(path, mode="r")                 # I do reading operations here, but it is done once more in process_block. TODO: noat effiocient
                         for stream_id in h5['wells'].keys():
 
-                            _ = process_block(path,stream_id=stream_id) 
+                            _ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
                     else:
                         logger.info(f"{run_id} not a network assay")   
                         continue
@@ -705,7 +795,7 @@ def main():
         else:
             logger.debug("Reference file not provided, so analysing all the files in the folder.")
             logger.debug(result)
-            for path in result:   ##TO DO: check if the run number is in ref file.
+            for path in result:   ##TODO: check if the run number is in ref file.
                 
 
                 import h5py
@@ -713,10 +803,11 @@ def main():
                 h5 = h5py.File(path, mode="r")
                 for stream_id in h5['wells'].keys():
                     try:
-                        _ = process_block(path,stream_id=stream_id) 
+                        _ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
 
                     except Exception as e:
-                        logger.info(e)
+                        logger.info(f"ERROR :{e}\n TRACEBACK: {traceback.format_exc()}")
+                                    
                         continue
 
 
