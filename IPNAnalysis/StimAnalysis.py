@@ -195,14 +195,14 @@ class StimulationAnalysis:
         return total_artifacts, peak_counts
     
     def avg_inter_stim_sc(self):
-        # calculates the average no. of spikes between each stim
+        # calculates the average no. of spikes between each stim, and average latency between stim
 
         if self.visible_artifact == True:
             _, peak_counts = self.filter_artifacts()
         else:
             peak_counts = self.peak_counts_df
 
-        print(peak_counts)
+        # print(peak_counts)
 
         num_stim_rows = 0
         num_stims = 0
@@ -244,18 +244,26 @@ class StimulationAnalysis:
                 continue
 
             evoked_peaks += len(relevant_peaks)
+            no_inter_stim_spikes = 0
 
             i = 0 # stim peaks index
             while i < (len(stim_electrode_peaks) - 2):
+                inter_stim_spikes = False
                 for j in range(len(rec_electrode_peaks)):
                     if rec_electrode_peaks[j] > stim_electrode_peaks[i] and rec_electrode_peaks[j] < stim_electrode_peaks[i+1]:
                         # finds the first action potential after a stim
                         latency = (rec_electrode_peaks[j] - stim_electrode_peaks[i]) / self.fs
                         total_latency += latency
                         n += 1
+                        inter_stim_spikes = True
                         break
+                
+                if(not inter_stim_spikes):
+                    no_inter_stim_spikes += 1
+
                 i += 1
 
+        print(f"Number of stims without spikes: {no_inter_stim_spikes}")
         avg_latency = total_latency / n
         print(f'evoked_peaks: {evoked_peaks}')
         print(f"Num stims {((self.stim_length / self.stim_freq) - 1)}")
@@ -505,4 +513,66 @@ class StimulationAnalysis:
         return start_time, end_time
 
 
+    def isi(self):
+        # calculates the inter spike interval (ISI) for each phase of the Stim Assay
+        # returns dictionary containg mean ISI and std for each phase
+        if self.visible_artifact == True: 
+            _, peaks = self.filter_artifacts()
+        else:
+            peaks = self.peak_counts_df
+
+        pre_stim_spikes = []
+        stim_spikes = []
+        post_stim_spikes = []
+
+        row_duration_samples = int(self.fs * 10)
+
+        for index, row in peaks.iterrows():
+            row_offset = index * row_duration_samples
+
+            spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']]
+
+            if 0 <= index < 12: # pre stim rows
+                pre_stim_spikes.extend(spikes)
+            elif 12 <= index < 24:    # Stim rows
+                stim_spikes.extend(spikes)
+            elif 24 <= index <= 35:    # Post-stim rows
+                post_stim_spikes.extend(spikes)
+
+        pre_stim_isis = np.diff(sorted(pre_stim_spikes)) / self.fs if len(pre_stim_spikes) > 1 else []
+        stim_isis = np.diff(sorted(stim_spikes)) / self.fs if len(stim_spikes) > 1 else []
+        post_stim_isis = np.diff(sorted(post_stim_spikes)) / self.fs if len(post_stim_spikes) > 1 else []
+
+        mean_pre_isi = np.mean(pre_stim_isis) if len(pre_stim_isis) > 0 else np.nan
+        std_pre_isi = np.std(pre_stim_isis) if len(pre_stim_isis) > 0 else np.nan
+
+        mean_stim_isi = np.mean(stim_isis) if len(stim_isis) > 0 else np.nan
+        std_stim_isi = np.std(stim_isis) if len(stim_isis) > 0 else np.nan
+
+        mean_post_isi = np.mean(post_stim_isis) if len(post_stim_isis) > 0 else np.nan
+        std_post_isi = np.std(post_stim_isis) if len(post_stim_isis) > 0 else np.nan
+
+        return {
+            "Pre-stim ISI": (mean_pre_isi, std_pre_isi),
+            "Stim ISI": (mean_stim_isi, std_stim_isi),
+            "Post-stim ISI": (mean_post_isi, std_post_isi)
+        }
     
+    def calculate_fano_factor(self, isi_stats):
+        # calculates fanofactor of ISI for each phase of stim assay
+        # parameter - isi_stats: df returned from self.isi()
+            # FANOFACTOR closer to 1 indicates more random spiking (poission distr.)
+            # FANOFACTOR less than 1 indicates more regular and consistent firing
+            # FANOFACTOR greater than 1 indicates super-Poisson variabilty - more bursts / irregular firing
+        # returns dictionary of fanofactor for each phase of Stim Assay
+        fano_factors = {}
+
+        for phase, (mean_isi, std_isi) in isi_stats.items():
+            if mean_isi > 0:  # Ensure the mean is non-zero to avoid division by zero
+                fano_factor = (std_isi ** 2) / mean_isi
+            else:
+                fano_factor = float('nan')  # Assign NaN if mean ISI is zero
+
+            fano_factors[phase] = fano_factor
+
+        return fano_factors
