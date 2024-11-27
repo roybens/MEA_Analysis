@@ -286,7 +286,23 @@ def plot_network_activity(ax,SpikeTimes, min_peak_distance=1.0, binSize=0.1, gau
     #burstPeakValues = properties['prominences']  # Get the peak values
     burstPeakValues = firingRate[peaks]  # Get the peak values
 
+    # Calculate the derivative
+    derivative = np.diff(firingRate)
+    derivative = np.append(derivative, 0)  # Match length with the signal
 
+    # Identify zero crossings
+    zero_crossings = np.where(np.diff(np.sign(derivative)))[0]
+
+    # Calculate widths using zero crossings
+    widths = []
+    for peak in peaks:
+        # Find the nearest zero crossings before and after the peak
+        left_zero = zero_crossings[zero_crossings < peak][-1]
+        right_zero = zero_crossings[zero_crossings > peak][0]
+        width = right_zero - left_zero
+        widths.append(width)
+
+    mean_burst_duration = np.mean(widths) if widths else np.nan
     #Calculate the ISIs between spiketimes
     # Calculate the intervals between consecutive peaks
     intervals = np.diff(burstPeakTimes)
@@ -320,6 +336,7 @@ def plot_network_activity(ax,SpikeTimes, min_peak_distance=1.0, binSize=0.1, gau
         "mean_IBI": mean_interburstinterval,
         "cov_IBI": covariance_interburstinterval,
         "mean_Burst_Peak": mean_peak_height,
+        "mean_Burst_Duration" : mean_burst_duration,
         "cov_Burst_Peak": cov_peak_height,
         "fano_factor": fanofact
     }   
