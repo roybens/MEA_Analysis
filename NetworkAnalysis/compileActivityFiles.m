@@ -126,6 +126,7 @@ for k = 1 : numFiles
         numWells = length(wellsIDs);
         fileResults = cell(numWells, 1);
         skippedWells = cell(numWells,1);
+       
         parfor z = 1:numWells
             wellID=wellsIDs(z);
             fprintf(1, 'Processing Well %d\n', wellID);
@@ -144,7 +145,7 @@ for k = 1 : numFiles
                 %}
                 activityScanData = mxw.fileManager(pathFileActivityScan,wellID);
             catch
-                skippedWells{z} = [pathFileNetwork,num2str(wellID)];
+                skippedWells{z} = [pathFileActivityScan,num2str(wellID)];
                 continue
             end
     
@@ -155,6 +156,8 @@ for k = 1 : numFiles
             catch
                 hd5Date = datetime(hd5_time,'InputFormat', 'dd-MMM-yyyy HH:mm:ss');
             end
+
+            try
             div0_datetime = datetime(div0_date, 'InputFormat', 'yourInputFormatHere');
             scan_div = floor(days(hd5Date - div0_datetime));
     
@@ -179,6 +182,13 @@ for k = 1 : numFiles
             'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
             'Mean_FiringRate','Mean_SpikeAmplitude','Active_area'...
             });
+            catch ME
+                disp(ME.message)
+                
+                skippedWells{z} = [pathFileActivityScan,num2str(wellID)];
+                
+                continue
+            end
             % plot amplitude and firing rate maps
             if plotFig
             try
@@ -292,7 +302,8 @@ for k = 1 : numFiles
             end
           % active area
         end
-    end
+        end
+ 
     end
 
 
