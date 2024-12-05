@@ -3,6 +3,7 @@ import spikeinterface.full as si
 import spikeinterface.extractors as se
 import h5py
 import matplotlib.pyplot as plt
+import math
 
 from helper_functions import detect_peaks
 import pandas as pd
@@ -127,17 +128,7 @@ class StimulationAnalysis:
         return self.peak_counts_df
     
     def get_spike_counts_in_range(self, start_time=0, end_time=None):
-        """
-        Returns a DataFrame with spike counts for stim and recording electrodes within a specific time range.
-
-        Parameters:
-            start_time (float): The start time in seconds (default 0).
-            end_time (float): The end time in seconds (default None, which means the entire duration).
-
-        Returns:
-            pd.DataFrame: A DataFrame with spike counts for the specified time range.
-        """
-        # If end_time is not provided, use the total recording duration
+        # returns df with spike counts for stim and rec electrodes within specific time range
         if end_time is None:
             end_time = self.num_samples / self.fs
 
@@ -164,6 +155,30 @@ class StimulationAnalysis:
         peaks_df = pd.DataFrame(valid_results)
 
         return peaks_df
+    
+
+    def get_spike_counts_in_range2(self, start_time=0, end_time=None):
+        if end_time is None:
+            end_time = self.num_samples / self.fs
+
+        if self.visible_artifact == True:
+            _, peaks = self.filter_artifacts()
+        else:
+            peaks = self.peak_counts_df
+
+        row_duration_samples = int(self.fs * 10)
+
+        spikes = []
+
+        for index, row in peaks.iterrows():
+            row_offset = index * row_duration_samples
+
+            curr_spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']]
+
+            spikes.extend(curr_spikes)
+
+        return [spike for spike in spikes if ((spike >= start_time * self.fs) and (spike <= end_time * self.fs))]
+        
 
     def filter_artifacts(self):
         total_artifacts = 0
@@ -270,12 +285,6 @@ class StimulationAnalysis:
         avg_spikes_per_stim = evoked_peaks / ((self.stim_length / self.stim_freq) - 1)
 
         return avg_latency, avg_spikes_per_stim
-
-
-
-
-
-
 
 
     def plot_spike_counts_bar_graph(self, electrode_type, trial_no):
@@ -421,10 +430,6 @@ class StimulationAnalysis:
         plt.ylabel('Amplitude')
         plt.title(f'{electrode_type.capitalize()} Electrode During-Stim Trace Trial {trial_no}')
         plt.xlim(start_at, start_at + time_range)
-        
-        # Add stim lines
-        for x in np.arange(start_at, start_at + time_range, 0.25):
-            plt.axvline(x=x, color='r', linestyle=':', linewidth = 1)
 
         plt.show()
 
@@ -437,7 +442,7 @@ class StimulationAnalysis:
         plt.show()
         
 
-    def plot_stim_traces(self, trial_no, bp_filter=True, time_range=None, start_at=0):
+    def plot_stim_traces(self, trial_no, bp_filter=True, time_range=None, start_at=0, draw_stim_lines=False):
         if time_range is None:
             time_range = self.total_recording / 3
 
@@ -446,62 +451,51 @@ class StimulationAnalysis:
         else:
             recording_data = self.recording
 
-        chunk_duration = self.total_recording / 3
+        start_time = start_at
+        end_time = start_at + time_range
 
-        samples_per_chunk = int(chunk_duration * self.fs)
+        if start_time < 0: 
+            raise ValueError("Start_at must be greater than 0")
+        if end_time > self.total_recording: 
+            raise ValueError("End time out of range of recording length")
 
-        pre_stim_start = 0
-        pre_stim_end = samples_per_chunk
-
-        stim_start = samples_per_chunk 
-        stim_end = stim_start + samples_per_chunk 
         channels = [str(self.rec_channel), str(self.stim_channel)]
         if self.artifact_electrode is not None:
             channels.append(str(self.artifact_channel))
         stim_data = recording_data.get_traces(
             channel_ids=channels, 
-            start_frame=stim_start, 
-            end_frame=stim_end
+            start_frame=(start_time * self.fs), 
+            end_frame=(end_time * self.fs)
         ) 
 
-        time_during_stim = np.arange(0, len(stim_data)) / self.fs
+        trace_length = (np.arange(0, len(stim_data)) / self.fs) + start_at
 
-        # start and end times of the graph
-        start_time = stim_start / self.fs + start_at
-        end_time = start_time + time_range
-
-        peaks = self.get_spike_counts_in_range(start_time, end_time)
-
-
-        stim_peaks = np.hstack(peaks[f'Channel {self.stim_channel}']) / self.fs + start_at
-        rec_peaks = np.hstack(peaks[f'Channel {self.rec_channel}']) / self.fs + start_at
-        
-
+        rec_peaks2 = self.get_spike_counts_in_range2(start_time, end_time)
+        rec_peaks2_times = [(peak / self.fs) for peak in rec_peaks2]
 
         # plot artifact electrode trace if it exists
         if self.artifact_electrode is not None:
-            artifact_peaks = np.hstack(peaks[f'Channel {self.artifact_channel}']) / self.fs + start_at
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(20,4))
         else:
             fig, (ax1, ax3) = plt.subplots(2, 1, sharex=True, figsize=(20,4))
 
 
         # plot stim electrode trace
-        ax1.plot(time_during_stim, stim_data[:,1], 'b-')
+        ax1.plot(trace_length, stim_data[:,1], 'b-')
         ax1.set_ylabel('Stim ')
         ax1.set_title(f'Trial {trial_no} Traces')
 
         # plot recording electrode trace
-        ax3.plot(time_during_stim, stim_data[:,0], 'b-')
+        ax3.plot(trace_length, stim_data[:,0], 'b-')
         ax3.set_ylabel('Recording')
         ax3.set_xlabel('Time (s)')
 
         # add stim lines
-        for t in rec_peaks:
+        for t in rec_peaks2_times:
             ax3.axvline(x=t, color='r', linestyle='--', linewidth=1)
 
         if self.artifact_electrode is not None:
-            ax2.plot(time_during_stim, stim_data[:,2], 'b-')
+            ax2.plot(trace_length, stim_data[:,2], 'b-')
             ax2.set_ylabel('Artifact ')
 
         plt.xlim(start_at, start_at + time_range)
@@ -516,10 +510,12 @@ class StimulationAnalysis:
     def isi(self):
         # calculates the inter spike interval (ISI) for each phase of the Stim Assay
         # returns dictionary containg mean ISI and std for each phase
+    
         if self.visible_artifact == True: 
             _, peaks = self.filter_artifacts()
         else:
             peaks = self.peak_counts_df
+
 
         pre_stim_spikes = []
         stim_spikes = []
@@ -543,14 +539,37 @@ class StimulationAnalysis:
         stim_isis = np.diff(sorted(stim_spikes)) / self.fs if len(stim_spikes) > 1 else []
         post_stim_isis = np.diff(sorted(post_stim_spikes)) / self.fs if len(post_stim_spikes) > 1 else []
 
-        mean_pre_isi = np.mean(pre_stim_isis) if len(pre_stim_isis) > 0 else np.nan
-        std_pre_isi = np.std(pre_stim_isis) if len(pre_stim_isis) > 0 else np.nan
+        self.plot_isi_distribution(pre_stim_isis, "Pre-Stim")
+        self.plot_isi_distribution(stim_isis, "Stim")
+        self.plot_isi_distribution(post_stim_isis, "Post-Stim")
+        
+        return (pre_stim_isis, stim_isis, post_stim_isis)
+    
+    def plot_isi_distribution(self, isis, stim_phase):
+        # num_bins = round(math.sqrt(len(isis)))
+        num_bins = 30
+        plt.figure(figsize=(6, 4))
+        plt.hist(isis, bins=num_bins, color='blue', alpha=0.7, edgecolor='black')
+        plt.title(f"{stim_phase} ISI Distribution")
+        plt.xlabel("ISI (s)")
+        plt.ylabel("Frequency")
+        plt.xlim(0, 6)
+        plt.ylim(0, 400)
+        plt.show()
 
-        mean_stim_isi = np.mean(stim_isis) if len(stim_isis) > 0 else np.nan
-        std_stim_isi = np.std(stim_isis) if len(stim_isis) > 0 else np.nan
 
-        mean_post_isi = np.mean(post_stim_isis) if len(post_stim_isis) > 0 else np.nan
-        std_post_isi = np.std(post_stim_isis) if len(post_stim_isis) > 0 else np.nan
+
+    def calc_mean_isi(self, isis):
+
+        mean_pre_isi = np.mean(isis[0]) if len(isis[0]) > 0 else np.nan
+        std_pre_isi = np.std(isis[0]) if len(isis[0]) > 0 else np.nan
+
+        mean_stim_isi = np.mean(isis[1]) if len(isis[1]) > 0 else np.nan
+        std_stim_isi = np.std(isis[1]) if len(isis[1]) > 0 else np.nan
+
+        mean_post_isi = np.mean(isis[2]) if len(isis[2]) > 0 else np.nan
+        std_post_isi = np.std(isis[2]) if len(isis[2]) > 0 else np.nan
+
 
         return {
             "Pre-stim ISI": (mean_pre_isi, std_pre_isi),
@@ -576,3 +595,38 @@ class StimulationAnalysis:
             fano_factors[phase] = fano_factor
 
         return fano_factors
+    
+    def run_full_analysis(self):
+        if self.stim_length == None:
+            length = input("Please input length of stim period in seconds: ")
+            self.stim_length = float(length)
+            self.pre_stim_length = float(length)
+            self.post_stim_length = float(length)
+        
+        self.get_spike_counts()
+
+
+        self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=(1.5*self.pre_stim_length))
+
+        vis_artifact = input("Is the artifact being detected? (y/n): ").strip().lower()
+
+        if vis_artifact == 'y':
+            self.visible_artifact = True
+            print("Artifact detection set to visible (True).")
+            self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=(1.5*self.pre_stim_length))
+        elif vis_artifact == 'n':
+            self.visible_artifact = False
+        else:
+            print("Invalid input! Please enter 'y' for yes or 'n' for no.")
+
+        
+        self.plot_spike_counts('recording', 1)
+
+        isi = self.isi()
+        isi_mean_std = self.calc_mean_isi(isi)
+        fanofactors = self.calculate_fano_factor(isi_mean_std)
+        print(f"Mean and std ISI: {isi_mean_std}")
+        print(f"Fanofactors: {fanofactors}")
+    
+
+    
