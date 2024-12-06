@@ -196,7 +196,7 @@ class StimulationAnalysis:
             
             artifact_indices = [
                 index for index, value in enumerate(rec_electrode_peaks)
-                if any(abs(value - artifact) <= 2 for artifact in stim_electrode_peaks)
+                if any(abs(value - artifact) <= 10 for artifact in stim_electrode_peaks)
             ]
 
             total_artifacts += len(artifact_indices)
