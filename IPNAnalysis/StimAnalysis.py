@@ -14,7 +14,7 @@ from multiprocessing import Pool
 import helper_functions as helper
 
 class StimulationAnalysis:
-    def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9):
+    def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9, peak_sign="neg"):
         self.visible_artifact = False
         self.spike_threshold = spike_threshold
         self.file_path = file_path
@@ -23,6 +23,7 @@ class StimulationAnalysis:
         self.artifact_electrode = artifact_electrode
         self.rec_channel = self.get_channel_id(recording_electrode)
         self.stim_channel = self.get_channel_id(stim_electrode)
+        self.peak_sign = peak_sign
 
         self.channel_dict = {'Stim Channel': self.stim_channel,
                              'Recording Channel': self.rec_channel
@@ -95,7 +96,7 @@ class StimulationAnalysis:
                     else:
                         threshold = 200
 
-                    x, y = detect_peaks(traces[:, channel_index], peak_sign="neg", abs_threshold=threshold)
+                    x, y = detect_peaks(traces[:, channel_index], peak_sign=self.peak_sign, abs_threshold=threshold)
                     batch_peaks[f'Channel {channel}'] = list(x)
 
                 return batch_peaks
