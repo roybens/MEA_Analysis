@@ -24,6 +24,7 @@ class StimulationAnalysis:
         self.rec_channel = self.get_channel_id(recording_electrode)
         self.stim_channel = self.get_channel_id(stim_electrode)
         self.peak_sign = peak_sign
+        self.stim_start = None
 
         self.channel_dict = {'Stim Channel': self.stim_channel,
                              'Recording Channel': self.rec_channel
@@ -348,22 +349,31 @@ class StimulationAnalysis:
 
         spike_counts = spike_counts.apply(len)
 
-        # Calculate spike counts for each phase
-        pre_stim_sc = spike_counts[time_values < self.pre_stim_length].sum() 
-        stim_sc = spike_counts[(time_values >= self.pre_stim_length) & (time_values <= (self.pre_stim_length + self.stim_length))].sum()
-        post_stim_sc = spike_counts[time_values > (self.pre_stim_length + self.stim_length)].sum() 
-        
-        
-        print(f"Pre-stim total spike count: {pre_stim_sc}") 
-        print(f"Stim total spike count: {stim_sc}") 
-        print(f"Post-stim spike count: {post_stim_sc}") 
+        row_duration_samples = int(self.fs * 10)
 
+        spikes = []
+        for index, row in peak_counts.iterrows():
+            row_offset = index * row_duration_samples
+
+            row_spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']]
+        
+            spikes.extend(row_spikes)
+        print(len(spikes))
+        # Calculate spike counts for each phase
+        pre_stim_spikes = [spike for spike in spikes if spike < (self.fs * self.stim_start)]
+        stim_spikes = [spike for spike in spikes if spike >= (self.fs * self.stim_start) and spike < (self.fs * (self.stim_start + self.stim_length))]
+        post_stim_spikes = [spike for spike in spikes if spike >= (self.fs * (self.stim_start + self.stim_length))]
+        
+        
+        print(f"Pre-stim total spike count: {len(pre_stim_spikes)}") 
+        print(f"Stim total spike count: {len(stim_spikes)}") 
+        print(f"Post-stim spike count: {len(post_stim_spikes)}") 
 
         plt.figure(figsize=(10,6))
         plt.plot(time_values, spike_counts, marker='o', linestyle='-', color='b')
 
-        plt.axvline(x=self.pre_stim_length, color='g', linestyle='--')
-        plt.axvline(x=(self.pre_stim_length + self.stim_length), color='g', linestyle='--')
+        plt.axvline(x=self.stim_start, color='g', linestyle='--')
+        plt.axvline(x=(self.stim_start + self.stim_length), color='g', linestyle='--')
 
 
         plt.title(f'Spike Counts Over Time - Trial {trial_no} {electrode_type.capitalize()} Electrode')
@@ -517,24 +527,19 @@ class StimulationAnalysis:
         else:
             peaks = self.peak_counts_df
 
-
-        pre_stim_spikes = []
-        stim_spikes = []
-        post_stim_spikes = []
-
         row_duration_samples = int(self.fs * 10)
 
+        spikes = []
         for index, row in peaks.iterrows():
             row_offset = index * row_duration_samples
 
-            spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']]
+            row_spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']]
+        
+            spikes.extend(row_spikes)
 
-            if 0 <= index < 12: # pre stim rows
-                pre_stim_spikes.extend(spikes)
-            elif 12 <= index < 24:    # Stim rows
-                stim_spikes.extend(spikes)
-            elif 24 <= index <= 35:    # Post-stim rows
-                post_stim_spikes.extend(spikes)
+        pre_stim_spikes = [spike for spike in spikes if spike < (self.fs * self.stim_start)]
+        stim_spikes = [spike for spike in spikes if spike >= (self.fs * self.stim_start) and spike < (self.fs * (self.stim_start + self.stim_length))]
+        post_stim_spikes = [spike for spike in spikes if spike >= (self.fs * (self.stim_start + self.stim_length))]
 
         pre_stim_isis = np.diff(sorted(pre_stim_spikes)) / self.fs if len(pre_stim_spikes) > 1 else []
         stim_isis = np.diff(sorted(stim_spikes)) / self.fs if len(stim_spikes) > 1 else []
@@ -601,8 +606,8 @@ class StimulationAnalysis:
         if self.stim_length == None:
             length = input("Please input length of stim period in seconds: ")
             self.stim_length = float(length)
-            self.pre_stim_length = float(length)
-            self.post_stim_length = float(length)
+            self.pre_stim_length = 2*float(length)
+            self.post_stim_length = 2*float(length)
         
         self.get_spike_counts()
 
