@@ -455,7 +455,7 @@ class StimulationAnalysis:
 
     def plot_stim_traces(self, trial_no, bp_filter=True, time_range=None, start_at=0, draw_stim_lines=False):
         if time_range is None:
-            time_range = self.total_recording / 3
+            time_range = self.total_recording
 
         if bp_filter:
             recording_data = self.recording_bp
@@ -603,11 +603,17 @@ class StimulationAnalysis:
         return fano_factors
     
     def run_full_analysis(self):
+        # get length of stim period in seconds
         if self.stim_length == None:
             length = input("Please input length of stim period in seconds: ")
             self.stim_length = float(length)
-            self.pre_stim_length = 2*float(length)
-            self.post_stim_length = 2*float(length)
+
+        # get time in seconds when stim starts
+        if self.stim_start == None:
+            time = input("Please input when stimming starts")
+            self.stim_start = float(time)
+            self.pre_stim_length = self.stim_start
+            self.post_stim_length = self.total_recording - (self.stim_start + self.stim_length)
         
         self.get_spike_counts()
 
