@@ -159,7 +159,9 @@ class StimulationAnalysis:
         return peaks_df
     
 
-    def get_spike_counts_in_range2(self, start_time=0, end_time=None):
+    def get_spike_counts_in_range2(self, channel_type, start_time=0, end_time=None):
+        # gets the spikes in certain time range, returned as a list of sample indeces
+        # channel_type: 'recording' or 'stim'
         if end_time is None:
             end_time = self.num_samples / self.fs
 
@@ -168,14 +170,21 @@ class StimulationAnalysis:
         else:
             peaks = self.peak_counts_df
 
+        if channel_type == 'recording':
+            channel = f'Channel {self.rec_channel}'
+        elif channel_type == 'stim':
+            channel = f'Channel {self.stim_channel}'
+        else:
+            raise ValueError(f"Parameter channel_type must either be \'recording\' or \'stim\'. It's currently set as {channel_type}")
+
         row_duration_samples = int(self.fs * 10)
 
         spikes = []
-
+    
         for index, row in peaks.iterrows():
             row_offset = index * row_duration_samples
 
-            curr_spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']]
+            curr_spikes = [spike + row_offset for spike in row[channel]]
 
             spikes.extend(curr_spikes)
 
@@ -481,8 +490,11 @@ class StimulationAnalysis:
 
         trace_length = (np.arange(0, len(stim_data)) / self.fs) + start_at
 
-        rec_peaks2 = self.get_spike_counts_in_range2(start_time, end_time)
-        rec_peaks2_times = [(peak / self.fs) for peak in rec_peaks2]
+        rec_peaks = self.get_spike_counts_in_range2('recording', start_time, end_time)
+        rec_peaks_times = [(peak / self.fs) for peak in rec_peaks]
+
+        stim_peaks = self.get_spike_counts_in_range2('stim', start_time, end_time)
+        stim_peaks_times = [(peak / self.fs) for peak in stim_peaks]
 
         # plot artifact electrode trace if it exists
         if self.artifact_electrode is not None:
@@ -496,13 +508,17 @@ class StimulationAnalysis:
         ax1.set_ylabel('Stim ')
         ax1.set_title(f'Trial {trial_no} Traces')
 
+        # add stim lines to stim electrode trace
+        for t in stim_peaks_times:
+            ax1.axvline(x=t, color='r', linestyle='--', linewidth=1)
+
         # plot recording electrode trace
         ax3.plot(trace_length, stim_data[:,0], 'b-')
         ax3.set_ylabel('Recording')
         ax3.set_xlabel('Time (s)')
 
-        # add stim lines
-        for t in rec_peaks2_times:
+        # add stim lines to recording trace (identifies artifacts)
+        for t in rec_peaks_times:
             ax3.axvline(x=t, color='r', linestyle='--', linewidth=1)
 
         if self.artifact_electrode is not None:
