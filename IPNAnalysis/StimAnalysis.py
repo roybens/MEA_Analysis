@@ -535,8 +535,7 @@ class StimulationAnalysis:
 
     def overlap_stim_responses(self, time_range):
         # overlaps immediate effect of all stims on graph
-        # time_range: time in seconds to show on x-axis
-        # exclude_first: time in seconds to exclude from the x-axis at the start
+        # time_range: time in seconds before and after stim to show on x-axis 
 
         start = self.stim_start if self.stim_start is not None else self.pre_stim_length
         end = start + self.stim_length
@@ -586,6 +585,22 @@ class StimulationAnalysis:
 
         average_voltages = {f"{time_points[i]:.4f}s": mean_trace[idx] for i, idx in enumerate(time_indices)}
 
+        # Plot the mean trace
+        plt.figure(figsize=(10, 6))
+        time_axis = np.linspace(-time_range, time_range, len(mean_trace))
+        plt.plot(time_axis, mean_trace, label="Average Trace", color="black", linewidth=2)
+
+        # Mark sampled points
+        sampled_points = [mean_trace[idx] for idx in time_indices]
+        plt.scatter(time_points[:len(sampled_points)], sampled_points, color="red", label="Sampled Points")
+
+        plt.axvline(x=0, color='r', linestyle='--', label="Stim Start")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Amplitude (mV)")
+        plt.title("Average Voltage Trace with Sampled Points")
+        plt.legend()
+        plt.show()
+        
         return average_voltages
 
 
