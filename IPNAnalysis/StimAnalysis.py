@@ -533,6 +533,44 @@ class StimulationAnalysis:
         print(f"End Time: {end_time}")
         return start_time, end_time
 
+    def overlap_stim_responses(self, time_range):
+        # overlaps immediate effect of all stims on graph
+        # time_range: time in seconds to show on x-axis
+
+        start = self.stim_start if self.stim_start is not None else self.pre_stim_length
+        end = start + self.stim_length
+
+        stim_spikes = self.get_spike_counts_in_range2('stim', start, end)
+        stim_times = [(spike / self.fs) for spike in stim_spikes]
+
+        recording = self.recording_bp
+
+        samples_per_time_range = int(time_range * self.fs)
+
+        plt.figure(figsize=(10, 6))
+        plt.title(f"Immediate Effect - {time_range}s After Stimulation")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Amplitude (mV)")
+
+        # Loop through each stim
+        for stim_time in stim_times:
+            # conversion from time to samples
+            stim_sample = int(stim_time * self.fs)
+            
+            # immediate post-stim recording trace 
+            trace = recording.get_traces(
+                channel_ids=[str(self.rec_channel)],
+                start_frame=stim_sample,
+                end_frame=stim_sample + samples_per_time_range
+            )
+
+            time_axis = np.linspace(0, time_range, len(trace))
+
+            plt.plot(time_axis, trace, alpha=0.5)
+
+        plt.show()
+
+
 
     def isi(self):
         # calculates the inter spike interval (ISI) for each phase of the Stim Assay
