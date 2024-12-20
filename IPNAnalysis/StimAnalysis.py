@@ -547,6 +547,8 @@ class StimulationAnalysis:
 
         samples_per_time_range = int(time_range * self.fs)
 
+        all_traces = []
+
         plt.figure(figsize=(10, 6))
         plt.title(f"Immediate Effect - {time_range}s After Stimulation")
         plt.xlabel("Time (s)")
@@ -564,11 +566,46 @@ class StimulationAnalysis:
                 end_frame=stim_sample + samples_per_time_range
             )
 
+            all_traces.append(trace)
+
             time_axis = np.linspace(0, time_range, len(trace))
 
             plt.plot(time_axis, trace, alpha=0.5)
 
         plt.show()
+
+        all_traces = np.array(all_traces) 
+        mean_trace = np.mean(all_traces, axis=0)
+
+        # get indeces to calculate average voltage
+        num_points = 5
+        time_points = np.linspace(0, time_range, num_points)[:-1]  # exclude the last point
+        time_indices = (time_points * self.fs).astype(int)
+
+        # Add the last point explicitly if it doesn't exceed the trace length
+        if samples_per_time_range - 1 not in time_indices:
+            time_indices = np.append(time_indices, samples_per_time_range - 1)
+            time_points = np.append(time_points, (samples_per_time_range - 1) / self.fs)
+
+        average_voltages = {f"{t:.4f}s": mean_trace[idx] for t, idx in zip(time_points, time_indices)}
+
+        print("Average post-stim voltages:")
+        for time, voltage in average_voltages.items():
+            print(f"Time: {time}, Voltage: {voltage}")
+
+        # Plot the mean trace with markers for specific time points
+        time_axis = np.linspace(0, time_range, len(mean_trace))
+        plt.figure(figsize=(10, 6))
+        plt.plot(time_axis, mean_trace, label="Average Trace", color="black", linewidth=2)
+        plt.scatter(time_points, [mean_trace[idx] for idx in time_indices], color="red", label="Sampled Points")
+        plt.axvline(x=0, color='r', linestyle='--', label="Stim Start")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Amplitude (mV)")
+        plt.title("Average Voltage Trace with Sampled Points")
+        plt.legend()
+        plt.show()
+
+        return average_voltages
 
 
 
@@ -672,14 +709,14 @@ class StimulationAnalysis:
         self.get_spike_counts()
 
 
-        self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=(1.5*self.pre_stim_length))
+        self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
 
         vis_artifact = input("Is the artifact being detected? (y/n): ").strip().lower()
 
         if vis_artifact == 'y':
             self.visible_artifact = True
             print("Artifact detection set to visible (True).")
-            self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=(1.5*self.pre_stim_length))
+            self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
         elif vis_artifact == 'n':
             self.visible_artifact = False
         else:
@@ -687,6 +724,9 @@ class StimulationAnalysis:
 
         
         self.plot_spike_counts('recording', 1)
+
+        self.overlap_stim_responses(0.005)
+        self.overlap_stim_responses(0.01)
 
         isi = self.isi()
         isi_mean_std = self.calc_mean_isi(isi)
