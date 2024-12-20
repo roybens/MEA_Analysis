@@ -303,7 +303,8 @@ for k = 1 : numFiles
           % active area
         end
         end
- 
+    else
+     continue
     end
 
 
