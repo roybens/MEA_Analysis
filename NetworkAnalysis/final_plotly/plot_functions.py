@@ -103,7 +103,7 @@ def plot_activity_graphs(data, div, output_types, ordered_genotypes, selected_co
                             ax.plot([x_genotype[genotype1][i], x_genotype[genotype2][i]], [maxim + 0.05 * maxim * count] * 2, 'k', linewidth=1.3)
                             ax.text((x_genotype[genotype1][i] + x_genotype[genotype2][i]) / 2, maxim + 0.05 * maxim * count, sign, ha='center', va='bottom', fontsize=7)
                             ax.axvline(x_genotype[genotype1][i], color='black', linestyle=':', linewidth=0.5)
-                            #ax.axvline(x_genotype[genotype2][i], color='black', linestyle=':', linewidth=0.5)
+                            ax.axvline(x_genotype[genotype2][i], color='black', linestyle=':', linewidth=0.5)
                         count += 1
 
         plt.title(f"{output_type}", fontsize=14)
@@ -111,6 +111,7 @@ def plot_activity_graphs(data, div, output_types, ordered_genotypes, selected_co
         plt.ylabel(f"{output_type}", fontsize=12)
         plt.xticks(base_x_coordinate, div, fontsize=10)
         plt.legend(title='NeuronType', loc='upper left', bbox_to_anchor=(1, 1), fontsize='small')
+        plt.ylim([0 , maxim + 0.075 * maxim * count])
         plt.tight_layout()
 
         img_bytes = io.BytesIO()
@@ -196,9 +197,9 @@ def plot_bar_with_p_values(data, divs, metrics, ordered_genotypes, selected_colo
                         marker=markers[i % len(markers)]
                     )
 
-        valid_arrays = [array for genotype_arrays in output_arrays.values() for array in genotype_arrays if len(array) > 0]
+        valid_arrays = [array[np.isfinite(array)] for genotype_arrays in output_arrays.values() for array in genotype_arrays if len(array) > 0]
         if valid_arrays:
-            maxim = max(max(array) for array in valid_arrays)
+            maxim = max(max(array) for array in valid_arrays if len(array)>0)
         else:
             maxim = 0
 
@@ -237,6 +238,9 @@ def plot_bar_with_p_values(data, divs, metrics, ordered_genotypes, selected_colo
         plt.legend(title='NeuronType', loc='upper left', bbox_to_anchor=(1, 1), fontsize='small')
         plt.tight_layout()
         plt.xlim([0, total_plot_width])
+        val = maxim + 0.075 * maxim * count
+        if not (np.isnan(val) or np.isinf(val)):  
+            plt.ylim([0 , maxim + 0.075 * maxim * count])
 
         img_bytes = io.BytesIO()
         plt.savefig(img_bytes, format='png')
