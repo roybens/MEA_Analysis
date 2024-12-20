@@ -533,9 +533,10 @@ class StimulationAnalysis:
         print(f"End Time: {end_time}")
         return start_time, end_time
 
-    def overlap_stim_responses(self, time_range):
+    def overlap_stim_responses(self, time_range, exclude_first=0.001):
         # overlaps immediate effect of all stims on graph
         # time_range: time in seconds to show on x-axis
+        # exclude_first: time in seconds to exclude from the x-axis at the start
 
         start = self.stim_start if self.stim_start is not None else self.pre_stim_length
         end = start + self.stim_length
@@ -546,6 +547,7 @@ class StimulationAnalysis:
         recording = self.recording_bp
 
         samples_per_time_range = int(time_range * self.fs)
+        samples_to_exclude = int(exclude_first * self.fs)  # Number of samples to exclude
 
         all_traces = []
 
@@ -556,10 +558,10 @@ class StimulationAnalysis:
 
         # Loop through each stim
         for stim_time in stim_times:
-            # conversion from time to samples
+            # Conversion from time to samples
             stim_sample = int(stim_time * self.fs)
-            
-            # immediate post-stim recording trace 
+
+            # Immediate post-stim recording trace
             trace = recording.get_traces(
                 channel_ids=[str(self.rec_channel)],
                 start_frame=stim_sample,
@@ -574,34 +576,37 @@ class StimulationAnalysis:
 
         plt.show()
 
-        all_traces = np.array(all_traces) 
+        all_traces = np.array(all_traces)
         mean_trace = np.mean(all_traces, axis=0)
 
-        # get indeces to calculate average voltage
+        # Trim the mean trace and time axis based on the exclude_first parameter
+        mean_trace_trimmed = mean_trace[samples_to_exclude:]
+        time_axis_trimmed = np.linspace(exclude_first, time_range, len(mean_trace_trimmed))
+
+        # Get indices to calculate average voltage
         num_points = 5
-        time_points = np.linspace(0, time_range, num_points)[:-1]  # exclude the last point
-        time_indices = (time_points * self.fs).astype(int)
+        time_points = np.linspace(exclude_first, time_range, num_points)[:-1]  # Exclude the last point
+        time_indices = ((time_points - exclude_first) * self.fs).astype(int)
 
         # Add the last point explicitly if it doesn't exceed the trace length
-        if samples_per_time_range - 1 not in time_indices:
-            time_indices = np.append(time_indices, samples_per_time_range - 1)
-            time_points = np.append(time_points, (samples_per_time_range - 1) / self.fs)
+        if len(mean_trace_trimmed) - 1 not in time_indices:
+            time_indices = np.append(time_indices, len(mean_trace_trimmed) - 1)
+            time_points = np.append(time_points, time_axis_trimmed[-1])
 
-        average_voltages = {f"{t:.4f}s": mean_trace[idx] for t, idx in zip(time_points, time_indices)}
+        average_voltages = {f"{t:.4f}s": mean_trace_trimmed[idx] for t, idx in zip(time_points, time_indices)}
 
         print("Average post-stim voltages:")
         for time, voltage in average_voltages.items():
             print(f"Time: {time}, Voltage: {voltage}")
 
-        # Plot the mean trace with markers for specific time points
-        time_axis = np.linspace(0, time_range, len(mean_trace))
+        # Plot the trimmed mean trace with markers for specific time points
         plt.figure(figsize=(10, 6))
-        plt.plot(time_axis, mean_trace, label="Average Trace", color="black", linewidth=2)
-        plt.scatter(time_points, [mean_trace[idx] for idx in time_indices], color="red", label="Sampled Points")
-        plt.axvline(x=0, color='r', linestyle='--', label="Stim Start")
+        plt.plot(time_axis_trimmed, mean_trace_trimmed, label="Average Trace", color="black", linewidth=2)
+        plt.scatter(time_points, [mean_trace_trimmed[idx] for idx in time_indices], color="red", label="Sampled Points")
+        plt.axvline(x=exclude_first, color='r', linestyle='--', label="Stim Start")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (mV)")
-        plt.title("Average Voltage Trace with Sampled Points")
+        plt.title("Average Voltage Trace with Sampled Points (Zoomed In)")
         plt.legend()
         plt.show()
 
