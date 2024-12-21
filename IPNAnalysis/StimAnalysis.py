@@ -579,9 +579,14 @@ class StimulationAnalysis:
 
         # Time points to calculate average voltage at
         step_size = 0.001  # in seconds
-        time_points = np.arange(-time_range, time_range + step_size, step_size) 
-        time_indices = ((time_points + time_range) * self.fs).astype(int) 
-        time_indices = time_indices[(time_indices >= 0) & (time_indices < len(mean_trace))] 
+        time_points = np.arange(-time_range, time_range + step_size, step_size)
+        time_indices = ((time_points + time_range) * self.fs).astype(int)
+
+        # include final sample 
+        if time_indices[-1] >= len(mean_trace):
+            final_time_point = (len(mean_trace) - 1) / self.fs - time_range  # Calculate time for the final sample
+            time_points = np.append(time_points[time_indices < len(mean_trace)], final_time_point)
+            time_indices = ((time_points + time_range) * self.fs).astype(int)
 
         average_voltages = {f"{time_points[i]:.4f}s": mean_trace[idx] for i, idx in enumerate(time_indices)}
 
@@ -600,7 +605,7 @@ class StimulationAnalysis:
         plt.title("Average Voltage Trace with Sampled Points")
         plt.legend()
         plt.show()
-        
+
         return average_voltages
 
 
