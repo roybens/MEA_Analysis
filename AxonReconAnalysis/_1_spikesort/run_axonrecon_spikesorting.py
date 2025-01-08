@@ -1,12 +1,8 @@
-#import setup_environment
-#from pprint import pprint
-#setup_environment.set_pythonpath()
-#from modules import mea_processing_library as MPL
-#from modules.axon_reconstructor import AxonReconstructor
 import sys
 import os
 import argparse
 from axon_reconstructor.axon_reconstructor import AxonReconstructor
+from MEAProcessingLibrary import mea_processing_library as MPL
 #==============================================================================
 #to run in login node:
 '''
@@ -22,13 +18,14 @@ salloc -A m2043_g -q interactive -C gpu -t 04:00:00 --nodes=1 --gpus=1 --image=a
 # INPUTS and OUTPUTS
 
 # output directory
-output_dir = '/pscratch/sd/a/adammwea/workspace/yThroughput/zRBS_axon_reconstruction_output'
+#output_dir = '/pscratch/sd/a/adammwea/workspace/yThroughput/zRBS_axon_reconstruction_output'
+output_dir = '/pscratch/sd/a/adammwea/workspace/MEA_Analysis/AxonReconAnalysis/output'
 
 # input data, dirs containing h5 files
 project_dirs = [
     #'/pscratch/sd/a/adammwea/workspace/xInputs/xRBS_input_data/B6J_DensityTest_10012024_AR', # too much data to process in one run...for now
     
-        #'/pscratch/sd/a/adammwea/workspace/xInputs/xRBS_input_data/B6J_DensityTest_10012024_AR/241004', #done
+        '/pscratch/sd/a/adammwea/workspace/xInputs/xRBS_input_data/B6J_DensityTest_10012024_AR/241004', #done
         #'/pscratch/sd/a/adammwea/workspace/xInputs/xRBS_input_data/B6J_DensityTest_10012024_AR/241007', #done
         #'/pscratch/sd/a/adammwea/workspace/xInputs/xRBS_input_data/B6J_DensityTest_10012024_AR/241010', #done
         #'/pscratch/sd/a/adammwea/workspace/xInputs/xRBS_input_data/B6J_DensityTest_10012024_AR/241014', #done
@@ -223,7 +220,8 @@ def run_pipeline_on_project_dirs(project_dirs, output_dir):
                 kwargs['waveform_switch'] = True
                 kwargs['template_switch'] = True
                 kwargs['recon_switch'] = True
-                h5_file_list = [plate_file]
+                h5_file_list = [plate_file] #   NOTE: in this case, always a list of one file
+                                            #   but AxonReconstructor expects a list of h5 files
                 reconstructor = AxonReconstructor(h5_file_list, **kwargs)
                 #reconstructor = AxonReconstructor(h5_file_paths, **kwargs)
                 reconstructor.run_pipeline(**kwargs)

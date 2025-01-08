@@ -20,6 +20,7 @@ slurm*.out
 **.out
 nohup.out
 **.svg
+**/output/**
 =======
 **.asv
 **.txt
