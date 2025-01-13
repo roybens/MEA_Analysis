@@ -4,14 +4,15 @@ import spikeinterface.extractors as se
 import h5py
 import matplotlib.pyplot as plt
 import math
-
 from helper_functions import detect_peaks
 import pandas as pd
 import numpy as np
 import time
 from multiprocessing import Pool
-
+from scipy.signal import butter, filtfilt
+from scipy.interpolate import CubicSpline
 import helper_functions as helper
+import stim_helper_functions as stim_helper
 
 class StimulationAnalysis:
     def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9, peak_sign="neg"):
@@ -533,14 +534,36 @@ class StimulationAnalysis:
         print(f"End Time: {end_time}")
         return start_time, end_time
 
-    def overlap_stim_responses(self, time_range):
+    def filter_artifact(self, trace, artifact_start_idx, artifact_end_idx):
+        # Filter artifact region in given trace w/ interpolated values
+        # trace - np.array
+        # returns filtered trace in np.array
+
+        artifact_start_idx = max(1, artifact_start_idx)
+        artifact_end_idx = min(len(trace) - 2, artifact_end_idx)
+
+        # Indices just outside the artifact region
+        x = [artifact_start_idx - 1, artifact_end_idx + 1]
+        y = [trace[artifact_start_idx - 1], trace[artifact_end_idx + 1]]
+
+        artifact_indices = np.arange(artifact_start_idx, artifact_end_idx + 1)
+
+        # fill with interpolated values
+        spline = CubicSpline(x, y, bc_type='natural')
+        trace[artifact_indices] = spline(artifact_indices)
+
+        return trace
+
+    def overlap_stim_responses(self, time_range, electrode_type='recording', filter_artifact=True):
         # overlaps immediate effect of all stims on graph
-        # time_range: time in seconds before and after stim to show on x-axis 
+        # electrode_type: 'stim' or 'recording'
+        # time_range: time in seconds before and after stim to show on x-axis
+        # filter_artifact (boolean): whether to apply artifact filter 
 
         start = self.stim_start if self.stim_start is not None else self.pre_stim_length
         end = start + self.stim_length
 
-        stim_spikes = self.get_spike_counts_in_range2('stim', start, end)
+        stim_spikes = self.get_spike_counts_in_range2('stim', start, end) 
         stim_times = [(spike / self.fs) for spike in stim_spikes]
 
         recording = self.recording_bp
@@ -550,7 +573,7 @@ class StimulationAnalysis:
         all_traces = []
 
         plt.figure(figsize=(10, 6))
-        plt.title(f"Immediate Effect - {time_range}s After Stimulation")
+        plt.title(f"{electrode_type.capitalize} Channel Overlapped Artifact - {time_range}s Window")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (mV)")
 
@@ -559,17 +582,24 @@ class StimulationAnalysis:
             # Conversion from time to samples
             stim_sample = int(stim_time * self.fs)
 
+            channel = [str(self.rec_channel)] if electrode_type == 'recording' else [str(self.stim_channel)]
+
             # Immediate post-stim recording trace
             trace = recording.get_traces(
-                channel_ids=[str(self.rec_channel)],
+                channel_ids=channel,
                 start_frame=stim_sample - samples_per_time_range,
                 end_frame=stim_sample + samples_per_time_range
-            )
+            ).flatten()
+
+            # Interpolate the artifact region if filtering is enabled
+            if filter_artifact:
+                artifact_start_idx = int((stim_time - 0.002) * self.fs - (stim_sample - samples_per_time_range))
+                artifact_end_idx = int((stim_time + 0.002) * self.fs - (stim_sample - samples_per_time_range))
+                trace = stim_helper.polynomial_interpolation(trace, artifact_start_idx, artifact_end_idx, degree=2)
 
             all_traces.append(trace)
 
             time_axis = np.linspace(-time_range, time_range, len(trace))
-
             plt.plot(time_axis, trace, alpha=0.5)
 
         plt.show()
@@ -577,37 +607,43 @@ class StimulationAnalysis:
         all_traces = np.array(all_traces)
         mean_trace = np.mean(all_traces, axis=0)
 
-        # Time points to calculate average voltage at
-        step_size = 0.001  # in seconds
-        time_points = np.arange(-time_range, time_range + step_size, step_size)
-        time_indices = ((time_points + time_range) * self.fs).astype(int)
-
-        # include final sample 
-        if time_indices[-1] >= len(mean_trace):
-            final_time_point = (len(mean_trace) - 1) / self.fs - time_range  # Calculate time for the final sample
-            time_points = np.append(time_points[time_indices < len(mean_trace)], final_time_point)
-            time_indices = ((time_points + time_range) * self.fs).astype(int)
-
-        average_voltages = {f"{time_points[i]:.4f}s": mean_trace[idx] for i, idx in enumerate(time_indices)}
+        # Interpolate the artifact region for the mean trace
+        if filter_artifact:
+            artifact_start_idx = int(samples_per_time_range - 0.002 * self.fs)
+            artifact_end_idx = int(samples_per_time_range + 0.002 * self.fs)
+            mean_trace = stim_helper.polynomial_interpolation(mean_trace, artifact_start_idx, artifact_end_idx, degree=2)
 
         # Plot the mean trace
         plt.figure(figsize=(10, 6))
         time_axis = np.linspace(-time_range, time_range, len(mean_trace))
         plt.plot(time_axis, mean_trace, label="Average Trace", color="black", linewidth=2)
 
-        # Mark sampled points
-        sampled_points = [mean_trace[idx] for idx in time_indices]
-        plt.scatter(time_points[:len(sampled_points)], sampled_points, color="red", label="Sampled Points")
-
         plt.axvline(x=0, color='r', linestyle='--', label="Stim Start")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (mV)")
-        plt.title("Average Voltage Trace with Sampled Points")
+        plt.title(f"{electrode_type.capitalize} Channel Mean Artifact Trace - {time_range}s Window")
         plt.legend()
         plt.show()
 
-        return average_voltages
+        return mean_trace
 
+    def detect_artifact_window(self, trace, threshold_factor=3):
+        # calculates and detects when the artifact begins and ends using rate of change (gradient) of the trace
+        # threshold_factor 
+        gradient = np.gradient(trace)
+
+        threshold = threshold_factor * np.std(gradient)
+
+        # detect indeces where the gradient exceeds calculated threshold
+        artifact_indices = np.where(np.abs(gradient) > threshold)[0]
+        # Determine the start and end of the artifact
+        if len(artifact_indices) > 0:
+            artifact_start_idx = artifact_indices[0]
+            artifact_end_idx = artifact_indices[-1]
+        else:
+            artifact_start_idx, artifact_end_idx = None, None
+        
+        return artifact_start_idx, artifact_end_idx
 
 
 
@@ -728,8 +764,17 @@ class StimulationAnalysis:
         
         self.plot_spike_counts('recording', 1)
 
-        self.overlap_stim_responses(0.005)
-        self.overlap_stim_responses(0.01)
+        print('Recording Electrode Overlapped Artifact: 0.005s window')
+        self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=True)
+        self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=False)
+
+        print('Stim Electrode Overlapped Stims 0.005s window')
+        self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=True)
+        self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=False)
+
+        print('Stim + recording Overlapped artifact 0.009s window')
+        self.overlap_stim_responses(0.009, electrode_type='recording', filter_artifact=True)
+        self.overlap_stim_responses(0.009, electrode_type='stim', filter_artifact=True)
 
         isi = self.isi()
         isi_mean_std = self.calc_mean_isi(isi)
