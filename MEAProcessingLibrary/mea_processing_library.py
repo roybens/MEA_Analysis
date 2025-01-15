@@ -245,7 +245,9 @@ def load_recordings(h5_file_path, stream_select=None, logger=None):
                 recs.append(recording)
             except:
                 continue
-        recordings['well000'] = {'recording_segments': recs}
+        #recordings['well000'] = {'recording_segments': recs}
+        recordings['well000'] = recs # NOTE: this should be a list of recording segments. Should be a list of 1 for network scans.
+                                        # activity scans and axon tracking scans will usually
         return MaxID, recordings, 1, [expected_rec_count]
 
     elif MaxID == 2:
@@ -273,7 +275,9 @@ def load_recordings(h5_file_path, stream_select=None, logger=None):
                         if "Unable to open object" in str(e):
                             logger.debug("This error may not be an issue. For some reason, some wells say they have segments when they don't.")
                 rec_counts.append(valid_rec_count)
-                recordings[stream_id_str] = {'recording_segments': recs}
+                #recordings[stream_id_str] = {'recording_segments': recs}
+                recordings[stream_id_str] = recs # NOTE: this should be a list of recording segments. Should be a list of 1 for network scans.
+                                                # activity scans and axon tracking scans will usually
                 if stream_select is not None:
                     break
         return MaxID, recordings, expected_well_count, rec_counts
@@ -673,7 +677,7 @@ def preprocess_single_recording(recording):
 
     return recording_chunk
 
-def run_kilosort2_docker_image(recording, output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=False, logger=None):
+def run_kilosort2_docker_image(recording, output_folder, docker_image="spikeinterface/kilosort2-compiled-base:latest", verbose=False, logger=None, params=None):
     """
     Runs Kilosort2 sorter on the provided recording in chunks using a Docker image.
 
@@ -692,8 +696,19 @@ def run_kilosort2_docker_image(recording, output_folder, docker_image="spikeinte
         logger = logging.getLogger(__name__)
     
     try:
-        default_KS2_params = ss.Kilosort2Sorter.default_params()
-        sorting = ss.run_kilosort2(recording, output_folder=output_folder, docker_image=docker_image, verbose=verbose, **default_KS2_params)
+        if params is None: # get default params if not provided
+            default_KS2_params = ss.Kilosort2Sorter.default_params()
+            params = default_KS2_params
+        assert params is not None, "Error: No parameters provided for Kilosort2."
+        logger.info(f"Running Kilosort2 spike sorting using Docker Images: {docker_image}.")
+        sorting = ss.run_sorter(
+                sorter_name="kilosort2",
+                recording=recording,
+                output_folder=output_folder,
+                docker_image=docker_image,
+                verbose=verbose,
+                **params
+            )
         logger.info("Kilosort2 processing complete")
         return sorting
 
