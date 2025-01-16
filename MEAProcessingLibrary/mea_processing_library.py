@@ -47,24 +47,86 @@ logger.addHandler(stream_handler)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s - %(module)s.%(funcName)s')
 stream_handler.setFormatter(formatter)
 
-# def extract_raw_h5_filepaths(directories):
-#     """
-#     This function finds all files named 'data.raw.h5' in the given directories and their subdirectories.
+# =============================================================================
+'''
+Functions. Newer to older.
+'''
+def load_kilosort2_results(output_folder):
+    """
+    Load Kilosort2 results from the specified output folder.
 
-#     Parameters:
-#     directories: The list of directories to search for 'data.raw.h5' files.
+    Parameters:
+    output_folder: Path to the folder where the Kilosort2 results are saved.
 
-#     Returns:
-#     h5_dirs: The list of paths to the found 'data.raw.h5' files.
-#     """
-#     logger.info(f"Extracting .h5 file paths from directories:")
-#     h5_dirs = []
-#     for directory in directories:
-#         for root, dirs, files in os.walk(directory):
-#             for file in files:
-#                 if file == "data.raw.h5":
-#                     h5_dirs.append(os.path.join(root, file))
-#     return h5_dirs
+    Returns:
+    sorting: Sorting object with the Kilosort2 results.
+    """
+    logger.info(f"Loading Kilosort2 results from {output_folder}.")
+    sorting = si.KilosortSortingExtractor(folder_path=output_folder)
+    return sorting
+
+def kilosort2_wrapper(recording, output_folder, sorting_params=None, verbose=False):
+    """
+    Run Kilosort2 spike sorting using Shifter.
+
+    Parameters:
+        recording: Recording object from SpikeInterface.
+        output_folder: Path to the folder where the output will be saved.
+        sorting_params: Dictionary of sorter parameters.
+        verbose: Whether to output verbose logs.
+
+    Returns:
+        sorting: Sorting object with the results.
+    """
+    # #delete and recreate output folder
+    # if os.path.exists(output_folder):
+    #     shutil.rmtree(output_folder)
+    # os.makedirs(output_folder, exist_ok=True)
+
+    # Set default sorting parameters if none provided
+    if sorting_params is None:
+        sorting_params = ss.Kilosort2Sorter.default_params()
+        sorting_params.update({
+            'n_jobs': -1,
+            'detect_threshold': 7,
+            'minFR': 0.01,
+            'minfr_goodchannels': 0.01,
+            'keep_good_only': False,
+            'do_correction': False
+        })
+    else:
+        default_params = ss.Kilosort2Sorter.default_params()
+        default_params.update(sorting_params)
+        sorting_params = default_params
+
+    # # Remove existing output folder if it exists
+    # if os.path.exists(output_folder):
+    #     shutil.rmtree(output_folder)
+
+    logger.info("Running Kilosort2 spike sorting using Shifter.")
+    
+    #set mode to 'singularity' for singularity container
+    #sorting_params['mode'] = 'singularity'
+
+    #set to one job to debug
+    #sorting_params['n_jobs'] = 1
+    #sorting_params = ss.Kilosort2_5Sorter.default_params()
+    
+    try:
+        sorting = ss.run_sorter(
+            #sorter_name="kilosort2",
+            sorter_name="kilosort2",
+            #singularity_image="spikeinterface/kilosort25-compiled-base:latest",
+            recording=recording,
+            output_folder=output_folder,
+            verbose=verbose,
+            **sorting_params
+        )
+    except Exception as e:
+        logger.error(f"Error running Kilosort2: {e}")
+        return None
+
+    return sorting
 
 def extract_raw_h5_filepaths(h5_dir):
     #walk through the directory and find all .h5 files
@@ -132,69 +194,6 @@ def extract_recording_details(h5_dirs):
         records.append(record)
 
     return records
-
-# def test_continuity(h5_file_path, verbose=False, stream_select = None, recordings = None, MaxID = None):
-#     """
-#     This function tests the continuity of a given h5 file by attempting to read recordings from the file until an error occurs.
-#     It also counts the number of successful reads (recordings).
-
-#     If the verbose flag is set to True, the function logs the number of recordings detected.
-
-#     If a recording is an exception object, an error has occurred. The function logs the error and appends False to a list.
-#     If the recording is successfully read, the function logs the success and appends True to the list.
-
-#     After attempting to read all recordings, the function checks if all items in the list are True. If they are, all recordings are continuous, and the function logs this and returns True. If not all items are True, the data is not continuous, and the function logs this and returns False.
-
-#     Parameters:
-#     h5_file_path (str): The path to the h5 file to read from.
-#     verbose (bool): If True, log detailed output. Default is False.
-
-#     Returns:
-#     bool: True if all recordings are continuous, False otherwise.
-#     """
-#     logger.info(f"Testing continuity of {h5_file_path}:")
-#     stream_count, rec_count = count_wells_and_recs(h5_file_path, verbose = verbose, stream_select = stream_select)
-#     if stream_count == 0:
-#         logger.error("No recordings detected, none are continuous.")
-#         return False  
-#     #This part of the function might be entirely unnecessary:
-#     TrueorFalse_list = []
-#     recordings = []
-#    # if MaxID is None and recordings is None: MaxID, recordings = load_recordings(h5_file_path, stream_select)
-
-#     for stream_num in range(stream_count):
-#         if stream_select is not None and stream_num != stream_select: 
-#             logger.info(f"Skipping stream {stream_num}.")
-#             continue #skip if stream_select is not None and stream_num is not stream_select, saves time on loading and verifying data
-#         #for rec_num in range(rec_count[stream_num]):
-#         for recording in recordings:
-#             # try: 
-#             #     recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, well_num = stream_num, verbose = verbose)
-#             #     recordings = recordings.append(recording)
-#             # except: recording, rec_name, stream_id = get_data_maxwell(h5_file_path, rec_num = rec_num, verbose = verbose)
-#             if isinstance(recording, BaseException):
-#                 e = recording
-#                 if "Unable to open object (object 'routed' doesn't exist)" in str(e):
-#                     logger.error("This error indicates that 'RecordSpikesOnly' was active during this recording. Data are not continuous.")
-#                 else:
-#                     logger.error("Unknown error")
-#                     logger.error(e)
-#                     logger.error("This error is unexpected. Please check the error message and try to resolve it.")
-#                 TrueorFalse_list.append(False)
-#             else:
-#                 logger.info(f"Successfully read Stream ID: {stream_id}, Recording: {rec_name}, indicating continuity.")
-#                 TrueorFalse_list.append(True)
-#     #if all items in TrueorFalse_list are True, then the data is continuous
-#     if all(TrueorFalse_list) and TrueorFalse_list != []:
-#         logger.info("All recordings are continuous.")
-#         return True, recordings
-#     elif TrueorFalse_list == []:
-#         logger.error("No recordings detected, none are continuous.")
-#         return False, None
-#     else:
-#         logger.error("Data are not continuous.")
-#         return False, None
-#     #This part of the function might be entirely unnecessary:
 
 def load_recordings(h5_file_path, stream_select=None, logger=None):
     """
@@ -281,7 +280,6 @@ def load_recordings(h5_file_path, stream_select=None, logger=None):
                 if stream_select is not None:
                     break
         return MaxID, recordings, expected_well_count, rec_counts
-
 
 def count_wells_and_segs(h5_file_path, verbose=False, stream_select=None, recordings=None, MaxID=None):
     """
@@ -716,10 +714,6 @@ def run_kilosort2_docker_image(recording, output_folder, docker_image="spikeinte
         logger.error(f"Error running Kilosort2 on recording: {e}")
         return None
 
-# import os
-# import shutil
-# import spikeinterface.sorters as ss
-
 def benshalom_kilosort2_docker_image(recording, output_folder, sorting_params=None, verbose = False):
     """
     Run Kilosort2 spike sorting using Docker.
@@ -771,8 +765,6 @@ def benshalom_kilosort2_docker_image(recording, output_folder, sorting_params=No
 
     return sorting
 
-
-
 def run_kilosort2_5_docker_image_GPUs(recording, output_folder, docker_image="spikeinterface/kilosort2_5-compiled-base:latest", verbose=False, num_gpus=1):
     # Update sorter parameters as needed
     sorter_params = si.get_default_sorter_params(si.Kilosort2_5Sorter)
@@ -808,7 +800,6 @@ def extract_waveforms(recording,sorting,folder, load_if_exists = False, n_jobs =
     waveforms = si.extract_waveforms(recording,sorting,folder=folder,overwrite=True, load_if_exists=load_if_exists, sparse = sparse, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
     return waveforms
 
-#This function supports generate_waveform_extractor_unit_by_unit
 def copy_and_compare_files(args):
     old_name, new_name, file_pattern, unit_id, unit_folder, waveforms_folder, overwrite, log_messages = args
     do_very_shallow = True
@@ -865,7 +856,6 @@ def copy_and_compare_files(args):
     #logger.info(f"{file_pattern[:-5]} for unit {unit_id} copied from {unit_folder} to {waveforms_folder}")
     log_messages.append(f"{file_pattern[:-5]} for unit {unit_id} copied from {unit_folder} to {waveforms_folder}")
 
-#@profile
 def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 4, units_per_extraction = 20, sparse = True, fresh_extractor = False, load_if_exists = False, job_kwargs = None):
 
     """
@@ -1193,7 +1183,6 @@ def generate_waveform_extractor_unit_by_unit(recording,sorting,folder, n_jobs = 
     logger.info(f"Waveform extractor successfully generated in chunks!")
     return waveform_extractor
 
-#Waveform post-processing:
 def get_quality_metrics(waveforms): 
     
     #Define default job_kwargs
@@ -1258,7 +1247,6 @@ def remove_violated_units(metrics):
     metrics = metrics.query(our_query)
 
     return metrics
-
 
 def postprocess_waveforms(waveforms, folder, get_quality=True, remove_violations=True, remove_similar=True):
     try: waveforms_good = si.load_waveforms(folder)
