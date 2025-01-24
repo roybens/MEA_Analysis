@@ -62,7 +62,8 @@ def load_kilosort2_results(output_folder):
     sorting: Sorting object with the Kilosort2 results.
     """
     logger.info(f"Loading Kilosort2 results from {output_folder}.")
-    sorting = si.KilosortSortingExtractor(folder_path=output_folder)
+    sorting = ss.Kilosort2Sorter._get_result_from_folder(output_folder)
+    #sorting = se.KilosortSortingExtractor(folder_path=output_folder)
     return sorting
 
 def kilosort2_wrapper(recording, output_folder, sorting_params=None, verbose=False):
@@ -256,7 +257,10 @@ def load_recordings(h5_file_path, stream_select=None, logger=None):
             streams_to_process = range(expected_well_count) if stream_select is None else [stream_select]
             for stream_id in streams_to_process:
                 stream_id_str = f'well{stream_id:03}'
-                expected_rec_names = list(h5_file['wells'][stream_id_str].keys())
+                try: expected_rec_names = list(h5_file['wells'][stream_id_str].keys())
+                except: 
+                    print(f"Stream ID: {stream_id_str} not found in h5 file.")
+                    continue
                 expected_rec_count = len(expected_rec_names)
                 valid_rec_count = 0
                 recs = []
