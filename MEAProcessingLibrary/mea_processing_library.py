@@ -51,6 +51,10 @@ stream_handler.setFormatter(formatter)
 '''
 Functions. Newer to older.
 '''
+def load_waveforms(output_folder):
+    waveforms = si.load_waveforms(output_folder)
+    return waveforms
+
 def load_kilosort2_results(output_folder):
     """
     Load Kilosort2 results from the specified output folder.
@@ -61,8 +65,27 @@ def load_kilosort2_results(output_folder):
     Returns:
     sorting: Sorting object with the Kilosort2 results.
     """
-    logger.info(f"Loading Kilosort2 results from {output_folder}.")
-    sorting = ss.Kilosort2Sorter._get_result_from_folder(output_folder)
+    if output_folder.endswith('sorter_output'):
+        sorter_output_folder = output_folder
+    else: 
+        sorter_output_folder = os.path.join(output_folder, 'sorter_output')
+        
+    assert os.path.exists(sorter_output_folder), f"Sorter output folder {sorter_output_folder} does not exist."
+    # assert that spike_times.npy and spike_clusters.npy exist in the sorter_output_folder
+    assert os.path.exists(os.path.join(sorter_output_folder, 'spike_times.npy')), f"spike_times.npy does not exist in {sorter_output_folder}."
+    assert os.path.exists(os.path.join(sorter_output_folder, 'spike_clusters.npy')), f"spike_clusters.npy does not exist in {sorter_output_folder}."
+    
+    logger.info(f"Loading Kilosort2 results from {sorter_output_folder}.")
+    # import sys
+    # sys.exit()
+    try: 
+        print(f"Loading Kilosort2 results from {output_folder}.")
+        
+        sorting = ss.Kilosort2Sorter._get_result_from_folder(sorter_output_folder)
+    except Exception as e:
+        #logger.error(f"Error loading Kilosort2 results: {e}")
+        print(f"Error loading Kilosort2 results: {e}")
+        return None
     #sorting = se.KilosortSortingExtractor(folder_path=output_folder)
     return sorting
 
@@ -114,6 +137,9 @@ def kilosort2_wrapper(recording, output_folder, sorting_params=None, verbose=Fal
     #sorting_params = ss.Kilosort2_5Sorter.default_params()
     
     try:
+        print(f"Output folder: {output_folder}")
+        # import sys
+        # sys.exit()
         sorting = ss.run_sorter(
             #sorter_name="kilosort2",
             sorter_name="kilosort2",
@@ -798,10 +824,69 @@ def run_kilosort2_5_docker_image_GPUs(recording, output_folder, docker_image="sp
 
     return sorting_KS2_5
 
-def extract_waveforms(recording,sorting,folder, load_if_exists = False, n_jobs = 4, sparse = True):
+def get_channel_recording_stats(recording):
+    
+    channel_ids = recording.get_channel_ids()
+    fs = recording.get_sampling_frequency()
+    num_chan = recording.get_num_channels()
+    num_seg = recording.get_num_segments()
+    total_recording = recording.get_total_duration()
+
+    #print('Channel ids:', channel_ids)
+    print('Sampling frequency:', fs)
+    print('Number of channels:', num_chan)
+    print('Number of segments:', num_seg)
+    print(f"total_recording: {total_recording} s")
+    return fs,num_chan,channel_ids, total_recording
+
+def preprocess(recording):  ## some hardcoded stuff.
+    """
+    Does the bandpass filtering and the common average referencing of the signal
+    
+    """
+    recording_bp = spre.bandpass_filter(recording, freq_min=300, freq_max=3000)
+    
+
+    recording_cmr = spre.common_reference(recording_bp, reference='global', operator='median')
+
+    recording_cmr.annotate(is_filtered=True)
+
+    return recording_cmr
+
+def extract_waveforms(recording, sorting, folder, load_if_exists = False, n_jobs = 4, sparse = True):
+    
+    #init
+    print (f"Extracting waveforms for {len(sorting.get_unit_ids())} units")
+    
+    # init time_in_s for recording_chunk
+    time_in_s = recording.get_total_duration()
+    time_in_s = round(time_in_s) # round to the nearest second
+    fs, num_chan, channel_ids, total_rec_time= get_channel_recording_stats(recording)
+    if total_rec_time < time_in_s:  # sometimes the recording are less than 300s
+        time_in_s = total_rec_time    
+    assert time_in_s <= total_rec_time, "time_in_s should be less than or equal to total_rec_time"
+    time_start = 0
+    time_end = time_start+time_in_s
+    # print(f'total_rec_time: {total_rec_time} s')
+    # print(f'time_in_s: {time_in_s} s')
+    # print(f'time_start: {time_start} s')
+    # print(f'time_end: {time_end} s')
+    # print(f'fs: {fs} Hz')
+    
+    # get a chunk of the recording
+    recording_chunk = recording.frame_slice(start_frame= int(time_start*fs),end_frame=int(time_end*fs))
+    recording_chunk = preprocess(recording_chunk)       
+    seg_sort = si.remove_excess_spikes(sorting, recording_chunk)
+    
+    # extract waveforms
     job_kwargs = dict(n_jobs=n_jobs, chunk_duration="1s", progress_bar=True)
     #waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True,**job_kwargs)
-    waveforms = si.extract_waveforms(recording,sorting,folder=folder,overwrite=True, load_if_exists=load_if_exists, sparse = sparse, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
+    print(f"Saving waveforms to {folder}...")
+    if not os.path.exists(folder):
+        os.makedirs(folder)    
+    waveforms = si.extract_waveforms(recording_chunk, seg_sort, folder=folder, overwrite=True, load_if_exists=load_if_exists, sparse = sparse, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
+    
+    # return
     return waveforms
 
 def copy_and_compare_files(args):
