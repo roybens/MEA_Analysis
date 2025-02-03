@@ -204,7 +204,12 @@ def detect_bursts_statistics(spike_times, isi_threshold):
             "cov_isi_all": cov_isi_all,
             "isis_within_bursts": isis_within_bursts,
             "isis_outside_bursts": isis_outside_bursts,
-            "isis_all": isis
+            "isis_all": isis,
+            
+            #added # aw 2025-02-02 22:09:13
+            "fano_factor_within": np.var(isis_within_bursts) / mean_isi_within if mean_isi_within > 0 else np.nan,
+            "fano_factor_outside": np.var(isis_outside_bursts) / mean_isi_outside if mean_isi_outside > 0 else np.nan,
+            "fano_factor_all": np.var(isis) / mean_isi_all if mean_isi_all > 0 else np.nan,
         }
 
     return results
