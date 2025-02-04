@@ -617,24 +617,6 @@ class StimulationAnalysis:
 
         return mean_trace
 
-    def detect_artifact_window(self, trace, threshold_factor=3):
-        # calculates and detects when the artifact begins and ends using rate of change (gradient) of the trace
-        # threshold_factor 
-        gradient = np.gradient(trace)
-
-        threshold = threshold_factor * np.std(gradient)
-
-        # detect indeces where the gradient exceeds calculated threshold
-        artifact_indices = np.where(np.abs(gradient) > threshold)[0]
-        # Determine the start and end of the artifact
-        if len(artifact_indices) > 0:
-            artifact_start_idx = artifact_indices[0]
-            artifact_end_idx = artifact_indices[-1]
-        else:
-            artifact_start_idx, artifact_end_idx = None, None
-        
-        return artifact_start_idx, artifact_end_idx
-
     def isi(self):
         # calculates the inter spike interval (ISI) for each phase of the Stim Assay
         # returns dictionary containg mean ISI and std for each phase
@@ -716,6 +698,38 @@ class StimulationAnalysis:
             fano_factors[phase] = fano_factor
 
         return fano_factors
+    
+    def extract_spike_waveforms(self, window_size=50):
+        """
+        Extracts spike waveforms from a continuous recording trace.
+        Parameter - window_size: Total number of samples per waveform.
+        Returns - waveforms: 2D array (num_spikes, window_size) of extracted waveforms.
+        """
+
+        # get entire recording trace
+        recording_trace = self.recording_bp.get_traces(channel_ids=[str(self.rec_channel)])
+
+        # get spike indices
+        spike_indices = []
+        row_duration_samples = int(self.fs * 10)  
+
+        for index, row in self.peak_counts_df.iterrows():
+            row_offset = index * row_duration_samples 
+            spikes = [spike + row_offset for spike in row[f'Channel {self.rec_channel}']] 
+            spike_indices.extend(spikes)  
+
+
+        half_window = window_size // 2
+        waveforms = []
+
+        for idx in spike_indices:
+            if idx - half_window < 0 or idx + half_window >= len(recording_trace):
+                continue  # Skip spikes near the edges
+
+            waveform = recording_trace[idx - half_window : idx + half_window]
+            waveforms.append(waveform)
+
+        return np.array(waveforms)
     
     def run_full_analysis(self):
         # get length of stim period in seconds
