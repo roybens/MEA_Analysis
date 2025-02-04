@@ -21,6 +21,7 @@ class StimulationAnalysis:
         self.stim_channel = self.get_channel_id(stim_electrode)
         self.peak_sign = peak_sign
         self.stim_start = None
+        self.peak_counts_df = self.get_spike_counts()
 
         self.channel_dict = {'Stim Channel': self.stim_channel,
                              'Recording Channel': self.rec_channel
@@ -743,8 +744,6 @@ class StimulationAnalysis:
             self.stim_start = float(time)
             self.pre_stim_length = self.stim_start
             self.post_stim_length = self.total_recording - (self.stim_start + self.stim_length)
-        
-        self.get_spike_counts()
 
         self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
 
