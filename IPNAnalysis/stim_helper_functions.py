@@ -4,33 +4,39 @@ from scipy.interpolate import CubicSpline
 import h5py
 from sklearn.manifold import TSNE
 
-def plot_spike_waveforms_subplots(waveforms, sampling_rate=10000, num_spikes=10):
+def plot_spike_waveforms_subplots(waveforms, fs=10000, num_spikes=10):
     """
     Plots multiple spike waveforms in subplots within a single figure.
-    
+
     Parameters:
-    - waveforms: np.array of shape (num_spikes, window_size, num_channels)
-    - sampling_rate: Sampling frequency (Hz)
-    - num_spikes: Number of spikes to plot (default: 10)
+    - waveforms: Dictionary where keys are spike times (in seconds) and values are waveform arrays.
+    - fs: Sampling frequency (Hz).
+    - num_spikes: Number of spikes to plot (default: 10).
     """
 
-    num_spikes = min(num_spikes, waveforms.shape[0])
-    
+    # Limit number of spikes plotted
+    spike_times = list(waveforms.keys())[:num_spikes]
+    num_spikes = len(spike_times)
+
     fig, axes = plt.subplots(num_spikes, 1, figsize=(6, num_spikes * 2), sharex=True)
     
-    time_axis = np.linspace(0, waveforms.shape[1] / sampling_rate * 1000, waveforms.shape[1])  # Time in ms
+    if num_spikes == 1:
+        axes = [axes]  # Ensure iterable when only one subplot
 
-    for i in range(num_spikes):
-        axes[i].plot(time_axis, waveforms[i, :, 0], color='black')
+    for i, spike_time in enumerate(spike_times):
+        waveform = waveforms[spike_time]
+        time_axis = np.linspace(-len(waveform) / (2 * fs) * 1000, len(waveform) / (2 * fs) * 1000, len(waveform))  # Time in ms
+
+        axes[i].plot(time_axis, waveform, color='black')
         axes[i].set_ylabel("Amplitude (µV)")
-        axes[i].set_title(f"Spike {i+1}")
+        axes[i].set_title(f"Spike at {spike_time:.4f} sec")
         axes[i].grid()
 
     plt.xlabel("Time (ms)")
     plt.show()
 
 
-def extract_spike_waveforms(recording_trace, spike_indices, window_size=50):
+def extract_spike_waveforms(recording_trace, spike_indices, window_size=50, fs=1000):
     """
     Extracts spike waveforms from a continuous recording trace.
 
@@ -40,18 +46,18 @@ def extract_spike_waveforms(recording_trace, spike_indices, window_size=50):
     - window_size: Total number of samples per waveform.
 
     Returns:
-    - waveforms: 2D array (num_spikes, window_size) of extracted waveforms.
+    - waveforms: Dictionary that maps spike times (in seconds) to 1D array waveforms
     """
 
     half_window = window_size // 2
-    waveforms = []
+    waveforms = {}
 
     for idx in spike_indices:
         if idx - half_window < 0 or idx + half_window >= len(recording_trace):
             continue  # Skip spikes near the edges
 
         waveform = recording_trace[idx - half_window : idx + half_window]
-        waveforms.append(waveform)
+        waveforms[idx / fs] = waveform
 
     return np.array(waveforms)
 
