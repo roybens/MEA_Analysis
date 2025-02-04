@@ -4,23 +4,31 @@ from scipy.interpolate import CubicSpline
 import h5py
 from sklearn.manifold import TSNE
 
-def plot_spike_waveforms(spike_waveforms):
+def plot_spike_waveforms_subplots(waveforms, sampling_rate=10000, num_spikes=10):
     """
-    Plots all extracted spike waveforms to verify the alignment and window size.
-
+    Plots multiple spike waveforms in subplots within a single figure.
+    
     Parameters:
-    - spike_waveforms: (num_spikes, window_size) array of extracted spike waveforms.
+    - waveforms: np.array of shape (num_spikes, window_size, num_channels)
+    - sampling_rate: Sampling frequency (Hz)
+    - num_spikes: Number of spikes to plot (default: 10)
     """
 
-    plt.figure(figsize=(10, 6))
+    num_spikes = min(num_spikes, waveforms.shape[0])
+    
+    fig, axes = plt.subplots(num_spikes, 1, figsize=(6, num_spikes * 2), sharex=True)
+    
+    time_axis = np.linspace(0, waveforms.shape[1] / sampling_rate * 1000, waveforms.shape[1])  # Time in ms
 
-    for waveform in spike_waveforms:
-        plt.plot(waveform, alpha=0.3, color="black")  # Low opacity for overlapping visualization
+    for i in range(num_spikes):
+        axes[i].plot(time_axis, waveforms[i, :, 0], color='black')
+        axes[i].set_ylabel("Amplitude (µV)")
+        axes[i].set_title(f"Spike {i+1}")
+        axes[i].grid()
 
-    plt.xlabel("Time (samples)")
-    plt.ylabel("Amplitude (mV)")
-    plt.title("Extracted Spike Waveforms")
+    plt.xlabel("Time (ms)")
     plt.show()
+
 
 def extract_spike_waveforms(recording_trace, spike_indices, window_size=50):
     """
