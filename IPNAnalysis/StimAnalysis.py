@@ -1,17 +1,12 @@
-import spikeinterface
 import spikeinterface.full as si
 import spikeinterface.extractors as se
 import h5py
 import matplotlib.pyplot as plt
-import math
 from helper_functions import detect_peaks
 import pandas as pd
 import numpy as np
-import time
 from multiprocessing import Pool
-from scipy.signal import butter, filtfilt
 from scipy.interpolate import CubicSpline
-import helper_functions as helper
 import stim_helper_functions as stim_helper
 
 class StimulationAnalysis:
@@ -52,14 +47,7 @@ class StimulationAnalysis:
         self.stim_length = None
         self.post_stim_length = None
         self.stim_freq = stim_frequency 
-    
 
-    def print_file_structure(self):
-        with h5py.File(self.file_path, 'r') as h5file:
-            def print_hdf5_structure(name, obj):
-                print(name)
-
-            h5file.visititems(print_hdf5_structure)
 
     def plot_neuron_print(self):
         fig, ax = plt.subplots(figsize=(8,8))
@@ -645,9 +633,6 @@ class StimulationAnalysis:
         
         return artifact_start_idx, artifact_end_idx
 
-
-
-
     def isi(self):
         # calculates the inter spike interval (ISI) for each phase of the Stim Assay
         # returns dictionary containg mean ISI and std for each phase
@@ -692,8 +677,6 @@ class StimulationAnalysis:
         plt.xlim(0, 6)
         plt.ylim(0, 400)
         plt.show()
-
-
 
     def calc_mean_isi(self, isis):
 
@@ -746,7 +729,6 @@ class StimulationAnalysis:
             self.post_stim_length = self.total_recording - (self.stim_start + self.stim_length)
         
         self.get_spike_counts()
-
 
         self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
 
