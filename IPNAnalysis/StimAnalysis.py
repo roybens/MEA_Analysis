@@ -21,7 +21,6 @@ class StimulationAnalysis:
         self.stim_channel = self.get_channel_id(stim_electrode)
         self.peak_sign = peak_sign
         self.stim_start = None
-        self.peak_counts_df = self.get_spike_counts()
 
         self.channel_dict = {'Stim Channel': self.stim_channel,
                              'Recording Channel': self.rec_channel
@@ -48,6 +47,8 @@ class StimulationAnalysis:
         self.stim_length = None
         self.post_stim_length = None
         self.stim_freq = stim_frequency 
+
+        self.peak_counts_df = self.get_spike_counts()
 
 
     def plot_neuron_print(self):
