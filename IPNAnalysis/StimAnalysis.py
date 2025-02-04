@@ -571,9 +571,10 @@ class StimulationAnalysis:
         samples_per_time_range = int(time_range * self.fs)
 
         all_traces = []
+        
 
         plt.figure(figsize=(10, 6))
-        plt.title(f"{electrode_type.capitalize} Channel Overlapped Artifact - {time_range}s Window")
+        plt.title(f"{electrode_type} Channel Overlapped Artifact - {time_range}s Window")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (mV)")
 
@@ -595,8 +596,8 @@ class StimulationAnalysis:
             if filter_artifact:
                 artifact_start_idx = int((stim_time - 0.002) * self.fs - (stim_sample - samples_per_time_range))
                 artifact_end_idx = int((stim_time + 0.002) * self.fs - (stim_sample - samples_per_time_range))
-                trace = stim_helper.polynomial_interpolation(trace, artifact_start_idx, artifact_end_idx, degree=2)
-
+                # trace = stim_helper.polynomial_interpolation(trace, artifact_start_idx, artifact_end_idx, degree=2)
+                trace = stim_helper.bandpass_filter(trace, self.fs, 300, 800)
             all_traces.append(trace)
 
             time_axis = np.linspace(-time_range, time_range, len(trace))
@@ -611,7 +612,8 @@ class StimulationAnalysis:
         if filter_artifact:
             artifact_start_idx = int(samples_per_time_range - 0.002 * self.fs)
             artifact_end_idx = int(samples_per_time_range + 0.002 * self.fs)
-            mean_trace = stim_helper.polynomial_interpolation(mean_trace, artifact_start_idx, artifact_end_idx, degree=2)
+            # mean_trace = stim_helper.polynomial_interpolation(mean_trace, artifact_start_idx, artifact_end_idx, degree=2)
+            mean_trace = stim_helper.bandpass_filter(mean_trace, self.fs, 300, 800)                
 
         # Plot the mean trace
         plt.figure(figsize=(10, 6))
@@ -621,7 +623,7 @@ class StimulationAnalysis:
         plt.axvline(x=0, color='r', linestyle='--', label="Stim Start")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (mV)")
-        plt.title(f"{electrode_type.capitalize} Channel Mean Artifact Trace - {time_range}s Window")
+        plt.title(f"{electrode_type} Channel Mean Artifact Trace - {time_range}s Window")
         plt.legend()
         plt.show()
 
