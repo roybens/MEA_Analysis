@@ -59,7 +59,7 @@ def extract_spike_waveforms(recording_trace, spike_indices, window_size=50, fs=1
         waveform = recording_trace[idx - half_window : idx + half_window]
         waveforms[idx / fs] = waveform
 
-    return np.array(waveforms)
+    return waveforms
 
 def tsne_spike_visualization(spike_waveforms):
     """
