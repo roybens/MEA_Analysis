@@ -705,7 +705,7 @@ class StimulationAnalysis:
         """
         Extracts spike waveforms from a continuous recording trace.
         Parameter - window_size: Total number of samples per waveform.
-        Returns - waveforms: 2D array (num_spikes, window_size) of extracted waveforms.
+        Returns - waveforms: dictionary that maps spike time to 1d array waveform for that spike
         """
 
         # get entire recording trace
@@ -722,16 +722,17 @@ class StimulationAnalysis:
 
 
         half_window = window_size // 2
-        waveforms = []
+        waveforms = {}
 
         for idx in spike_indices:
             if idx - half_window < 0 or idx + half_window >= len(recording_trace):
                 continue  # Skip spikes near the edges
 
-            waveform = recording_trace[idx - half_window : idx + half_window]
-            waveforms.append(waveform)
+            waveform = recording_trace[idx - half_window : idx + half_window].flatten()
+            spike_time = idx / self.fs
+            waveforms[spike_time] = waveform
 
-        return np.array(waveforms)
+        waveforms
     
     def run_full_analysis(self):
         # get length of stim period in seconds
