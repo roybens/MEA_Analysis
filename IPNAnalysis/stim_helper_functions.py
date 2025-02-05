@@ -35,32 +35,6 @@ def plot_spike_waveforms_subplots(waveforms, fs=10000, num_spikes=10):
     plt.xlabel("Time (ms)")
     plt.show()
 
-
-def extract_spike_waveforms(recording_trace, spike_indices, window_size=50, fs=1000):
-    """
-    Extracts spike waveforms from a continuous recording trace.
-
-    Parameters:
-    - recording_trace: 1D array of the voltage signal.
-    - spike_indices: List or array of indices where spikes occur.
-    - window_size: Total number of samples per waveform.
-
-    Returns:
-    - waveforms: Dictionary that maps spike times (in seconds) to 1D array waveforms
-    """
-
-    half_window = window_size // 2
-    waveforms = {}
-
-    for idx in spike_indices:
-        if idx - half_window < 0 or idx + half_window >= len(recording_trace):
-            continue  # Skip spikes near the edges
-
-        waveform = recording_trace[idx - half_window : idx + half_window]
-        waveforms[idx / fs] = waveform
-
-    return waveforms
-
 def tsne_spike_visualization(spike_waveforms):
     """
     Uses t-SNE to visualize spike waveform clustering.
