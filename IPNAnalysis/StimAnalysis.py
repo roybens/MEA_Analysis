@@ -732,7 +732,7 @@ class StimulationAnalysis:
             spike_time = idx / self.fs
             waveforms[spike_time] = waveform
 
-        waveforms
+        return waveforms
     
     def run_full_analysis(self):
         # get length of stim period in seconds
