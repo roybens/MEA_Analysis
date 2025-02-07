@@ -30,13 +30,15 @@ function [] = compileNetworkFiles(data)
 
 
     % Ensure output directories exist
-    outputFolders = {'Plot60s', 'Plot120s', 'Plot300s', 'Plot600s', 'Figureformat'};
-    for i = 1:length(outputFolders)
-        folderPath = fullfile(opDir, 'Network_outputs/Raster_BurstActivity', outputFolders{i});
-        if ~isfolder(folderPath)
-            mkdir(folderPath);
-        end
-    end
+
+    
+    % outputFolders = {'Plot60s', 'Plot120s', 'Plot300s', 'Plot600s', 'Figureformat'};
+    % for i = 1:length(outputFolders)
+    %     folderPath = fullfile(opDir, 'Network_outputs/Raster_BurstActivity', outputFolders{i});
+    %     if ~isfolder(folderPath)
+    %         mkdir(folderPath);
+    %     end
+    % end
     
     
 
@@ -75,7 +77,7 @@ function [] = compileNetworkFiles(data)
     %%parallelizing the files processsing
 
     % %%Specify the exact number of cores to use
-    numCores = 6;  % Adjust this number based on your needs and resource availability
+    numCores = 3;  % Adjust this number based on your needs and resource availability
 
     % Initialize or modify the existing parallel pool
     currentPool = gcp('nocreate');  % Check for existing parallel pool
@@ -150,9 +152,36 @@ function [] = compileNetworkFiles(data)
                 fprintf(1, 'Processing Well %d\n', wellID);
                 %tic;
                 neuronSourceType = neuronTypes(z);
-                
+                        % Define ChipID_WellID folder
+                    folderName = sprintf('%s_Well%d', scan_chipID, wellID); 
+                    chipWellFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', folderName);
+            
+                    % Ensure ChipID_WellID folder exists
+                    if ~isfolder(chipWellFolder)
+                        mkdir(chipWellFolder);
+                    end
+            
+                    % Define time durations and file formats
+                    outputFolders = {'Plot60s', 'Plot120s', 'Plot300s','Plot600s'};
+                    formatFolders = {'eps', 'png'};
+            
+                    % Ensure each duration folder exists inside ChipID_WellID
+                    for i = 1:length(outputFolders)
+                        durationFolder = fullfile(chipWellFolder, outputFolders{i});
+                        if ~isfolder(durationFolder)
+                            mkdir(durationFolder);
+                        end
+            
+                        % Create eps and png subfolders
+                        for j = 1:length(formatFolders)
+                            formatPath = fullfile(durationFolder, formatFolders{j});
+                            if ~isfolder(formatPath)
+                                mkdir(formatPath);
+                            end
+                        end
+                    end
                 networkData = mxw.fileManager(pathFileNetwork,wellID);
-              
+                
                
                 % get the startTime of the recordings
                 hd5_time = networkData.fileObj.stopTime;
@@ -211,7 +240,7 @@ function [] = compileNetworkFiles(data)
                     % get the times of the burst start and stop edges
                     edges = double.empty(length(peakAmps),0);
                     for i = 1:length(peakAmps)
-                       % take a sizeable (±6 s) chunk of the network activity curve 
+                       % take a sizeable (�6 s) chunk of the network activity curve 
                        % around each burst peak point
                        %MANDAR I THink using this there is a p
                        idx = networkAct.time>(peakTimes(i)-6) & networkAct.time<(peakTimes(i)+6);
@@ -478,20 +507,20 @@ function [] = compileNetworkFiles(data)
                     hold on;    
                     plot(networkStats.maxAmplitudesTimes, networkStats.maxAmplitudesValues, 'or');
                     plotFileName =  sprintf('Raster_BurstActivity_%s_WellID_%d_%s_DIV%d_%s', scan_runID_text, wellID, scan_chipID, scan_div, strrep(neuronSourceType{1}, ' ', ''));
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Figureformat',plotFileName);
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Figureformat',plotFileName);
+                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity',plotFileName);
                     savefig(f, [fileNameBase '.fig']);
                     
                     ylim([0 ylimNetwork]);
                     xlim([0 xlimNetwork])
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot60s',plotFileName);
-                           
-                           
-                    % Save in different formats
+                    %rohan made changes here
+                    fileNameBase = fullfile(chipWellFolder, 'Plot60s', 'png', plotFileName);
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', chipWellFolder, 'Plot60s', 'png', plotFileName);
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', chipWellFolder, 'Plot60s', 'eps', plotFileName);
+                    fileNameBase = fullfile(chipWellFolder, 'Plot60s', 'eps', plotFileName);
                     print(f, [fileNameBase '.eps'], '-depsc', '-r300');
-                    
+                    %changes end here
 
                     %totalTime = toc;  % Measure the total elapsed time after the loop
     
@@ -503,12 +532,13 @@ function [] = compileNetworkFiles(data)
                     subplot(2,1,2);
                     xlim([0 120])
                     ylim([0 ylimNetwork])
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot120s',plotFileName); 
-                  
-                    % Save in different formats
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot120s',plotFileName); 
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', chipWellFolder, 'Plot120s', 'png', plotFileName);
+                    fileNameBase = fullfile(chipWellFolder, 'Plot120s', 'png', plotFileName);
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
+
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', chipWellFolder, 'Plot120s', 'eps', plotFileName);
+                    fileNameBase = fullfile(chipWellFolder, 'Plot120s', 'eps', plotFileName);
                     print(f, [fileNameBase '.eps'], '-depsc', '-r300');
 
     
@@ -526,12 +556,13 @@ function [] = compileNetworkFiles(data)
                     % Create one annotation box containing all the text entries
                     % Adjust the position vector [x y width height] as needed
                     annotation('textbox', [0.1, 0.425, 0.9, 0.1], 'String', textString, 'EdgeColor', 'none', 'HorizontalAlignment', 'center');
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot300s',plotFileName);
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot300s',plotFileName);
 
-                    % Save in different formats
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', chipWellFolder, 'Plot300s', 'png', plotFileName);
+                    fileNameBase = fullfile(chipWellFolder, 'Plot300s', 'png', plotFileName);
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', chipWellFolder, 'Plot300s', 'eps', plotFileName);
+                    fileNameBase = fullfile(chipWellFolder, 'Plot300s', 'eps', plotFileName);
                     print(f, [fileNameBase '.eps'], '-depsc', '-r300');
                     
     
@@ -542,12 +573,13 @@ function [] = compileNetworkFiles(data)
                     subplot(2,1,2);
                     xlim([0 600])
                     ylim([0 ylimNetwork])
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot600s',plotFileName);
-                    
+                    %fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot600s',plotFileName);
+                    fileNameBase = fullfile(chipWellFolder, 'Plot600s', 'png', plotFileName);
                         % Save the figure in PNG format
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
                     
                     % Save the figure in EPS format
+                    fileNameBase = fullfile(chipWellFolder, 'Plot600s', 'eps', plotFileName);
                     print(f, [fileNameBase '.eps'], '-depsc', '-r300');
                     
 
@@ -622,13 +654,3 @@ function [] = compileNetworkFiles(data)
     fprintf(1,'Network analysis successfully compiled.\n');
 
 end
-
-
-
-
-
-
-
-
-
-
