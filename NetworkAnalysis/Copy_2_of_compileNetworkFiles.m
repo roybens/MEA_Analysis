@@ -44,7 +44,7 @@ function [] = compileNetworkFiles(data)
 
     % extract runID info from reference excel sheet
     refTable = readtable(refDir);
-    % Convert the 'Assay' column to lowercase and trim any leading/trailing whitespace
+   % Convert the 'Assay' column to lowercase and trim any leading/trailing whitespace
     assayColumn = strtrim(lower(refTable.Assay));
     
     % Find rows that contain 'network today' or 'network'
@@ -144,7 +144,7 @@ function [] = compileNetworkFiles(data)
             while ~sucessFile && attempt < maxRetries
             attempt = attempt + 1;
             try
-            for z = 1:numWells
+            parfor z = 1:numWells
                 try
                 wellID=wellsIDs(z);
                 fprintf(1, 'Processing Well %d\n', wellID);
@@ -174,17 +174,15 @@ function [] = compileNetworkFiles(data)
                 %networkAct.firingRate= networkAct.firingRate(1:3000);
                 networkStats = computeNetworkStatsModified(networkAct.firingRate,networkAct.time, 'ThresholdMethod',thresholdFunction,'Threshold', thresholdBurst, 'MinPeakProminence', minProminence,'MinPeakDistance', minPeakDistance);
                 %networkStatsNorm = computeNetworkStatsNew_JL(networkAct.firingRateNorm,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
-                %networkStatsAbs = computeNetworkStatsModified(networkAct.absfiringRate,networkAct.time, 'ThresholdMethod',thresholdFunction,'Threshold', thresholdBurst, 'MinPeakProminence', minProminence,'MinPeakDistance', minPeakDistance);
-                AbsBP = networkAct.absfiringRate(ismember(networkAct.time,networkStats.maxAmplitudesTimes));
-                %tally the peaks with normal 
-
+                networkStatsAbs = computeNetworkStatsModified(networkAct.absfiringRate,networkAct.time, 'ThresholdMethod',thresholdFunction,'Threshold', thresholdBurst, 'MinPeakProminence', minProminence,'MinPeakDistance', minPeakDistance);
+                
                 %% Tim's code for averaging and aggregating mean spiking data (IBI, Burst peaks, Spikes within Bursts, # of Bursts etc.)
                 %average IBI
                 meanIBI = mean(networkStats.maxAmplitudeTimeDiff);
                 %average Burst peak (burst firing rate y-value)
                 meanBurstPeak = mean(networkStats.maxAmplitudesValues);
                 %meanBPNorm = mean(networkStatsNorm.maxAmplitudesValues);
-                meanAbsBP = mean(AbsBP);
+                meanAbsBP = mean(networkStatsAbs.maxAmplitudesValues);
                 %Number of bursts
                 nBursts = length(networkStats.maxAmplitudesTimes);
 
@@ -199,7 +197,7 @@ function [] = compileNetworkFiles(data)
                 stdIBI = std(networkStats.maxAmplitudeTimeDiff);
                 stdBurstPeak = std(networkStats.maxAmplitudesValues);
                 %stdBPNorm = std(networkStatsNorm.maxAmplitudesValues);
-                stdAbsBP = std(AbsBP);
+                stdAbsBP = std(networkStatsAbs.maxAmplitudesValues);
                 % Calculate coefficients of variation
                 covIBI = (stdIBI / meanIBI) * 100;  % CV as a percentage
                 covBurstPeak = (stdBurstPeak / meanBurstPeak) * 100;  % CV as a percentage
@@ -213,126 +211,6 @@ function [] = compileNetworkFiles(data)
                 ch = networkData.fileObj.spikes.channel;
                 ch = ch(ts>0);
                 ts = ts(ts>0);
-                %%firing rate
-              % Loop through each bin size
-                   
-                frbinSizes = [0.01,0.1,1,10];
-            
-                for frbinSize = frbinSizes
-
-                        % Ensure output directories exist for this bin size
-                        % Define directory paths
-                        firingRateMatrixFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('FiringRateMatrix_BinSize_%2f', frbinSize));
-                        heatmapFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('Heatmaps_BinSize_%2f', frbinSize));
-                        svdFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('SVD_BinSize_%2f', frbinSize));
-                        logheatmapFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('Log_Heatmaps_BinSize_%2f', frbinSize));
-                        % Create directories if they don't exist
-                        if ~isfolder(firingRateMatrixFolder)
-                            mkdir(firingRateMatrixFolder);
-                        end
-                        if ~isfolder(logheatmapFolder)
-                            mkdir(logheatmapFolder);
-                        end
-                        if ~isfolder(heatmapFolder)
-                            mkdir(heatmapFolder);
-                        end
-                        if ~isfolder(svdFolder)
-                            mkdir(svdFolder);
-                        end
-                        % Compute firing rate matrix
-                        binEdges = 0:frbinSize:networkData.fileObj.dataLenTime;
-                        firingRateMatrix = zeros(max(ch), length(binEdges) - 1);
-                        for chIdx = 1:max(ch)
-                            spikeTimes = ts(ch == chIdx);
-                            firingRateMatrix(chIdx, :) = histcounts(spikeTimes, binEdges);
-                        end
-                                                %%SVD computation
-                        [U, S, V] = svd(firingRateMatrix, 'econ');
-
-                        % Extract the singular values from the diagonal matrix S
-                        singularValues = diag(S);
-                    
-                        % Number of singular vectors (columns) to visualize
-                        %numSingularValues = length(singularValues);
-                        numSingularValues = 20;
-                    
-                        % Create a single figure for combined visualization
-                        figure('Visible', 'off');
-                    
-                        % Subplot 1: Singular values as a line plot
-                        subplot(3, 1, 1);
-                        plot(singularValues, '-o', 'LineWidth', 1.5);
-                        xlabel('Component number');
-                        ylabel('Singular value (variance explained)');
-                        title(sprintf('Singular values from SVD (Bin Size: %f)', frbinSize));
-                        grid on;
-                    
-                        % Subplot 2: Heatmap of all left singular vectors (U)
-                        subplot(3, 1, 2);
-                        imagesc(U(:, 1:numSingularValues));  % Use all columns of U
-                        colorbar;
-                        xlabel('Singular vector index');
-                        ylabel('Channel');
-                        title('All left singular vectors (U)');
-                    
-                        % Subplot 3: Heatmap of all right singular vectors (V)
-                        subplot(3, 1, 3);
-                        imagesc(V(:, 1:numSingularValues));  % Use all columns of V
-                        colorbar;
-                        xlabel('Singular vector index');
-                        ylabel('Time bin');
-                        title('All right singular vectors (V)');
-                    
-                        % Save the combined figure
-                        combinedPlotPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity',...
-                            sprintf('SVD_BinSize_%2f', frbinSize),...
-                            sprintf('CombinedSVD_RunID%d_%s_WellID%d_DIV%d.png', scan_runID,scan_chipID ,wellID, scan_div));
-                        saveas(gcf, combinedPlotPath);
-                        close(gcf);
-                        % % Save firing rate matrix
-                        % firingRateMatrixPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', ...
-                        %     sprintf('FiringRateMatrix_BinSize_%.2f', frbinSize), ...
-                        %     sprintf('FiringRateMatrix_RunID%d_WellID%d.mat', scan_runID, wellID));
-                        % save(firingRateMatrixPath, 'firingRateMatrix');
-
-                        % Generate and save heatmaps for 60s, 120s, and 300s
-
-
-                        timeIntervals = [60, 120, 300];
-                        for tIdx = 1:length(timeIntervals)
-                            tLimit = timeIntervals(tIdx);
-                            tBinIdx = find(binEdges <= tLimit, 1, 'last')-1;
-                            figure('Visible', 'off');
-                            imagesc(firingRateMatrix(:, 1:tBinIdx));
-                            title(sprintf('Firing Rate Heatmap (First %ds, Bin Size %2f)', tLimit, frbinSize));
-                            xlabel('Time Bins');
-                            ylabel('Channel');
-                            colorbar;
-                            colormap('hot');
-                            heatmapPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', ...
-                                sprintf('Heatmaps_BinSize_%2f', frbinSize), ...
-                                sprintf('Heatmap_RunID%d_%s_WellID%d_DIV%d_%ds.png', scan_runID,scan_chipID ,wellID, scan_div,tLimit));
-                            saveas(gcf, heatmapPath);
-                            close(gcf);
-                        
-                            % Log-scaled heatmap
-                            figure('Visible', 'off');
-                            % Add 1 to avoid log(0) issues
-                            imagesc(log10(firingRateMatrix(:, 1:tBinIdx) + 1));
-                            title(sprintf('Log-Scaled Firing Rate Heatmap (First %ds, Bin Size %2f)', tLimit, frbinSize));
-                            xlabel('Time Bins');
-                            ylabel('Channel');
-                            colorbar;
-                            colormap('hot');
-                            logHeatmapPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', ...
-                                sprintf('Log_Heatmaps_BinSize_%2f', frbinSize), ...
-                                sprintf('Log_Heatmap_RunID%d_%s_WellID%d_DIV%d_%ds.png', scan_runID,scan_chipID, wellID, scan_div, tLimit));
-                            saveas(gcf, logHeatmapPath);
-                            close(gcf);
-                        end
-
-                  end
-
                 %average spikesPerBurst        
                 if length(networkStats.maxAmplitudesTimes)>3
                     peakAmps = networkStats.maxAmplitudesValues';
@@ -349,7 +227,7 @@ function [] = compileNetworkFiles(data)
                        a1 = networkAct.firingRate(idx)';
                       
                        % get the arunIDstemp = run_id_and_type(:,1);mplitude at the desired peak width
-                       peakWidthAmp = (peakAmps(i)-peakAmps(i)*thresholdStartStop);
+                       peakWidthAmp = (peakAmps(i)-round(peakAmps(i)*thresholdStartStop));
                         %the fraction of the total peak height measured
                         %from the top at hich the burst start stop are
                         %defined.
@@ -377,11 +255,11 @@ function [] = compileNetworkFiles(data)
                     meanBurstDuration =NaN;
                     covSpikesPerBurst =NaN ;
                     covBurstDuration = NaN;
-                    IBIStrings = {''};
-                    BurstPeakStrings = {''};
-                    AbsBurstPeakStrings = {''};
-                    BurstDurationStrings = {''};
-                    spikesPerBurstStrings = {''};
+                    IBIStrings = NaN;
+                    BurstPeakStrings = NaN;
+                    AbsBurstPeakStrings = NaN;
+                    BurstDurationStrings = NaN;
+                    spikesPerBurstStrings = NaN;
 
                     else
                     % Initialize the spikesPerBurst array to zeros 
@@ -416,25 +294,11 @@ function [] = compileNetworkFiles(data)
                     stdBurstDuration = std(meanBurstDuration);
                     covSpikesPerBurst = (stdSpikesPerBurst/meanSpikesPerBurst)*100;
                     covBurstDuration = (stdBurstDuration/meanBurstDuration) * 100;
-                    if isempty(edges)
-                        % If edges are empty, use all time points
-                        baselineFiringRate = mean(networkAct.firingrate);
-                    else
-                        % Otherwise, exclude the times within the burst intervals
-                        excludeIdx = false(size(networkAct.time));
                     
-                        for i = 1:size(edges, 1)
-                            excludeIdx = excludeIdx | (networkAct.time >= edges(i,1) & networkAct.time <= edges(i,2));
-                        end
-                    
-                        includeIdx = ~excludeIdx;
-                        baselineFiringRate = mean(networkAct.firingrate(includeIdx));
-                    end
-                                        
                     % Convert spikesPerBurst to a comma-separated string
                     IBIStrings = {strjoin(arrayfun(@num2str, networkStats.maxAmplitudeTimeDiff, 'UniformOutput', false), ',')};
                     BurstPeakStrings = {strjoin(arrayfun(@num2str, networkStats.maxAmplitudesValues, 'UniformOutput', false), ',')};
-                    AbsBurstPeakStrings = {strjoin(arrayfun(@num2str, AbsBP, 'UniformOutput', false), ',')};
+                    AbsBurstPeakStrings = {strjoin(arrayfun(@num2str, networkStatsAbs.maxAmplitudesValues, 'UniformOutput', false), ',')};
                     BurstDurationStrings = {strjoin(arrayfun(@num2str, bursts, 'UniformOutput', false), ',')};
                     spikesPerBurstStrings = {strjoin(arrayfun(@num2str, spikesPerBurst, 'UniformOutput', false), ',')};
                                         
@@ -448,11 +312,6 @@ function [] = compileNetworkFiles(data)
                     meanBurstDuration =NaN;
                     covSpikesPerBurst =NaN ;
                     covBurstDuration = NaN;
-                    IBIStrings = {''};
-                    BurstPeakStrings = {''};
-                    AbsBurstPeakStrings = {''};
-                    BurstDurationStrings = {''};
-                    spikesPerBurstStrings = {''};
 
                 end
                 %totalTime = toc;  % Measure the total elapsed time after the loop
@@ -585,7 +444,7 @@ function [] = compileNetworkFiles(data)
                 meanISI, covISI, ...
                 meanBurstISI, covBurstISI, ...
                 meanBurstISIOutside, covBurstISIOutside, ...
-                fanoFactor, burstRate,baselineFiringRate, IBIStrings, BurstPeakStrings, AbsBurstPeakStrings, BurstDurationStrings, spikesPerBurstStrings, ...
+                fanoFactor, burstRate, IBIStrings, BurstPeakStrings, AbsBurstPeakStrings, BurstDurationStrings, spikesPerBurstStrings, ...
                 'VariableNames', {
                 'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
                 'mean_IBI', 'cov_IBI', 'mean_Burst_Peak', 'cov_Burst_Peak', ...
@@ -593,7 +452,7 @@ function [] = compileNetworkFiles(data)
                 'MeanNetworkISI', 'CoVNetworkISI', ...
                 'MeanWithinBurstISI', 'CoVWithinBurstISI', ...
                 'MeanOutsideBurstISI', 'CoVOutsideBurstISI', ...
-                'Fanofactor', 'BurstRate','Baseline' ...
+                'Fanofactor', 'BurstRate', ...
                 'IBI_List', 'Burst_Peak_List', 'Abs_Burst_Peak_List', 'Burst_Times_List', 'SpikesPerBurst_List'
                 });
 
@@ -656,7 +515,7 @@ function [] = compileNetworkFiles(data)
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
                     
                     % Save the figure in EPS format
-                    %print(f, [fileNameBase '.eps'], '-depsc', '-r300');
+                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
                     
 
                     %totalTime = toc;  % Measure the total elapsed time after the loop
@@ -675,7 +534,7 @@ function [] = compileNetworkFiles(data)
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
                     
                     % Save the figure in EPS format
-                   % print(f, [fileNameBase '.eps'], '-depsc', '-r300');
+                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
 
     
                  
@@ -687,9 +546,7 @@ function [] = compileNetworkFiles(data)
                     ylim([0 ylimNetwork])
                      % Assuming you want to display metrics above the raster plot
                     textString = sprintf('# Bursts: %d | Mean Burst Duration: %.2fs | mean SpB: %.2f | mean IBI: %.2fs | Mean BP: %.2f', nBursts,meanBurstDuration, meanSpikesPerBurst, meanIBI, meanBurstPeak);
-                    timeVector = 0:binSize:max(relativeSpikeTimes.time);   %need to optimize
-                    plot(baselineFiringRate*ones(ceil(timeVector(end)),1))
-
+                    
                     % Create one annotation box containing all the text entries
                     % Adjust the position vector [x y width height] as needed
                     annotation('textbox', [0.1, 0.425, 0.9, 0.1], 'String', textString, 'EdgeColor', 'none', 'HorizontalAlignment', 'center');
@@ -699,7 +556,7 @@ function [] = compileNetworkFiles(data)
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
                     
                     % Save the figure in EPS format
-                    %print(f, [fileNameBase '.eps'], '-depsc', '-r300');
+                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
                     
     
     
@@ -715,7 +572,7 @@ function [] = compileNetworkFiles(data)
                     print(f, [fileNameBase '.png'], '-dpng', '-r300');
                     
                     % Save the figure in EPS format
-                   % print(f, [fileNameBase '.eps'], '-depsc', '-r300');
+                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
                     
 
                     close(f);
@@ -786,7 +643,7 @@ function [] = compileNetworkFiles(data)
     end
     %printf(logFile,'Network analysis successfully compiled.\n');
     fprintf(' Total elapsed time for execution: %f seconds\n', toc);
-    fprintf(1,'Network analysis successfully comp   iled.\n');
+    fprintf(1,'Network analysis successfully compiled.\n');
 
 end
 
