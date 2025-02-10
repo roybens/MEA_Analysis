@@ -10,7 +10,11 @@ function [] = compileNetworkFiles(data)
     tic;
     plotFig=data.plotFig;
     extMetricsFlag = data.extMetricsFlag;
-    epsPlot= false
+
+    epsPlot= false;
+
+    plotFRmatrix = false;
+
     % Unpack the data structure
    
     div0_date =  datetime(data.div0Date, "InputFormat",'MM/dd/yyyy');
@@ -147,7 +151,7 @@ function [] = compileNetworkFiles(data)
             while ~sucessFile && attempt < maxRetries
             attempt = attempt + 1;
             try
-            for z = 1:numWells
+            parfor z = 1:numWells
                 try
                 wellID=wellsIDs(z);
                 fprintf(1, 'Processing Well %d\n', wellID);
@@ -247,7 +251,7 @@ function [] = compileNetworkFiles(data)
               % Loop through each bin size
                    
                 frbinSizes = [0.01,0.1,1,10];
-            
+                if plotFRmatrix
                 for frbinSize = frbinSizes
 
                         % Ensure output directories exist for this bin size
@@ -362,7 +366,7 @@ function [] = compileNetworkFiles(data)
                         end
 
                   end
-
+                end
                 %average spikesPerBurst        
                 if length(networkStats.maxAmplitudesTimes)>3
                     peakAmps = networkStats.maxAmplitudesValues';
@@ -448,7 +452,7 @@ function [] = compileNetworkFiles(data)
                     covBurstDuration = (stdBurstDuration/meanBurstDuration) * 100;
                     if isempty(edges)
                         % If edges are empty, use all time points
-                        baselineFiringRate = mean(networkAct.firingrate);
+                        baselineFiringRate = mean(networkAct.firingRate);
                     else
                         % Otherwise, exclude the times within the burst intervals
                         excludeIdx = false(size(networkAct.time));
@@ -458,7 +462,7 @@ function [] = compileNetworkFiles(data)
                         end
                     
                         includeIdx = ~excludeIdx;
-                        baselineFiringRate = mean(networkAct.firingrate(includeIdx));
+                        baselineFiringRate = mean(networkAct.firingRate(includeIdx));
                     end
                                         
                     % Convert spikesPerBurst to a comma-separated string
