@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import convolve, find_peaks
 from scipy.stats import norm
+from scipy.interpolate import interp1d
 
 
 def detect_peaks(trace, peak_sign, abs_threshold):
@@ -285,24 +286,29 @@ def plot_network_activity(ax,SpikeTimes, min_peak_distance=1.0, binSize=0.1, gau
     burstPeakTimes = timeVector[peaks]  # Convert peak indices to times
     #burstPeakValues = properties['prominences']  # Get the peak values
     burstPeakValues = firingRate[peaks]  # Get the peak values
+    # Step 4: Interpolate for finer resolution
+    interp_func = interp1d(timeVector, firingRate, kind='cubic')
+    fine_time_vector = np.linspace(timeVector[0], timeVector[-1], len(timeVector) * 10)
+    fine_firing_rate = interp_func(fine_time_vector)
 
-    # Calculate the derivative
-    derivative = np.diff(firingRate)
-    derivative = np.append(derivative, 0)  # Match length with the signal
+    # Step 5: Calculate zero crossings
+    fine_derivative = np.diff(fine_firing_rate)
+    fine_derivative = np.append(fine_derivative, 0)
+    fine_zero_crossings = np.where(np.diff(np.sign(fine_derivative)))[0]
 
-    # Identify zero crossings
-    zero_crossings = np.where(np.diff(np.sign(derivative)))[0]
-
-    # Calculate widths using zero crossings
-    widths = []
+    # Step 6: Calculate widths for each peak
+    fine_widths = []
     for peak in peaks:
-        # Find the nearest zero crossings before and after the peak
-        left_zero = zero_crossings[zero_crossings < peak][-1]
-        right_zero = zero_crossings[zero_crossings > peak][0]
-        width = right_zero - left_zero
-        widths.append(width)
+        peak_idx = np.argmin(np.abs(fine_time_vector - timeVector[peak]))
+        left_zeros = fine_zero_crossings[fine_zero_crossings < peak_idx]
+        right_zeros = fine_zero_crossings[fine_zero_crossings > peak_idx]
 
-    mean_burst_duration = np.mean(widths) if widths else np.nan
+        if len(left_zeros) > 0 and len(right_zeros) > 0:
+            left_zero = left_zeros[-1]
+            right_zero = right_zeros[0]
+            width = fine_time_vector[right_zero] - fine_time_vector[left_zero]
+            fine_widths.append(width)
+    mean_burst_duration = np.mean(fine_widths) if fine_widths else np.nan
     #Calculate the ISIs between spiketimes
     # Calculate the intervals between consecutive peaks
     intervals = np.diff(burstPeakTimes)
@@ -336,7 +342,7 @@ def plot_network_activity(ax,SpikeTimes, min_peak_distance=1.0, binSize=0.1, gau
         "mean_IBI": mean_interburstinterval,
         "cov_IBI": covariance_interburstinterval,
         "mean_Burst_Peak": mean_peak_height,
-        "mean_Burst_Duration" : mean_burst_duration,
+        "mean_BurstDuration" : mean_burst_duration,
         "cov_Burst_Peak": cov_peak_height,
         "fano_factor": fanofact
     }   
