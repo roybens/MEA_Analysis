@@ -46,7 +46,7 @@ switch args.ThresholdMethod
             args.networkActivityVectortime,'MinPeakHeight',threshold, peakParams{:});
     case 'Adaptive'
         % Use findpeaks to get initial peaks
-        [initialPeaks, initialLocs] = findpeaks(args.networkActivityVectorFR, ...
+        [initialPeaks, initialLocs,widths] = findpeaks(args.networkActivityVectorFR, ...
             args.networkActivityVectortime, peakParams{:});
         % threshold = movmean(args.networkActivityVectorFR, 30) + 2 * movstd(args.networkActivityVectorFR, 30);   % 10 is hardcoded
         % % Filter peaks using the adaptive threshold
