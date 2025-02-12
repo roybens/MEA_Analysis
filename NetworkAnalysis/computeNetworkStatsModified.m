@@ -30,12 +30,12 @@ end
 
 switch args.ThresholdMethod
     case 'Fixed'
-        if isempty(args.FixedThreshold)
+        if isempty(args.Threshold)
             error('FixedThreshold must be provided for fixed threshold method');
         end
-        threshold = args.FixedThreshold;
+        threshold = args.Threshold;
         [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(args.networkActivityVectorFR, ...
-            args.networkActivityVectortime,'MinPeakHeight',threshold, peakParams{:});
+            args.networkActivityVectortime,'MinPeakHeight',threshold);
     case 'RMS'
         if isempty(args.Threshold)
             error('Threshold must be provided for RMS threshold method');
