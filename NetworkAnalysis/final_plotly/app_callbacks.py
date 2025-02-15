@@ -271,7 +271,7 @@ def register_callbacks(app):
             ordered_genotypes = unique_genotypes
 
         graphs = []
-        excluded_columns = ['DIV', 'NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time']
+        excluded_columns = ['DIV', 'NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time','IBI_List',	'Burst_Peak_List',	'Abs_Burst_Peak_List',	'Burst_Times_List',	'SpikesPerBurst_List']
         selected_metrics = [col for col in df.columns if col not in excluded_columns]
 
         all_svg_bytes_list = []
