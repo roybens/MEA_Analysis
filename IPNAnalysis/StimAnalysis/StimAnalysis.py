@@ -9,6 +9,37 @@ from multiprocessing import Pool
 from scipy.interpolate import CubicSpline
 import stim_helper_functions as stim_helper
 
+def filter_spikes_by_isi(spike_times, isi_threshold=0.01):
+    """
+    Filter spikes based on inter-spike-interval threshold.
+    
+    Parameters:
+    -----------
+    spike_times : array-like
+        Array of spike timestamps in seconds
+    isi_threshold : float
+        Minimum allowed time between spikes in seconds (default: 10ms)
+        
+    Returns:
+    --------
+    filtered_spikes : array
+        Array of spike times with bursts filtered out
+    """
+    if len(spike_times) < 2:
+        return spike_times
+        
+    spike_times = np.sort(spike_times)
+    isis = np.diff(spike_times)
+    
+    # Initialize with first spike
+    filtered_spikes = [spike_times[0]]
+    
+    # Add spikes only if they are separated by at least isi_threshold
+    for i in range(1, len(spike_times)):
+        if isis[i-1] >= isi_threshold:
+            filtered_spikes.append(spike_times[i])
+            
+    return np.array(filtered_spikes)
 
 class StimulationAnalysis:
     def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9, peak_sign="neg"):
@@ -90,7 +121,17 @@ class StimulationAnalysis:
                         threshold = 200
 
                     x, y = detect_peaks(traces[:, channel_index], peak_sign=self.peak_sign, abs_threshold=threshold)
-                    batch_peaks[f'Channel {channel}'] = list(x)
+                    
+                    # convert to seconds
+                    spike_times_sec = x / self.fs
+            
+                    # apply ISI filtering
+                    filtered_times = filter_spikes_by_isi(spike_times_sec, isi_threshold=0.01)
+                    
+                    # convert back to samples
+                    filtered_samples = (filtered_times * self.fs).astype(int)
+                    
+                    batch_peaks[f'Channel {channel}'] = list(filtered_samples)
 
                 return batch_peaks
 
@@ -733,7 +774,7 @@ class StimulationAnalysis:
             spike_time = idx / self.fs
             waveforms[spike_time] = waveform
 
-        return waveforms
+        waveforms
     
     def run_full_analysis(self):
         # get length of stim period in seconds
