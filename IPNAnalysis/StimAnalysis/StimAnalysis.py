@@ -10,37 +10,6 @@ from scipy.interpolate import CubicSpline
 import stim_helper_functions as stim_helper
 from sklearn.manifold import TSNE
 
-def filter_spikes_by_isi(spike_times, isi_threshold=0.01):
-    """
-    Filter spikes based on inter-spike-interval threshold.
-    
-    Parameters:
-    -----------
-    spike_times : array-like
-        Array of spike timestamps in seconds
-    isi_threshold : float
-        Minimum allowed time between spikes in seconds (default: 10ms)
-        
-    Returns:
-    --------
-    filtered_spikes : array
-        Array of spike times with bursts filtered out
-    """
-    if len(spike_times) < 2:
-        return spike_times
-        
-    spike_times = np.sort(spike_times)
-    isis = np.diff(spike_times)
-    
-    # Initialize with first spike
-    filtered_spikes = [spike_times[0]]
-    
-    # Add spikes only if they are separated by at least isi_threshold
-    for i in range(1, len(spike_times)):
-        if isis[i-1] >= isi_threshold:
-            filtered_spikes.append(spike_times[i])
-            
-    return np.array(filtered_spikes)
 
 class StimulationAnalysis:
     def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9, peak_sign="neg"):
@@ -823,6 +792,79 @@ class StimulationAnalysis:
         fanofactors = self.calculate_fano_factor(isi_mean_std)
         print(f"Mean and std ISI: {isi_mean_std}")
         print(f"Fanofactors: {fanofactors}")
+    
+    def plot_spike_types_on_trace(self, time_window=None):
+        """
+        Plot segments of the recording trace with color-coded spike types based on t-SNE clusters.
+        
+        Parameters:
+        -----------
+        time_window : tuple, optional
+            (start_time, end_time) in seconds to plot. If None, plots first 5 seconds
+        """
+        # Set default time window if none provided
+        if time_window is None:
+            time_window = (0, 5)  # Plot first 5 seconds
+        
+        # Convert time window to samples
+        start_sample = int(time_window[0] * self.fs)
+        end_sample = int(time_window[1] * self.fs)
+        
+        # Get the trace for the recording electrode
+        channel_index = np.where(self.all_channel_ids == str(self.rec_channel))[0][0]
+        trace = self.recording_bp.get_traces(segment_index=0, 
+                                           channel_ids=self.all_channel_ids[channel_index],
+                                           start_frame=start_sample,
+                                           end_frame=end_sample)
+        
+        # Define regions as before
+        regions = {
+            'Main Cluster': (self.tsne_results[:, 0] < 20) & (self.tsne_results[:, 0] > -40) & (self.tsne_results[:, 1] < 30),
+            'Vertical Chain': (self.tsne_results[:, 0] > 30) & (self.tsne_results[:, 0] < 50),
+            'Top Cluster': (self.tsne_results[:, 1] > 30),
+            'Far Right Outliers': (self.tsne_results[:, 0] > 50)
+        }
+        
+        # Create a color map for different spike types
+        colors = {'Main Cluster': 'blue', 
+                  'Vertical Chain': 'red',
+                  'Top Cluster': 'green',
+                  'Far Right Outliers': 'purple'}
+        
+        # Convert spike times from dictionary keys to array
+        spike_times = np.array(list(self.spike_waveforms_dict.keys()))
+        
+        # Create the plot
+        plt.figure(figsize=(15, 8))
+        
+        # Plot the raw trace
+        time_axis = np.arange(start_sample, end_sample) / self.fs
+        plt.plot(time_axis, trace.flatten(), 'k', alpha=0.5, label='Raw Trace')
+        
+        # Plot colored markers for each spike type
+        for region_name, region_mask in regions.items():
+            # Find spikes that belong to this cluster
+            region_spikes = spike_times[region_mask]
+            
+            # Filter spikes within time window
+            mask = (region_spikes >= time_window[0]) & (region_spikes <= time_window[1])
+            region_spikes = region_spikes[mask]
+            
+            # Plot markers at spike times
+            if len(region_spikes) > 0:
+                spike_amplitudes = [trace[int((t - time_window[0]) * self.fs)] for t in region_spikes]
+                plt.scatter(region_spikes, spike_amplitudes, 
+                           color=colors[region_name], 
+                           label=region_name,
+                           marker='|',
+                           s=100)
+        
+        plt.xlabel('Time (seconds)')
+        plt.ylabel('Amplitude')
+        plt.title(f'Spike Types on Raw Trace (Recording Electrode {self.rec_electrode})')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
     
     
 
