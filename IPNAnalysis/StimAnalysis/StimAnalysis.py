@@ -8,6 +8,7 @@ import numpy as np
 from multiprocessing import Pool
 from scipy.interpolate import CubicSpline
 import stim_helper_functions as stim_helper
+from sklearn.manifold import TSNE
 
 def filter_spikes_by_isi(spike_times, isi_threshold=0.01):
     """
@@ -774,7 +775,7 @@ class StimulationAnalysis:
             spike_time = idx / self.fs
             waveforms[spike_time] = waveform
 
-        waveforms
+        return waveforms
     
     def run_full_analysis(self):
         # get length of stim period in seconds
@@ -822,6 +823,31 @@ class StimulationAnalysis:
         fanofactors = self.calculate_fano_factor(isi_mean_std)
         print(f"Mean and std ISI: {isi_mean_std}")
         print(f"Fanofactors: {fanofactors}")
+    
+
+    def tsne_spike_visualization(self, spike_waveforms_dict):
+        """
+        Visualize spike waveforms using t-SNE dimensionality reduction.
+        
+        Params:
+        spike_waveforms_dict : dict Dictionary mapping spike times to waveform arrays
+        """
+        # convert dictionary of waveforms to a matrix
+        waveforms_matrix = np.array(list(spike_waveforms_dict.values()))
+        
+        # t-SNE
+        tsne = TSNE(n_components=2, perplexity=min(30, len(waveforms_matrix)-1), random_state=42)
+        tsne_results = tsne.fit_transform(waveforms_matrix)
+        
+        # scatter plot
+        plt.figure(figsize=(8,6))
+        plt.scatter(tsne_results[:, 0], tsne_results[:, 1], alpha=0.5)
+        plt.title('t-SNE Visualization of Spike Waveforms')
+        plt.xlabel('t-SNE 1')
+        plt.ylabel('t-SNE 2')
+        plt.show()
+        
+        return tsne_results
     
 
     
