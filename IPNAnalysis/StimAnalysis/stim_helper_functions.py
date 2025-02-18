@@ -4,6 +4,32 @@ from scipy.interpolate import CubicSpline
 import h5py
 from sklearn.manifold import TSNE
 
+def filter_spikes_by_isi(spike_times, isi_threshold=0.01):
+    """
+    Filter spikes based on inter-spike-interval threshold
+    
+    Params:
+        spike_times : array of spike timestamps in seconds
+        isi_threshold : minimum allowed time between spikes in seconds (default: 10ms)
+        
+    Returns:
+        filtered_spikes : array of spike times with bursts filtered out
+    """
+    if len(spike_times) < 2:
+        return spike_times
+        
+    spike_times = np.sort(spike_times)
+    isis = np.diff(spike_times)
+    
+    filtered_spikes = [spike_times[0]]
+    
+    # Add spikes only if they are separated by at least isi_threshold
+    for i in range(1, len(spike_times)):
+        if isis[i-1] >= isi_threshold:
+            filtered_spikes.append(spike_times[i])
+            
+    return np.array(filtered_spikes)
+
 def plot_spike_waveforms_subplots(waveforms, fs=10000, num_spikes=10):
     """
     Plots multiple spike waveforms in subplots within a single figure.
