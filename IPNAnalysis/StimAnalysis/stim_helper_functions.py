@@ -61,23 +61,29 @@ def plot_spike_waveforms_subplots(waveforms, fs=10000, num_spikes=10):
     plt.xlabel("Time (ms)")
     plt.show()
 
-def tsne_spike_visualization(spike_waveforms):
+def tsne_spike_visualization(spike_waveforms_dict):
     """
-    Uses t-SNE to visualize spike waveform clustering.
-
-    Parameters:
-    - spike_waveforms: (num_spikes, waveform_length) array.
+    Visualize spike waveforms using t-SNE dimensionality reduction.
+    
+    Params:
+    spike_waveforms_dict : dict Dictionary mapping spike times to waveform arrays
     """
-
-    tsne = TSNE(n_components=2, perplexity=30, random_state=42)
-    tsne_results = tsne.fit_transform(spike_waveforms)
-
+    # convert dictionary of waveforms to a matrix
+    waveforms_matrix = np.array(list(spike_waveforms_dict.values()))
+    
+    # t-SNE
+    tsne = TSNE(n_components=2, perplexity=min(30, len(waveforms_matrix)-1), random_state=42)
+    tsne_results = tsne.fit_transform(waveforms_matrix)
+    
+    # scatter plot
     plt.figure(figsize=(8,6))
     plt.scatter(tsne_results[:, 0], tsne_results[:, 1], alpha=0.5)
-    plt.xlabel("t-SNE Component 1")
-    plt.ylabel("t-SNE Component 2")
-    plt.title("t-SNE Visualization of Spike Waveforms")
+    plt.title('t-SNE Visualization of Spike Waveforms')
+    plt.xlabel('t-SNE 1')
+    plt.ylabel('t-SNE 2')
     plt.show()
+    
+    return tsne_results
 
 
 def print_file_structure(self):
