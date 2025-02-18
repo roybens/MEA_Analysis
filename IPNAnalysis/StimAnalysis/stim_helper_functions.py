@@ -61,6 +61,43 @@ def plot_spike_waveforms_subplots(waveforms, fs=10000, num_spikes=10):
     plt.xlabel("Time (ms)")
     plt.show()
 
+def plot_cluster_examples(spike_waveforms_dict, tsne_results, n_examples=3):
+    """
+    Plot example waveforms from different clusters to compare their shapes
+    Params: 
+        spike_waveforms_dict: dictionary of spike waveforms (from extract_spike_waveforms())
+        tsne_results: t-SNE results (from tsne_spike_visualization())
+        n_examples: number of examples to plot
+    """
+    # Convert dictionary to list for indexing
+    waveforms = list(spike_waveforms_dict.values())
+    
+    # Define regions of interest based on your t-SNE plot
+    regions = {
+        'Main Cluster': (tsne_results[:, 0] < 20) & (tsne_results[:, 0] > -40) & (tsne_results[:, 1] < 30),
+        'Vertical Chain': (tsne_results[:, 0] > 30) & (tsne_results[:, 0] < 50),
+        'Top Cluster': (tsne_results[:, 1] > 30),
+        'Far Right Outliers': (tsne_results[:, 0] > 50)
+    }
+    
+    fig, axes = plt.subplots(len(regions), n_examples, figsize=(15, 10))
+    
+    for i, (name, mask) in enumerate(regions.items()):
+        # Get indices for this region
+        indices = np.where(mask)[0]
+        
+        # Randomly sample n_examples from this region
+        sample_indices = np.random.choice(indices, size=min(n_examples, len(indices)), replace=False)
+        
+        for j, idx in enumerate(sample_indices):
+            waveform = waveforms[idx]
+            axes[i, j].plot(waveform)
+            axes[i, j].set_title(f'{name}\nExample {j+1}')
+            axes[i, 0].set_ylabel('Amplitude')
+    
+    plt.tight_layout()
+    plt.show()
+
 def tsne_spike_visualization(spike_waveforms_dict):
     """
     Visualize spike waveforms using t-SNE dimensionality reduction.
@@ -92,7 +129,6 @@ def print_file_structure(self):
                 print(name)
 
             h5file.visititems(print_hdf5_structure)
-from scipy.signal import butter, filtfilt
 
 def plot_frequency_spectrum(trace, fs):
     """
@@ -161,3 +197,4 @@ def polynomial_interpolation(trace, start_idx, end_idx, degree=3):
     # plt.show()
 
     return trace
+
