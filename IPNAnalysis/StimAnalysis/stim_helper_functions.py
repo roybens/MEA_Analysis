@@ -122,6 +122,33 @@ def tsne_spike_visualization(spike_waveforms_dict):
     
     return tsne_results
 
+def get_spike_cluster_times(tsne_results, spike_waveforms_dict):
+    """
+    Get spike times separated by cluster type from t-SNE analysis.
+    Params:
+        tsne_results: t-SNE results
+        spike_waveform_dict: dictionary of spike waveforms
+    Returns:
+        dict : Dictionary containing lists of spike times (in seconds) for each cluster type
+    """
+    # Define regions
+    regions = {
+        'Main Cluster': (tsne_results[:, 0] < 20) & (tsne_results[:, 0] > -40) & (tsne_results[:, 1] < 30),
+        'Vertical Chain': (tsne_results[:, 0] > 30) & (tsne_results[:, 0] < 50),
+        'Top Cluster': (tsne_results[:, 1] > 30),
+        'Far Right Outliers': (tsne_results[:, 0] > 50)
+    }
+    
+    spike_times = np.array(list(spike_waveforms_dict.keys()))
+    
+    cluster_times = {}
+    
+    # Get times for each cluster type
+    for region_name, region_mask in regions.items():
+        cluster_times[region_name] = spike_times[region_mask]
+    
+    return cluster_times
+
 
 def print_file_structure(self):
         with h5py.File(self.file_path, 'r') as h5file:

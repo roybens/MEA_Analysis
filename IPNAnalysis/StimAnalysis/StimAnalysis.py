@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import spikeinterface.full as si
 import spikeinterface.extractors as se
 import h5py
@@ -7,7 +9,7 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 from scipy.interpolate import CubicSpline
-import stim_helper_functions as stim_helper
+from stim_helper_functions import filter_spikes_by_isi
 from sklearn.manifold import TSNE
 
 
