@@ -225,3 +225,78 @@ def polynomial_interpolation(trace, start_idx, end_idx, degree=3):
 
     return trace
 
+def compare_early_late_waveforms(spike_waveforms_dict, spike_times, early_threshold=60, late_threshold=90):
+    """
+    Compare spike waveforms from early (<60s) and late (>90s) time periods
+    
+    Parameters:
+    -----------
+    spike_waveforms_dict : dict
+        Dictionary with spike times as keys and waveform arrays as values
+    spike_times : array-like
+        Array of spike times in seconds
+    early_threshold : float
+        Time threshold for early spikes (default: 60s)
+    late_threshold : float
+        Time threshold for late spikes (default: 90s)
+        
+    Returns:
+    --------
+    None (displays plot)
+    """
+    
+    # Get early and late spike times
+    early_spikes = spike_times[spike_times < early_threshold]
+    late_spikes = spike_times[spike_times > late_threshold]
+    
+    # Get corresponding waveforms
+    early_waveforms = [spike_waveforms_dict[t] for t in early_spikes]
+    late_waveforms = [spike_waveforms_dict[t] for t in late_spikes]
+    
+    # Convert to numpy arrays
+    early_waveforms = np.array(early_waveforms)
+    late_waveforms = np.array(late_waveforms)
+    
+    # Calculate means and standard deviations
+    early_mean = np.mean(early_waveforms, axis=0)
+    early_std = np.std(early_waveforms, axis=0)
+    late_mean = np.mean(late_waveforms, axis=0)
+    late_std = np.std(late_waveforms, axis=0)
+    
+    # Create time axis (assuming waveform length matches your data)
+    time_ms = np.linspace(-1, 1, len(early_mean))  # Adjust range as needed
+    
+    # Plot
+    plt.figure(figsize=(12, 8))
+    
+    # Plot early spikes
+    plt.fill_between(time_ms, 
+                     early_mean - early_std, 
+                     early_mean + early_std, 
+                     alpha=0.3, 
+                     color='blue',
+                     label='Early Std')
+    plt.plot(time_ms, early_mean, 'b-', label=f'Early Mean (n={len(early_spikes)})')
+    
+    # Plot late spikes
+    plt.fill_between(time_ms, 
+                     late_mean - late_std, 
+                     late_mean + late_std, 
+                     alpha=0.3, 
+                     color='red',
+                     label='Late Std')
+    plt.plot(time_ms, late_mean, 'r-', label=f'Late Mean (n={len(late_spikes)})')
+    
+    plt.title('Comparison of Early (<60s) vs Late (>90s) Spike Waveforms')
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Amplitude (µV)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    # Print some basic statistics
+    print(f"Number of early spikes: {len(early_spikes)}")
+    print(f"Number of late spikes: {len(late_spikes)}")
+    print(f"Early mean amplitude: {np.max(early_mean)-np.min(early_mean):.2f} µV")
+    print(f"Late mean amplitude: {np.max(late_mean)-np.min(late_mean):.2f} µV")
+
