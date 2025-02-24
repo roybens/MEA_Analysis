@@ -298,5 +298,71 @@ def compare_early_late_waveforms(spike_waveforms_dict, spike_times, early_thresh
     print(f"Number of early spikes: {len(early_spikes)}")
     print(f"Number of late spikes: {len(late_spikes)}")
     print(f"Early mean amplitude: {np.max(early_mean)-np.min(early_mean):.2f} µV")
-    print(f"Late mean amplitude: {np.max(late_mean)-np.min(late_mean):.2f} µV")
+    print(f"Late mean amplitude: {np.max(late_mean)-np.min(late_mean)::.2f} µV")
+
+def plot_evoked_waveforms(spike_waveforms_dict, stim_start, stim_length):
+    """
+    Plot average waveform and standard deviation of spikes during stimulation period
+    
+    Parameters:
+    -----------
+    spike_waveforms_dict : dict
+        Dictionary with spike times as keys and waveform arrays as values
+    stim_start : float
+        Start time of stimulation in seconds
+    stim_length : float
+        Duration of stimulation in seconds
+        
+    Returns:
+    --------
+    tuple: (evoked_spikes, mean_waveform, std_waveform)
+    """
+    
+    # Get spike times from dictionary keys
+    spike_times = np.array(list(spike_waveforms_dict.keys()))
+    
+    # Get spikes during stim period
+    evoked_spikes = spike_times[(spike_times >= stim_start) & 
+                               (spike_times < (stim_start + stim_length))]
+    
+    # Get corresponding waveforms
+    evoked_waveforms = [spike_waveforms_dict[t] for t in evoked_spikes]
+    
+    # Convert to numpy array
+    evoked_waveforms = np.array(evoked_waveforms)
+    
+    # Calculate mean and standard deviation
+    mean_waveform = np.mean(evoked_waveforms, axis=0)
+    std_waveform = np.std(evoked_waveforms, axis=0)
+    
+    # Create time axis (assuming waveform length matches your data)
+    time_ms = np.linspace(-1, 1, len(mean_waveform))  # Adjust range as needed
+    
+    # Plot
+    plt.figure(figsize=(12, 8))
+    
+    # Plot mean +/- std
+    plt.fill_between(time_ms,
+                    mean_waveform - std_waveform,
+                    mean_waveform + std_waveform,
+                    alpha=0.3,
+                    color='blue',
+                    label='Standard Deviation')
+    
+    plt.plot(time_ms, mean_waveform, 'b-', 
+             label=f'Mean Evoked Waveform (n={len(evoked_spikes)})')
+    
+    plt.title('Average Evoked Spike Waveform During Stimulation')
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Amplitude (µV)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    # Print basic statistics
+    print(f"Number of evoked spikes: {len(evoked_spikes)}")
+    print(f"Mean evoked spike amplitude: {np.max(mean_waveform)-np.min(mean_waveform):.2f} µV")
+    print(f"Mean firing rate during stim: {len(evoked_spikes)/stim_length:.2f} Hz")
+    
+    return evoked_spikes, mean_waveform, std_waveform
 
