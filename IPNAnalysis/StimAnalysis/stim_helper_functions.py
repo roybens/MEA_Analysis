@@ -275,8 +275,8 @@ def compare_early_late_waveforms(spike_waveforms_dict, spike_times, early_thresh
                      early_mean + early_std, 
                      alpha=0.3, 
                      color='blue',
-                     label='Early Std')
-    plt.plot(time_ms, early_mean, 'b-', label=f'Early Mean (n={len(early_spikes)})')
+                     label='Pre-stim Std')
+    plt.plot(time_ms, early_mean, 'b-', label=f'Pre-stim Mean (n={len(early_spikes)})')
     
     # Plot late spikes
     plt.fill_between(time_ms, 
@@ -284,10 +284,10 @@ def compare_early_late_waveforms(spike_waveforms_dict, spike_times, early_thresh
                      late_mean + late_std, 
                      alpha=0.3, 
                      color='red',
-                     label='Late Std')
-    plt.plot(time_ms, late_mean, 'r-', label=f'Late Mean (n={len(late_spikes)})')
+                     label='Post-stim Std')
+    plt.plot(time_ms, late_mean, 'r-', label=f'Post-stim Mean (n={len(late_spikes)})')
     
-    plt.title('Comparison of Early (<60s) vs Late (>90s) Spike Waveforms')
+    plt.title('Comparison of Pre-stim vs Post-stim Spike Waveforms')
     plt.xlabel('Time (ms)')
     plt.ylabel('Amplitude (µV)')
     plt.legend()
@@ -295,10 +295,10 @@ def compare_early_late_waveforms(spike_waveforms_dict, spike_times, early_thresh
     plt.show()
     
     # Print some basic statistics
-    print(f"Number of early spikes: {len(early_spikes)}")
-    print(f"Number of late spikes: {len(late_spikes)}")
-    print(f"Early mean amplitude: {np.max(early_mean)-np.min(early_mean):.2f} µV")
-    print(f"Late mean amplitude: {np.max(late_mean)-np.min(late_mean)::.2f} µV")
+    print(f"Number of pre-stim spikes: {len(early_spikes)}")
+    print(f"Number of post-stim spikes: {len(late_spikes)}")
+    print(f"Pre-stim mean amplitude: {np.max(early_mean)-np.min(early_mean):.2f} µV")
+    print(f"Post-stim mean amplitude: {np.max(late_mean)-np.min(late_mean):.2f} µV")
 
 def plot_evoked_waveforms(spike_waveforms_dict, stim_start, stim_length):
     """
