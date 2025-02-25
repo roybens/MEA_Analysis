@@ -295,10 +295,18 @@ def compare_early_late_waveforms(spike_waveforms_dict, spike_times, early_thresh
     plt.show()
     
     # Print some basic statistics
+    early_duration = early_threshold  # Duration is from 0 to early_threshold
+    late_duration = max(spike_times) - late_threshold  # Duration from late_threshold to end
+    
+    early_hz = len(early_spikes) / early_duration
+    late_hz = len(late_spikes) / late_duration
+    
     print(f"Number of pre-stim spikes: {len(early_spikes)}")
     print(f"Number of post-stim spikes: {len(late_spikes)}")
     print(f"Pre-stim mean amplitude: {np.max(early_mean)-np.min(early_mean):.2f} µV")
     print(f"Post-stim mean amplitude: {np.max(late_mean)-np.min(late_mean):.2f} µV")
+    print(f"Pre-stim firing rate: {early_hz:.2f} Hz")
+    print(f"Post-stim firing rate: {late_hz:.2f} Hz")
 
 def plot_evoked_waveforms(spike_waveforms_dict, stim_start, stim_length):
     """
