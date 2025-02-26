@@ -51,8 +51,8 @@ stream_handler.setFormatter(formatter)
 '''
 Functions. Newer to older.
 '''
-def load_waveforms(output_folder):
-    waveforms = si.load_waveforms(output_folder)
+def load_waveforms(output_folder, sorting=None):
+    waveforms = si.load_waveforms(output_folder, sorting=sorting)
     return waveforms
 
 def load_kilosort2_results(output_folder):
@@ -136,8 +136,20 @@ def kilosort2_wrapper(recording, output_folder, sorting_params=None, verbose=Fal
     #sorting_params['n_jobs'] = 1
     #sorting_params = ss.Kilosort2_5Sorter.default_params()
     
+    # print waveform length for debugging
+    # print(f'waveform length param: {sorting_params["wave_length"]}')
+    # import sys
+    # sys.exit()
+    
     try:
         print(f"Output folder: {output_folder}")
+        if os.path.exists(output_folder):
+            print(f"Output folder exists: {output_folder}")
+            print(f"Removing existing output folder: {output_folder}")
+            shutil.rmtree(output_folder)
+        print(f"Beginning Kilosort2 spike sorting.")
+        from pprint import pprint
+        pprint(sorting_params)
         # import sys
         # sys.exit()
         sorting = ss.run_sorter(
@@ -853,7 +865,7 @@ def preprocess(recording):  ## some hardcoded stuff.
 
     return recording_cmr
 
-def extract_waveforms(recording, sorting, folder, load_if_exists = False, n_jobs = 4, sparse = True):
+def extract_waveforms(recording, sorting, folder, load_if_exists = False, n_jobs = 4, sparse = True, ms_before = 3, ms_after = 3):
     
     #init
     print (f"Extracting waveforms for {len(sorting.get_unit_ids())} units")
@@ -884,7 +896,9 @@ def extract_waveforms(recording, sorting, folder, load_if_exists = False, n_jobs
     print(f"Saving waveforms to {folder}...")
     if not os.path.exists(folder):
         os.makedirs(folder)    
-    waveforms = si.extract_waveforms(recording_chunk, seg_sort, folder=folder, overwrite=True, load_if_exists=load_if_exists, sparse = sparse, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
+    waveforms = si.extract_waveforms(recording_chunk, seg_sort, folder=folder, overwrite=True, load_if_exists=load_if_exists, sparse = sparse, 
+                                     ms_before=ms_before, ms_after=ms_after,
+                                     allow_unfiltered=True,**job_kwargs)
     
     # return
     return waveforms
