@@ -39,6 +39,19 @@ end
 
 % extract runID info from reference excel sheet
 refTable = readtable(refDir);
+
+% % Convert the 'Assay' column to lowercase and trim any leading/trailing whitespace
+%assayColumn = strtrim(lower(refTable.Assay));
+% 
+% % Find rows that contain 'network today' or 'network'
+% containsNetworkToday = contains(assayColumn, 'network today');
+% containsNetwork = contains(assayColumn, 'network');
+% 
+% % Combine the conditions using logical OR
+% combinedCondition = containsNetworkToday | containsNetwork;
+% 
+% % Extract unique run_ids based on the combined condition
+% run_ids = unique(refTable.Run_(combinedCondition)); 
 run_ids = unique(refTable.Run_);
 
 % defines
@@ -119,10 +132,12 @@ for k = 1 : numFiles
 
         
         neuronTypes = refTable.NeuronSource(idx);
+        
         if iscell(neuronTypes)
         neuronTypes = strsplit(neuronTypes{1}, ',');
 
         end
+        assayColumn = refTable.Assay(idx);
         numWells = length(wellsIDs);
         fileResults = cell(numWells, 1);
         skippedWells = cell(numWells,1);
@@ -176,10 +191,10 @@ for k = 1 : numFiles
             Active_area = sum(idx)/length(idx)*100;
             
                   % Create a new row for the table
-            fileResults{z} = table(scan_runID, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
+            fileResults{z} = table(scan_runID,assayColumn, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
                    scan_meanFiringRate, scan_meanSpikeAmplitude,Active_area,...
                    'VariableNames', {
-            'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
+            'Run_ID','AssayType', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
             'Mean_FiringRate','Mean_SpikeAmplitude','Active_area'...
             });
             catch ME
