@@ -82,7 +82,7 @@ function [] = compileNetworkFiles(data)
     %%parallelizing the files processsing
 
     % %%Specify the exact number of cores to use
-    numCores = 3;  % Adjust this number based on your needs and resource availability
+    numCores = 6;  % Adjust this number based on your needs and resource availability
 
     % Initialize or modify the existing parallel pool
     currentPool = gcp('nocreate');  % Check for existing parallel pool
@@ -136,7 +136,7 @@ function [] = compileNetworkFiles(data)
             if ismember(',', neuronTypes{1})
                 neuronTypes = strsplit(neuronTypes{1}, ',');
             end
-            
+            assayColumn = refTable.Assay(idx);
             numWells = length(wellsIDs);
             fileResults = cell(numWells, 1);
             skippedWells = cell(numWells,1);
@@ -416,6 +416,7 @@ function [] = compileNetworkFiles(data)
                     AbsBurstPeakStrings = {''};
                     BurstDurationStrings = {''};
                     spikesPerBurstStrings = {''};
+                    baselineFiringRate = mean(networkAct.firingRate);
 
                     else
                     % Initialize the spikesPerBurst array to zeros 
@@ -450,21 +451,20 @@ function [] = compileNetworkFiles(data)
                     stdBurstDuration = std(meanBurstDuration);
                     covSpikesPerBurst = (stdSpikesPerBurst/meanSpikesPerBurst)*100;
                     covBurstDuration = (stdBurstDuration/meanBurstDuration) * 100;
-                    if isempty(edges)
-                        % If edges are empty, use all time points
-                        baselineFiringRate = mean(networkAct.firingRate);
-                    else
-                        % Otherwise, exclude the times within the burst intervals
-                        excludeIdx = false(size(networkAct.time));
+                    % Default value in case no bursts are detected
+                    baselineFiringRate = mean(networkAct.firingRate);
                     
+                    if ~isempty(edges)
+                        excludeIdx = false(size(networkAct.time));
                         for i = 1:size(edges, 1)
                             excludeIdx = excludeIdx | (networkAct.time >= edges(i,1) & networkAct.time <= edges(i,2));
                         end
-                    
                         includeIdx = ~excludeIdx;
-                        baselineFiringRate = mean(networkAct.firingRate(includeIdx));
+                        if any(includeIdx)  % Avoid empty selection leading to NaN values
+                            baselineFiringRate = mean(networkAct.firingRate(includeIdx));
+                        end
                     end
-                                        
+                                                            
                     % Convert spikesPerBurst to a comma-separated string
                     IBIStrings = {strjoin(arrayfun(@num2str, networkStats.maxAmplitudeTimeDiff, 'UniformOutput', false), ',')};
                     BurstPeakStrings = {strjoin(arrayfun(@num2str, networkStats.maxAmplitudesValues, 'UniformOutput', false), ',')};
@@ -487,7 +487,7 @@ function [] = compileNetworkFiles(data)
                     AbsBurstPeakStrings = {''};
                     BurstDurationStrings = {''};
                     spikesPerBurstStrings = {''};
-
+                    baselineFiringRate = mean(networkAct.firingRate);
                 end
                 %totalTime = toc;  % Measure the total elapsed time after the loop
     
@@ -613,7 +613,7 @@ function [] = compileNetworkFiles(data)
                 %channelISIStrings = cellfun(@(x) strjoin(arrayfun(@num2str, x, 'UniformOutput', false), ','), ISIs, 'UniformOutput', false);
                 %combinedISIString = strjoin(channelISIStrings, ';');   
             % Add spikesPerBurst to the table
-                  fileResults{z} = table(scan_runID, scan_div, wellID, strtrim({neuronSourceType{1}}), hd5Date, {scan_chipID}, ...
+                  fileResults{z} = table(scan_runID, scan_div,assayColumn, wellID, strtrim({neuronSourceType{1}}), hd5Date, {scan_chipID}, ...
                 meanIBI, covIBI, meanBurstPeak, covBurstPeak, ...
                 nBursts, meanSpikesPerBurst, covSpikesPerBurst, meanAbsBP, covAbsBP, meanBurstDuration, covBurstDuration, ...
                 meanISI, covISI, ...
@@ -621,7 +621,7 @@ function [] = compileNetworkFiles(data)
                 meanBurstISIOutside, covBurstISIOutside, ...
                 fanoFactor, burstRate,baselineFiringRate, IBIStrings, BurstPeakStrings, AbsBurstPeakStrings, BurstDurationStrings, spikesPerBurstStrings, ...
                 'VariableNames', {
-                'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
+                'Run_ID', 'DIV','Assay', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
                 'mean_IBI', 'cov_IBI', 'mean_Burst_Peak', 'cov_Burst_Peak', ...
                 'Number_Bursts', 'mean_Spike_per_Burst', 'cov_Spike_per_Burst', 'mean_Burst_Peak_Abs', 'cov_Burst_Peak_Abs', 'mean_BurstDuration', 'cov_BurstDuration', ...
                 'MeanNetworkISI', 'CoVNetworkISI', ...
@@ -640,11 +640,11 @@ function [] = compileNetworkFiles(data)
                 else
                 %%
               % Create a new row for the table, now including combinedISIString
-                fileResults{z} = table(scan_runID, scan_div, wellID, strtrim({neuronSourceType{1}}), hd5Date, {scan_chipID}, ...
+                fileResults{z} = table(scan_runID, scan_div, assayColumn, wellID, strtrim({neuronSourceType{1}}), hd5Date, {scan_chipID}, ...
                        meanIBI,covIBI, meanBurstPeak,covBurstPeak, meanBPNorm,covBPNorm, meanAbsBP,covAbsBP, ...
                        nBursts, meanSpikesPerBurst,covSpikesPerBurst, meanBurstDuration,covBurstDuration,...
                        'VariableNames', {
-                'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
+                'Run_ID', 'DIV', 'Assay','Well', 'NeuronType', 'Time', 'Chip_ID', ...
                 'mean_IBI','cov_IBI', 'mean_Burst_Peak','cov_Burst_Peak',...
                 'Number_Bursts', 'mean_Spike_per_Burst','cov_Spike_per_Burst','mean_Burst_Peak_Abs','cov_Burst_Peak_Abs', 'mean_BurstDuration','cov_BurstDuration',...             
                 });
@@ -773,10 +773,24 @@ function [] = compileNetworkFiles(data)
                  % Display total elapsed time
                      %fprintf('in Well %d Total elapsed time for plot and save all graphs: %f seconds\n', wellID,totalTime); 
             end
-                catch ME
-                fprintf('Error: %s\n', ME.message);
-                skippedWells{z} = [pathFileNetwork,num2str(wellID)];
-                    continue
+               catch ME
+                    % Print general error message
+                    fprintf('Error: %s\n', ME.message);
+                    
+                    % Print error identifier
+                    fprintf('Error ID: %s\n', ME.identifier);
+                    
+                    % Print stack trace (full details of where the error occurred)
+                    fprintf('Stack trace:\n');
+                    for i = 1:length(ME.stack)
+                        fprintf('  File: %s\n', ME.stack(i).file);
+                        fprintf('  Function: %s\n', ME.stack(i).name);
+                        fprintf('  Line: %d\n', ME.stack(i).line);
+                    end
+                    
+                    % Save the skipped well for logging
+                    skippedWells{z} = [pathFileNetwork, num2str(wellID)];
+                    continue;
                 end
 
             end
