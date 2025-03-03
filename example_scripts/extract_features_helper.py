@@ -179,7 +179,7 @@ def extract_network_metrics(
     assert sorting_object is not None, f"Error: sorting_object is None"
     
     # import network analysis module
-    from RBS_network_models.network_analysis import get_experimental_network_activity_metrics
+    from MEA_Analysis.NetworkAnalysis.awNetworkAnalysis.network_analysis import get_experimental_network_activity_metrics
     
     # get network metrics
     well_id = f'well{str(0).zfill(2)}{stream_num}'
