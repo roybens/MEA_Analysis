@@ -8,6 +8,7 @@ import random
 import multiprocessing
 import os
 import scipy.stats as stats
+import traceback
 # =================== #
 # Function Definitions
 
@@ -18,7 +19,7 @@ def build_sequence_stacks(network_metrics, burst_metrics, **kwargs):
     source = kwargs['source']
     if source == 'experimental':
         #classified_units = network_metrics['classification_output']['classified_units']
-        unit_types = network_metrics['classification_output']['classification_units']
+        unit_types = network_metrics['classification_output']['classified_units']
     elif source == 'simulated':
         #classified_units = network_metrics['unit_types']
         unit_types = network_metrics['unit_types']
@@ -212,6 +213,20 @@ def dtw_burst_analysis(network_metrics, kwargs):
         return results, mega_results
     
     # Main ========================================
+    # check if doing dtw computations is possible.
+    # check if burst parts are available to compute dtw
+    bursting_data = network_metrics.get('bursting_data', None)
+    if bursting_data is not None:
+        burst_metrics = bursting_data.get('burst_metrics', None)
+        if burst_metrics is not None:
+            burst_parts = burst_metrics.get('burst_parts', None)
+            if 'Burst sequencing not enabled' in burst_parts:
+                network_metrics['dtw_output'] = 'Burst sequencing not enabled'
+                network_metrics['mega_dtw_output'] = 'Burst sequencing not enabled'
+                network_metrics['dtw_burst_analysis'] = 'Burst sequencing not enabled'
+                network_metrics['dtw_mega_burst_analysis'] = 'Burst sequencing not enabled'
+                return network_metrics
+    
     #init
     max_workers = kwargs.get('max_workers', 4)  
 
@@ -461,30 +476,34 @@ def dtw_analysis_dynamic_v2(sequence_stacks, data_path=None,
     
     def try_load_data(data_path):
         global global_matrix_value_list, sum_value, sum_sq_value, n_value
-        
-        if data_path is not None:
-            csv_path = os.path.join(data_path, 'dtw_analysis_dynamic_results.csv')
-            if os.path.exists(csv_path):
-                df = pd.read_csv(csv_path)
-                global_matrix = df.to_numpy()[:, 1:]  # Remove index column
+        try:
+            if data_path is not None:
+                csv_path = os.path.join(data_path, 'dtw_analysis_dynamic_results.csv')
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    global_matrix = df.to_numpy()
+                    global_matrix = df.to_numpy()[:, 1:]  # Remove index column
 
-                for idx, val in np.ndenumerate(global_matrix):
-                    if not np.isnan(val):
-                        global_matrix_value_list[idx[0] * num_sequences + idx[1]] = val
-                        global_matrix_value_list[idx[1] * num_sequences + idx[0]] = val
+                    for idx, val in np.ndenumerate(global_matrix):
+                        if not np.isnan(val):
+                            global_matrix_value_list[idx[0] * num_sequences + idx[1]] = val
+                            global_matrix_value_list[idx[1] * num_sequences + idx[0]] = val
 
-                # Update Shared Stats Based on Loaded Data
-                prev_computed = [global_matrix_value_list[i * num_sequences + j] 
-                                for i in range(num_sequences) for j in range(i + 1, num_sequences) 
-                                if not np.isnan(global_matrix_value_list[i * num_sequences + j])]
-                
-                sum_value.value = sum(prev_computed)
-                sum_sq_value.value = sum([x**2 for x in prev_computed])
-                n_value.value = len(prev_computed)
+                    # Update Shared Stats Based on Loaded Data
+                    prev_computed = [global_matrix_value_list[i * num_sequences + j] 
+                                    for i in range(num_sequences) for j in range(i + 1, num_sequences) 
+                                    if not np.isnan(global_matrix_value_list[i * num_sequences + j])]
+                    
+                    sum_value.value = sum(prev_computed)
+                    sum_sq_value.value = sum([x**2 for x in prev_computed])
+                    n_value.value = len(prev_computed)
 
-                print(f"Loaded {n_value.value} precomputed distances.")
-            else:
-                pass # data_path will be used to save results later
+                    print(f"Loaded {n_value.value} precomputed distances.")
+                else:
+                    pass # data_path will be used to save results later
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Error loading data: {e}")
             
             # return global_matrix_value_list, sum_value, sum_sq_value, n_value
         
@@ -540,6 +559,9 @@ def dtw_analysis_dynamic_v2(sequence_stacks, data_path=None,
         variance_dtw = (sum_sq_value.value / n_value.value) - mean_dtw ** 2
         std_dtw = np.sqrt(variance_dtw)
         cov_dtw = std_dtw / mean_dtw if mean_dtw > 0 and std_dtw > 0 else 0 # Coefficient of Variation
+        median_dtw = np.median(global_matrix_value_list)
+        min_dtw = np.min(global_matrix_value_list)
+        max_dtw = np.max(global_matrix_value_list)
         
         # 🔹 Convert Computed Distances into a Matrix
         global_matrix = np.array(global_matrix_value_list).reshape(num_sequences, num_sequences)
@@ -575,11 +597,15 @@ def dtw_analysis_dynamic_v2(sequence_stacks, data_path=None,
     
     # 🔹 Save Results
     results_dict = {
+        'dtw_distance_matrix': global_matrix,
         'mean_dtw': mean_dtw,
         'std_dtw': std_dtw,
         'variance_dtw': variance_dtw,
         'cov_dtw': cov_dtw,
-        'dtw_distance_matrix': global_matrix,
+        'median_dtw': np.median(global_matrix),
+        'min_dtw': np.min(global_matrix),
+        'max_dtw': np.max(global_matrix),
+
         'num_computations': n_value.value,
         #'effective_rate': effective_rate.value
     }

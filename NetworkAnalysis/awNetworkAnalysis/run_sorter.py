@@ -15,6 +15,11 @@ def run_sorter(
     ):
     
     #init
+    if not os.path.exists(sorted_output_dir): os.makedirs(sorted_output_dir)
+    if not os.path.exists(waveform_output_dir): os.makedirs(waveform_output_dir)
+    assert os.path.exists(raw_data_path), f'raw_data_path does not exist: {raw_data_path}'
+    
+    #paths
     print(f'raw_data_path: {raw_data_path}')
     #print(f'sorted_output_dir: {sorted_output_dir}')
     print(f'sorted_output_dir: {sorted_output_dir}')
