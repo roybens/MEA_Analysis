@@ -15,15 +15,15 @@ from sklearn.manifold import TSNE
 
 class StimulationAnalysis:
     def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9, peak_sign="neg"):
-        self.visible_artifact = False
-        self.spike_threshold = spike_threshold
+        self.visible_artifact = True # whether artifact is visible on graph
+        self.spike_threshold = spike_threshold # threshold for spike detection
         self.file_path = file_path
         self.rec_electrode = recording_electrode
         self.stim_electrode = stim_electrode
         self.artifact_electrode = artifact_electrode
         self.rec_channel = self.get_channel_id(recording_electrode)
         self.stim_channel = self.get_channel_id(stim_electrode)
-        self.peak_sign = peak_sign
+        self.peak_sign = peak_sign # "neg" or "pos" or "both" for spike detection
         self.stim_start = None
 
         self.channel_dict = {'Stim Channel': self.stim_channel,
@@ -41,7 +41,7 @@ class StimulationAnalysis:
         self.recording = se.read_maxwell(self.file_path)
         self.recording_bp = si.bandpass_filter(self.recording, freq_min=300, freq_max=3000)
 
-        self.all_channel_ids = self.recording.get_channel_ids()
+        self.all_channel_ids = self.recording.get_channel_ids() 
         self.fs = self.recording.get_sampling_frequency()
         self.num_chan = self.recording.get_num_channels()
         self.num_seg = self.recording.get_num_segments()
@@ -297,8 +297,8 @@ class StimulationAnalysis:
         print(f"Number of stims without spikes: {no_inter_stim_spikes}")
         avg_latency = total_latency / n
         print(f'evoked_peaks: {evoked_peaks}')
-        print(f"Num stims {((self.stim_length / self.stim_freq) - 1)}")
-        avg_spikes_per_stim = evoked_peaks / ((self.stim_length / self.stim_freq) - 1)
+        print(f"Num stims {(self.stim_length * self.stim_freq - 1)}")  
+        avg_spikes_per_stim = evoked_peaks / (self.stim_length * self.stim_freq - 1)  
 
         return avg_latency, avg_spikes_per_stim
 
@@ -761,39 +761,39 @@ class StimulationAnalysis:
             self.pre_stim_length = self.stim_start
             self.post_stim_length = self.total_recording - (self.stim_start + self.stim_length)
 
-        self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
+        self.plot_stim_traces(1, time_range=(8 / self.stim_freq), start_at=self.stim_start)
 
-        vis_artifact = input("Is the artifact being detected? (y/n): ").strip().lower()
+        # vis_artifact = input("Is the artifact being detected? (y/n): ").strip().lower()
 
-        if vis_artifact == 'y':
-            self.visible_artifact = True
-            print("Artifact detection set to visible (True).")
-            self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
-        elif vis_artifact == 'n':
-            self.visible_artifact = False
-        else:
-            print("Invalid input! Please enter 'y' for yes or 'n' for no.")
+        # if vis_artifact == 'y':
+        #     self.visible_artifact = True
+        #     print("Artifact detection set to visible (True).")
+        #     self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
+        # elif vis_artifact == 'n':
+        #     self.visible_artifact = False
+        # else:
+        #     print("Invalid input! Please enter 'y' for yes or 'n' for no.")
 
         
         self.plot_spike_counts('recording', 1)
 
-        print('Recording Electrode Overlapped Artifact: 0.005s window')
-        self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=True)
-        self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=False)
+        # print('Recording Electrode Overlapped Artifact: 0.005s window')
+        # self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=True)
+        # self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=False)
 
-        print('Stim Electrode Overlapped Stims 0.005s window')
-        self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=True)
-        self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=False)
+        # print('Stim Electrode Overlapped Stims 0.005s window')
+        # self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=True)
+        # self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=False)
 
-        print('Stim + recording Overlapped artifact 0.009s window')
-        self.overlap_stim_responses(0.009, electrode_type='recording', filter_artifact=True)
-        self.overlap_stim_responses(0.009, electrode_type='stim', filter_artifact=True)
+        # print('Stim + recording Overlapped artifact 0.009s window')
+        # self.overlap_stim_responses(0.009, electrode_type='recording', filter_artifact=True)
+        # self.overlap_stim_responses(0.009, electrode_type='stim', filter_artifact=True)
 
-        isi = self.isi()
-        isi_mean_std = self.calc_mean_isi(isi)
-        fanofactors = self.calculate_fano_factor(isi_mean_std)
-        print(f"Mean and std ISI: {isi_mean_std}")
-        print(f"Fanofactors: {fanofactors}")
+        # isi = self.isi()
+        # isi_mean_std = self.calc_mean_isi(isi)
+        # fanofactors = self.calculate_fano_factor(isi_mean_std)
+        # print(f"Mean and std ISI: {isi_mean_std}")
+        # print(f"Fanofactors: {fanofactors}")
     
     def plot_spike_types_on_trace(self, time_window=None):
         """
@@ -867,7 +867,6 @@ class StimulationAnalysis:
         plt.legend()
         plt.grid(True)
         plt.show()
-    
-    
 
-    
+
+
