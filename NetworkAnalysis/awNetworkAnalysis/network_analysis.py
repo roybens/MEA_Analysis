@@ -224,6 +224,20 @@ def plot_network_summary_v2(network_data, **kwargs):
         x_max = max([ax[0].get_xlim()[1], ax[1].get_xlim()[1]])
         ax[0].set_xlim(x_min, x_max)
         ax[1].set_xlim(x_min, x_max)
+        
+        ## override y axis to 17.5
+        ## ==================
+        #ax[0].set_ylim(0, 17.5)
+        ax[1].set_ylim(0, 17.5)
+        #ax[2].set_ylim(0, 17.5)
+        ##==================
+        
+        # override remove legends
+        # ==================
+        #ax[0].legend().remove()
+        ax[1].legend().remove()
+        # ==================
+        
         plt.tight_layout()
         
         # set limit on time as needed
@@ -266,6 +280,21 @@ def plot_network_summary_v2(network_data, **kwargs):
         ax[0].set_xlim(x_min, x_max)
         ax[1].set_xlim(x_min, x_max)
         ax[2].set_xlim(x_min, x_max)
+        
+        ## override y axis to 17.5
+        ## ==================
+        #ax[0].set_ylim(0, 17.5)
+        ax[1].set_ylim(0, 17.5)
+        ax[2].set_ylim(0, 17.5)
+        ##==================
+
+        # override remove legends
+        # ==================
+        #ax[0].legend().remove()
+        ax[1].legend().remove()
+        ax[2].legend().remove()
+        # ==================
+        
         plt.tight_layout()
         
         # set limit on time as needed
@@ -998,8 +1027,16 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
     network_data = locate_units(network_data, kwargs)
     if source == 'experimental': # for now only do with with experimental data
         network_data = compute_dynamic_time_warping(network_data, kwargs)
-    if source == 'simulated': network_data = add_sim_specific_data(network_data, kwargs) # for now only do with simulated data
+    if source == 'simulated': 
+        network_data = add_sim_specific_data(network_data, kwargs) # for now only do with simulated data
     network_data = compute_summary_metrics(network_data, kwargs)
+    
+    # debug
+    # unit_types = network_data['unit_types']
+    # print(f'Unit types: {unit_types}')
+    # import sys
+    # sys.exit()
+    
     return network_data
 
 '''# aw 2025-02-26+ updates above this point'''
@@ -1587,8 +1624,14 @@ def compute_wf_metrics(best_channel_waveforms, sampling_rate, plot_wf=False, sav
             fig_dir = os.path.dirname(fig_name)
             if not os.path.exists(fig_dir):
                 os.makedirs(fig_dir)
-            plt.savefig(fig_name, dpi=300)
+            png_path = fig_name
+            pdf_path = fig_name.replace('.png', '.pdf')
+            plt.savefig(png_path, dpi=300)
+            plt.savefig(pdf_path)
             print(f"Figure saved to {fig_name}")
+            print(f"Figure saved to {pdf_path}")
+            #plt.savefig(fig_name, dpi=300)
+            #print(f"Figure saved to {fig_name}")
         else:
             plt.show()
             
@@ -4872,7 +4915,8 @@ def plot_network_summary(
     bursting_fig_path=None,
     save_path=None,
     mode='2p',
-    limit_seconds = None    
+    limit_seconds = None,
+    plot_class = False,    
     ):
     # assertions
     assert save_path is not None, f"Error: save_path must be specified in plot_network_activity"
@@ -4883,35 +4927,6 @@ def plot_network_summary(
         #HACK: dumb way to to allow for pdf or png save paths - fix later I guess.
         if '.pdf' in save_path: save_path = save_path.replace('.pdf', '.npy') #switch it back to .npy so that it gets handled correctly
         if '.png' in save_path: save_path = save_path.replace('.png', '.npy') 
-        
-        # assert 'network_metrics' in save_path, f"Error: save_path must contain 'network_metrics'" # HACK: this is a hack to make sure we're saving in the right place
-        # split_path = save_path.split('network_metrics/')
-        # raster_plot_path = plot_path.replace('.npy', '_raster_plot.pdf')
-        # # raster_fig_path = plot_path.replace('.npy', '_raster_fig.pkl')
-        # # raster_plot_path_png = plot_path.replace('.npy', '_raster_plot.png')
-        # bursting_plot_path = plot_path.replace('.npy', '_bursting_plot.pdf')
-        # bursting_fig_path = plot_path.replace('.npy', '_bursting_fig.pkl')
-        # bursting_plot_path_png = plot_path.replace('.npy', '_bursting_plot.png')       
-
-        #get parent dir of summary plot
-        #parent_dir = os.path.dirname(save_path)
-        
-        # dir for individual pannels
-        # pannel_dir = parent_dir + '/pannels/'
-        # if not os.path.exists(pannel_dir):
-        #     os.makedirs(pannel_dir)
-            
-        # base path for all plots
-        #basename = os.path.basename(save_path)
-        
-        #define pannel paths
-        # plot_path = pannel_dir
-        # raster_plot_path = plot_path + basename.replace('.npy', '_raster_plot.pdf')
-        # raster_fig_path = plot_path + basename.replace('.npy', '_raster_fig.pkl')
-        # raster_plot_path_png = plot_path + basename.replace('.npy', '_raster_plot.png')
-        # bursting_plot_path = plot_path + basename.replace('.npy', '_bursting_plot.pdf')
-        # bursting_fig_path = plot_path + basename.replace('.npy', '_bursting_fig.pkl')
-        # bursting_plot_path_png = plot_path + basename.replace('.npy', '_bursting_plot.png')
         
         # summary plot path
         summary_plot_path = save_path.replace('.npy', '.pdf')
@@ -4929,6 +4944,7 @@ def plot_network_summary(
     bursting_ax = network_metrics['bursting_data']['ax']
     mega_bursting_ax = network_metrics['mega_bursting_data']['ax'] 
     spiking_data_by_unit = network_metrics['spiking_data']['spiking_metrics_by_unit']    
+    unit_types = network_metrics['unit_types']
     
     # choose mode:
     # mode = '2p' - 2 panels
@@ -4941,7 +4957,7 @@ def plot_network_summary(
         # plot raster plot
         print("Generating raster plot...")
         #spiking_data_by_unit = network_metrics['spiking_data']['spiking_data_by_unit']
-        ax[0] = plot_raster_plot_experimental(ax[0], spiking_data_by_unit)
+        ax[0] = plot_raster_plot_experimental(ax[0], spiking_data_by_unit, unit_types=unit_types, plot_class=plot_class)
 
         # plot network bursting plots
         print("Generating network bursting plot...")
@@ -4957,6 +4973,14 @@ def plot_network_summary(
         x_max = max([ax[0].get_xlim()[1], ax[1].get_xlim()[1]])
         ax[0].set_xlim(x_min, x_max)
         ax[1].set_xlim(x_min, x_max)
+        
+        ## override y axis to 17.5
+        ## ==================
+        ax[0].set_ylim(0, 17.5)
+        ax[1].set_ylim(0, 17.5)
+        #ax[2].set_ylim(0, 17.5)
+        ##==================
+        
         plt.tight_layout()
         
     elif mode == '3p':
@@ -4966,7 +4990,7 @@ def plot_network_summary(
         # plot raster plot
         print("Generating raster plot...")
         #spiking_data_by_unit = network_metrics['spiking_data']['spiking_data_by_unit']
-        ax[0] = plot_raster_plot_experimental(ax[0], spiking_data_by_unit)
+        ax[0] = plot_raster_plot_experimental(ax[0], spiking_data_by_unit, unit_types=unit_types, plot_class=plot_class)
         
         # plot network bursting plots
         print("Generating network bursting plot...")
@@ -4985,6 +5009,14 @@ def plot_network_summary(
         ax[0].set_xlim(x_min, x_max)
         ax[1].set_xlim(x_min, x_max)
         ax[2].set_xlim(x_min, x_max)
+        
+        ## override y axis to 17.5
+        ## ==================
+        ax[0].set_ylim(0, 17.5)
+        ax[1].set_ylim(0, 17.5)
+        ax[2].set_ylim(0, 17.5)
+        ##==================
+        
         plt.tight_layout()
         
     # # #for debugging, limit x-axis to 35 seconds (in ms)
@@ -5802,7 +5834,7 @@ def plot_network_summary_slide(sim_data_path,
         privileged_print("\tComparison summary slide saved.")
         privileged_print(f'\tTime taken: {time()-start_summary_slide} seconds')
 
-def plot_raster_plot_experimental(ax, spiking_data_by_unit):
+def plot_raster_plot_experimental(ax, spiking_data_by_unit, unit_types=None, plot_class=False):
     """Plot a raster plot for spiking data."""
     
     # Calculate the average firing rate for each unit
@@ -5818,13 +5850,37 @@ def plot_raster_plot_experimental(ax, spiking_data_by_unit):
     
     # Create a mapping from original gid to new y-axis position
     gid_to_ypos = {gid: pos for pos, gid in enumerate(sorted_units)}
+    #gid_to_ypos = {gid: pos for pos, gid in sorted_units.items()}
     
     # Plot the units in the sorted order
-    for gid in sorted_units:
-        spike_times = spiking_data_by_unit[gid]['spike_times']
-        spike_times = [spike_times] if isinstance(spike_times, (int, float)) else spike_times
-        ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'b.', markersize=2)
-
+    #print(f'PLOT CLASS MODE: {plot_class}')
+    if not plot_class: # typical raster plot
+        for gid in sorted_units:
+            spike_times = spiking_data_by_unit[gid]['spike_times']
+            spike_times = [spike_times] if isinstance(spike_times, (int, float)) else spike_times
+            ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'b.', markersize=2)
+    else: # plot class
+        #init legend for e/i units
+        # e - blue, i - red
+        ax.plot([], [], 'b.', markersize=2, label='E')
+        ax.plot([], [], 'r.', markersize=2, label='I')
+        ax.plot([], [], 'g.', markersize=2, label='U')
+        ax.legend()
+        #print(unit_types)
+        for gid in sorted_units:
+            spike_times = spiking_data_by_unit[gid]['spike_times']
+            spike_times = [spike_times] if isinstance(spike_times, (int, float)) else spike_times
+            
+            # if gid not in unit_types, plot as green - unknown, avoid error
+            if unit_types is None or gid not in unit_types:
+                ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'g.', markersize=2)
+                continue
+            
+            if unit_types[gid] == 'E':
+                ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'b.', markersize=2)
+            elif unit_types[gid] == 'I':
+                ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'r.', markersize=2)
+            #ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'b.', markersize=2)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Unit ID (sorted by firing rate)')
     ax.set_title('Raster Plot')

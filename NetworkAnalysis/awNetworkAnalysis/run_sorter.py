@@ -41,12 +41,16 @@ def run_sorter(
     
     #modify params as needed
     kilosort2_params['keep_good_only'] = True # false by default
-    kilosort2_params['n_jobs'] = 32
+    #kilosort2_params['n_jobs'] = 32
     # change chunk size from '1s' to half a second to help with memory issues
-    kilosort2_params['chunk_duration'] = '500ms'
+    #kilosort2_params['chunk_duration'] = '500ms'
     #kilosort2_params['NT'] = 100 # number of timepoints in waveforms
     #kilosort2_params['wave_length'] = 81 # increase from default of 61 to 100 to help capture more information for long refractory periods typical of excitatory neurons
     #kilosort2_params['n_jobs'] = 64
+    kilosort2_params['minfr_goodchannels'] = 0
+    kilosort2_params['minFR'] = 0
+    kilosort2_params['detect_threshold'] = 3
+    #kilosort2_params['nfilt_factor'] = 1
     
     
     for wellid, recording in recordings.items():
