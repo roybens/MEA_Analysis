@@ -551,22 +551,19 @@ def classify(network_data, plot_wfs=False, **kwargs):
         # inhibitory_units = features_pca[cluster_labels == 0]
         excitatory_units = features_pca[cluster_labels == excitatory_cluster]
         inhibitory_units = features_pca[cluster_labels == inhibitory_cluster]
-        plt.scatter(excitatory_units[:, 0], excitatory_units[:, 1], c='blue', s=50, alpha=0.5, label='Excitatory')
-        plt.scatter(inhibitory_units[:, 0], inhibitory_units[:, 1], c='red', s=50, alpha=0.5, label='Inhibitory')
+        plt.scatter(excitatory_units[:, 0], excitatory_units[:, 1], c='blue', s=100, alpha=0.5, label='Excitatory')
+        plt.scatter(inhibitory_units[:, 0], inhibitory_units[:, 1], c='red', s=100, alpha=0.5, label='Inhibitory')
         
         plt.xlabel('Principal Component 1')
         plt.ylabel('Principal Component 2')
         plt.title('K-Means Clustering of Neuronal Features')
         
-        # add centroids - NOTE: these arent classified as inhib/excit at this step
+        # add centroids - NOTE: these aren't classified as inhib/excit at this step
         centroids = kmeans.cluster_centers_
-        plt.scatter(centroids[:, 0], centroids[:, 1], c='black', s=200, label='Cluster Centroids')
         
-        inhib_centroid_loc = cluster_metrics[inhibitory_cluster]['centroid']
-        excit_centroid_loc = cluster_metrics[excitatory_cluster]['centroid']
-        #plot text for centroids
-        plt.text(inhib_centroid_loc[0], inhib_centroid_loc[1]*1.25, 'Inhibitory', fontsize=12, ha='center', va='center', color='black')
-        plt.text(excit_centroid_loc[0], excit_centroid_loc[1]*1.25, 'Excitatory', fontsize=12, ha='center', va='center', color='black')
+        # Plot inhibitory and excitatory centroids with different colors and larger empty circles
+        plt.scatter(centroids[inhibitory_cluster, 0], centroids[inhibitory_cluster, 1], edgecolor='red', facecolor='none', s=300, label='Inhib. Centroid')
+        plt.scatter(centroids[excitatory_cluster, 0], centroids[excitatory_cluster, 1], edgecolor='blue', facecolor='none', s=300, label='Excit. Centroid')
         
         # save
         plt.tight_layout()
@@ -577,10 +574,19 @@ def classify(network_data, plot_wfs=False, **kwargs):
         cluster_output_path = wfs_output_path.replace('waveforms', 'class_cluster_plots')
         if not os.path.exists(cluster_output_path):
             os.makedirs(cluster_output_path)
-        plt.savefig(os.path.join(cluster_output_path, 'cluster_plot.png'))
-        
+        #plt.savefig(os.path.join(cluster_output_path, 'cluster_plot.png'))
+        png_path = os.path.join(cluster_output_path, 'cluster_plot.png')
+        pdf_path = png_path.replace('png', 'pdf')
+        plt.savefig(png_path, dpi=300)
+        plt.savefig(pdf_path)
+        print(f"Saved cluster plot to {png_path}")
+        print(f"Saved cluster plot to {pdf_path}")
         plt.close()
-        print(f"Saved cluster plot to {os.path.join(cluster_output_path, 'cluster_plot.png')}")
+        
+        # import sys
+        # sys.exit()
+
+        #print(f"Saved cluster plot to {os.path.join(cluster_output_path, 'cluster_plot.png')}")
     
     # ** Store Classification Results **
     # init dict
@@ -612,6 +618,15 @@ def classify_neurons_v2(network_data, plot_wfs=False, **kwargs):
         'features_pca': features_pca,
         'cluster_info': cluster_info_dict   
     }
+    
+    # save as json
+    # import json
+    # classification_output_path = os.path.join(network_data['waveform_output'], 'classified_units.json')
+    # with open(classification_output_path, 'w') as f:
+    #     json.dump(classified_units, f, indent=4)
+    # print(f"Saved classified_units to {classification_output_path}")
+    
+    #print(classified_units)
     
     network_data['classification_output'] = classification_dict
     
