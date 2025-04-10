@@ -198,7 +198,6 @@ function [] = compileNetworkFiles(data)
                 div0_datetime = datetime(div0_date, 'InputFormat', 'yourInputFormatHere');
                 scan_div = floor(days(hd5Date - div0_datetime));
                 
-        
                 % compute Network Activity and detect bursts
                 relativeSpikeTimes = mxw.util.computeRelativeSpikeTimes(networkData);
                 networkAct = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize,'GaussianSigma', gaussianSigma);
@@ -368,7 +367,7 @@ function [] = compileNetworkFiles(data)
                   end
                 end
                 %average spikesPerBurst        
-                if length(networkStats.maxAmplitudesTimes)>3
+                if length(networkStats.maxAmplitudesTimes)> 0
                     peakAmps = networkStats.maxAmplitudesValues';
                     peakTimes = networkStats.maxAmplitudesTimes;
                     
