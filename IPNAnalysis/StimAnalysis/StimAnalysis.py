@@ -788,52 +788,43 @@ class StimulationAnalysis:
 
         return waveforms
     
-    def run_full_analysis(self):
-        # get length of stim period in seconds
-        if self.stim_length == None:
-            length = input("Please input length of stim period in seconds: ")
-            self.stim_length = float(length)
+    def run_full_analysis(self, stim_start: float, stim_length: float, filter_artifact: bool = True, plot_traces: bool = True, plot_spike_counts: bool = True):
+        """
+        Runs the full stimulation analysis pipeline.
 
-        # get time in seconds when stim starts
-        if self.stim_start == None:
-            time = input("Please input when stimming starts")
-            self.stim_start = float(time)
-            self.pre_stim_length = self.stim_start
-            self.post_stim_length = self.total_recording - (self.stim_start + self.stim_length)
+        Parameters:
+        -----------
+        stim_start : float
+            Time (in seconds) when stimulation starts.
+        stim_length : float
+            Duration (in seconds) of the stimulation period.
+        plot_traces : bool
+            If True, plots stim and recording traces.
+        plot_spike_counts : bool
+            If True, plots spike counts across time.
+        """
 
-        self.plot_stim_traces(1, time_range=(8 / self.stim_freq), start_at=self.stim_start)
+        self.stim_start = stim_start
+        self.stim_length = stim_length
+        self.pre_stim_length = stim_start
+        self.post_stim_length = self.total_recording - (stim_start + stim_length)
+        self.visible_artifact = filter_artifact
 
-        # vis_artifact = input("Is the artifact being detected? (y/n): ").strip().lower()
+        self.peak_counts_df = self.get_spike_counts()
 
-        # if vis_artifact == 'y':
-        #     self.visible_artifact = True
-        #     print("Artifact detection set to visible (True).")
-        #     self.plot_stim_traces(1, time_range=(8 * self.stim_freq), start_at=self.stim_start)
-        # elif vis_artifact == 'n':
-        #     self.visible_artifact = False
-        # else:
-        #     print("Invalid input! Please enter 'y' for yes or 'n' for no.")
+        if plot_traces:
+            self.plot_stim_traces(trial_no=1, time_range=(8 / self.stim_freq), start_at=stim_start)
 
-        
-        self.plot_spike_counts('recording', 1)
+        if plot_spike_counts:
+            self.plot_spike_counts(electrode_type='recording', trial_no=1)
 
-        # print('Recording Electrode Overlapped Artifact: 0.005s window')
-        # self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=True)
-        # self.overlap_stim_responses(0.005, electrode_type='recording', filter_artifact=False)
+        # Uncomment these for deeper metrics:
+        isi = self.isi()
+        isi_mean_std = self.calc_mean_isi(isi)
+        fanofactors = self.calculate_fano_factor(isi_mean_std)
+        print(f"Mean and std ISI: {isi_mean_std}")
+        print(f"Fano factors: {fanofactors}")
 
-        # print('Stim Electrode Overlapped Stims 0.005s window')
-        # self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=True)
-        # self.overlap_stim_responses(0.005, electrode_type='stim', filter_artifact=False)
-
-        # print('Stim + recording Overlapped artifact 0.009s window')
-        # self.overlap_stim_responses(0.009, electrode_type='recording', filter_artifact=True)
-        # self.overlap_stim_responses(0.009, electrode_type='stim', filter_artifact=True)
-
-        # isi = self.isi()
-        # isi_mean_std = self.calc_mean_isi(isi)
-        # fanofactors = self.calculate_fano_factor(isi_mean_std)
-        # print(f"Mean and std ISI: {isi_mean_std}")
-        # print(f"Fanofactors: {fanofactors}")
     
     def plot_spike_types_on_trace(self, time_window=None):
         """
