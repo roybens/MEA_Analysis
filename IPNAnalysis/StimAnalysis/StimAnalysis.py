@@ -14,6 +14,46 @@ from sklearn.manifold import TSNE
 
 
 class StimulationAnalysis:
+    """
+    A class to analyze neuronal responses to electrical stimulation in MEA recordings.
+
+    Attributes
+    ----------
+    file_path : str
+        Path to the raw .h5 file from the MEA recording.
+    stim_frequency : float
+        Frequency (Hz) of stimulation during the experiment.
+    recording_electrode : int
+        Electrode ID used for recording spikes.
+    stim_electrode : int
+        Electrode ID used for stimulation.
+    artifact_electrode : int, optional
+        Electrode ID used for measuring visible artifacts (if applicable).
+    spike_threshold : float, optional
+        Amplitude threshold for spike detection on the recording electrode (default: 9).
+    peak_sign : str, optional
+        Sign of the peaks to detect: "neg", "pos", or "both" (default: "neg").
+
+    Usage
+    -----
+    analysis = StimulationAnalysis(
+        file_path='path/to/file.raw.h5',
+        stim_frequency=4,
+        recording_electrode=73,
+        stim_electrode=141,
+        spike_threshold=9
+    )
+
+    analysis.run_full_analysis(stim_start=60, stim_length=120)
+
+    Notes
+    -----
+    After initializing, call `run_full_analysis()` to generate summary plots
+    and perform preliminary spike analysis.
+    Additional methods support artifact filtering, waveform visualization,
+    and ISI/fano factor analysis.
+    """
+
     def __init__(self, file_path, stim_frequency, recording_electrode, stim_electrode, artifact_electrode=None, spike_threshold=9, peak_sign="neg"):
         self.visible_artifact = True # whether artifact is visible on graph
         self.spike_threshold = spike_threshold # threshold for spike detection
