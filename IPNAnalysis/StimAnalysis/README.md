@@ -64,6 +64,26 @@ This will:
 - ISI and fano factor analysis
 - Modular, customizable methods for deeper analysis
 
+### Artifact Filtering
+
+When `filter_artifact=True` is passed to `run_full_analysis()` (or set manually via `self.visible_artifact = True`), the pipeline will:
+
+- Identify and remove stimulus-locked artifacts from spike detection on the recording electrode
+- Apply inter-spike interval (ISI) filtering to reduce spike bursts
+- Use the cleaned spike data for all downstream steps, including:
+  - Spike count plots
+  - ISI and Fano factor analysis
+  - Spike waveform extraction and visualization
+
+This is recommended when the stimulation artifact overlaps with neural spikes or introduces false positives in the detection phase.
+
+
+#### Example usage:
+
+```python
+analysis.run_full_analysis(stim_start=60, stim_length=120, filter_artifact=True)
+``` 
+
 ## Custom Analysis
 
 You can call additional methods such as:
