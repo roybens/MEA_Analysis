@@ -1,3 +1,4 @@
+# imports =======================================================
 import os
 import shutil
 import logging
@@ -7,26 +8,16 @@ import subprocess
 import numpy as np
 import dill
 import h5py
+from MEA_Analysis.MEAProcessingLibrary import mea_processing_library as MPL
+from pprint import pprint
 
-from axon_reconstructor.utils import lib_sorting_functions as sorter
-from axon_reconstructor.utils import lib_waveform_functions as waveformer
-from axon_reconstructor.utils import extract_templates as templater
+# local imports ===================================================
+from .utils import lib_sorting_functions as sorter
+from .utils import lib_waveform_functions as waveformer
+from .utils import extract_templates as templater
+from ..modules.analyze_and_reconstruct.reconstruct_and_analyze import reconstruct_and_analyze  # This is the main function for reconstruction and analysis
 
-from MEAProcessingLibrary import mea_processing_library as MPL
-#from MEA_Analysis import mea_processing_library as MPL
-
-#TODO: Remove these imports
-#import sys
-#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-#import modules.lib_sorting_functions as sorter
-#import modules.lib_waveform_functions as waveformer
-#import modules.generate_templates.extract_templates as templater
-
-#from modules.analyze_and_reconstruct.reconstruct_and_analyze import reconstruct_and_analyze
-#from modules.analyze_and_reconstruct.reconstruct import reconstruct
-
-from modules import mea_processing_library as MPL
-
+# logging helpers ===================================================
 class SingleLevelFilter(logging.Filter):
     def __init__(self, level):
         super().__init__()
@@ -35,6 +26,7 @@ class SingleLevelFilter(logging.Filter):
     def filter(self, record):
         return record.levelno == self.level
 
+# AxonReconstructor class =========================================
 class AxonReconstructor:
     
     def __init__(self, h5_parent_dirs, **kwargs):
@@ -92,7 +84,9 @@ class AxonReconstructor:
         self.requirements = None
         self.git_version = None
 
-        self.logger.debug("AxonReconstructor initialized with parameters: %s", self.__dict__)
+        #self.logger.debug("AxonReconstructor initialized with parameters: %s", self.__dict__)
+        print("AxonReconstructor initialized with parameters:")
+        pprint(self.__dict__)
 
     def setup_logger(self, prefix=None):
         logger_level = self.logger_level
@@ -344,7 +338,8 @@ class AxonReconstructor:
     def concatenate_recordings(self):        
         self.logger.info("Concatenating recordings")
         multirecordings = {}
-        try: assert self.recordings, "No recordings found. Skipping concatenation."
+        try: 
+            assert self.recordings, "No recordings found. Skipping concatenation."
         except Exception as e: self.logger.error(e); return
         for rec_key, recording in self.recordings.items():
             
@@ -362,8 +357,12 @@ class AxonReconstructor:
                 self.setup_logger(prefix=f'{rec_key}_{stream_id}')
                 #test logger message
                 self.logger.info(f"Concatenating recording segments for {date}_{chip_id}_{run_id} stream {stream_id}")
-                recording_segments = recording['streams'][stream_id]['recording_segments']
-
+                
+                #print(recording['streams'][stream_id])
+                
+                #recording_segments = recording['streams'][stream_id]['recording_segments']
+                recording_segments = recording['streams'][stream_id]
+                
                 # Check if multirecording already exists in reconstructor object
                 try: 
                     assert self.reconstructor_load_options['load_reconstructor'], 'Load reconstructor option from reconstructor is set to False. Concatenating new multirecording.'
@@ -651,16 +650,6 @@ class AxonReconstructor:
         }
         
         reconstruct_and_analyze(**analyze_kwargs)
-        # reconstruct(
-        #     self.templates,
-        #     recon_dir=self.recon_dir,
-        #     params=self.av_params,
-        #     analysis_options=self.analysis_options,
-        #     stream_select=self.stream_select,
-        #     n_jobs=self.max_workers, #TODO: why?
-        #     logger=self.logger,
-        #     **recon_kwargs,
-        # )
         self.logger.debug("Completed analysis and reconstruction")
 
     def save_reconstructor(self):

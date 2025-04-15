@@ -12,7 +12,6 @@ from sklearn.impute import IterativeImputer
 import traceback
 
 import spikeinterface.postprocessing as spost
-import spikeinterface.full as si
 
 def check_features(feature_dict):
     """Check feature values for issues and report problematic feature names."""
@@ -348,19 +347,16 @@ def classify(network_data, plot_wfs=False, **kwargs):
     '''
     
     ## init
-    #wfs_output_path = network_data['waveform_output']
-    sa_output_path = network_data['sorting_analyzer_output']
+    wfs_output_path = network_data['waveform_output']
     sorting_object = kwargs['sorting_object']
     sorting_object.remove_empty_units()
     sampling_frequency = sorting_object.get_sampling_frequency()
-    #we = kwargs['wf_extractor']
-    sa = si.load_sorting_analyzer(sa_output_path)
-    wfs = sa.get_extension('waveforms')
+    we = kwargs['wf_extractor']
     
     ## ** Extract Features from Spiking and Bursting Analysis **
     unit_ids = sorting_object.get_unit_ids()
     
-    features, feature_dicts, include_units, exclude_units = extract_features_v2(wfs, unit_ids, network_data, sorting_object, sampling_frequency)    
+    features, feature_dicts, include_units, exclude_units = extract_features_v2(we, unit_ids, network_data, sorting_object, sampling_frequency)    
     
     ## ** Feature Scaling and Dimensionality Reduction **
     
@@ -575,8 +571,7 @@ def classify(network_data, plot_wfs=False, **kwargs):
         #plt.savefig(os.path.join(wfs_output_path, 'cluster_plot.png'))
         #replace 'waveforms' w/ 'class_cluster_plots'
         #cluster_output_path = os.path.join(wfs_output_path, 'class_cluster_plots')
-        #cluster_output_path = wfs_output_path.replace('waveforms', 'class_cluster_plots')
-        cluster_output_path = os.path.join(sa_output_path, 'cluster_plots')
+        cluster_output_path = wfs_output_path.replace('waveforms', 'class_cluster_plots')
         if not os.path.exists(cluster_output_path):
             os.makedirs(cluster_output_path)
         #plt.savefig(os.path.join(cluster_output_path, 'cluster_plot.png'))

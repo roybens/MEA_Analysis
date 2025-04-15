@@ -25,6 +25,16 @@ import spikeinterface.postprocessing as sp
 import spikeinterface.preprocessing as spre
 import spikeinterface.qualitymetrics as qm
 
+# import os
+# import spikeinterface.full as si
+# import spikeinterface.extractors as se
+# import spikeinterface.preprocessing as spre
+# import spikeinterface.postprocessing as spost
+# import spikeinterface.waveforms as swf
+
+#from spikeinterface.postprocessing import remove_excess_spikes
+#from spikeinterface.analysis import create_sorting_analyzer
+
 #Logger Setup
 #Create a logger
 logger = logging.getLogger(__name__)
@@ -860,14 +870,81 @@ def preprocess(recording):  ## some hardcoded stuff.
     """
     recording_bp = spre.bandpass_filter(recording, freq_min=300, freq_max=3000)
     
-
     recording_cmr = spre.common_reference(recording_bp, reference='global', operator='median')
 
     recording_cmr.annotate(is_filtered=True)
 
     return recording_cmr
 
-def extract_waveforms(recording, sorting, folder, load_if_exists = False, n_jobs = 4, sparse = True, ms_before = 3, ms_after = 3):
+def extract_waveforms(recording, sorting, folder, load_if_exists=False, n_jobs=4, sparse=True, ms_before=3, ms_after=3):
+    
+    # init
+    print(f"Extracting waveforms for {len(sorting.unit_ids)} units")
+    
+    # init time_in_s for recording_chunk
+    time_in_s = recording.get_total_duration()
+    time_in_s = round(time_in_s)  # round to the nearest second
+    fs, num_chan, channel_ids, total_rec_time = get_channel_recording_stats(recording)
+    if total_rec_time < time_in_s:
+        time_in_s = total_rec_time    
+    assert time_in_s <= total_rec_time, "time_in_s should be less than or equal to total_rec_time"
+    time_start = 0
+    time_end = time_start + time_in_s
+    
+    # get a chunk of the recording
+    recording_chunk = recording.frame_slice(start_frame=int(time_start * fs), end_frame=int(time_end * fs))
+    recording_chunk = preprocess(recording_chunk)
+    
+    # remove excess spikes
+    seg_sort = si.remove_excess_spikes(sorting, recording_chunk)
+
+    print(f"Saving waveforms and analysis to {folder}...")
+    
+    # Set parameters for waveforms extraction
+    wf_kwargs = {
+        'n_jobs': n_jobs,
+        # 'ms_before': ms_before,
+        # 'ms_after': ms_after,
+        # 'sparse': sparse,
+    }
+
+    if os.path.exists(folder):
+        if load_if_exists:
+            print(f"Loading existing sorting analyzer from {folder}")
+            sorting_analyzer = load_sorting_analyzer(folder)
+        else:
+            print(f"Overwriting existing folder at {folder}")
+            shutil.rmtree(folder)
+            sorting_analyzer = si.create_sorting_analyzer(
+                sorting=seg_sort,
+                recording=recording_chunk,
+                format="binary_folder",
+                folder=folder,
+                **wf_kwargs
+            )
+    else:
+        sorting_analyzer = si.create_sorting_analyzer(
+            sorting=seg_sort,
+            recording=recording_chunk,
+            format="binary_folder",
+            folder=folder,
+            **wf_kwargs
+        )
+    
+    # 💡 Compute random spikes FIRST (required dependency)
+    if "random_spikes" not in sorting_analyzer.get_loaded_extension_names():
+        sorting_analyzer.compute("random_spikes", **wf_kwargs)
+
+    # 💾 Now extract waveforms
+    sorting_analyzer.compute("waveforms", **wf_kwargs)
+
+    # Return waveform extractor
+    waveforms = sorting_analyzer.get_extension("waveforms")
+
+    return waveforms
+
+# aw 2025-04-09 01:28:57 - deprecated, patching for updated spikeinterface
+def extract_waveforms_dep(recording, sorting, folder, load_if_exists = False, n_jobs = 4, sparse = True, ms_before = 3, ms_after = 3):
     
     #init
     print (f"Extracting waveforms for {len(sorting.get_unit_ids())} units")
