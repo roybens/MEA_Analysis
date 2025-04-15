@@ -20,6 +20,7 @@ from MEA_Analysis.NetworkAnalysis.awNetworkAnalysis.dtw import dtw_burst_analysi
 import time
 from .helper import indent_mode_on, indent_mode_off, indent_increase, indent_decrease
 import spikeinterface.postprocessing as spost
+import spikeinterface.full as si
 
 # Functions ===================================================================
 '''Newer Functions'''
@@ -374,13 +375,20 @@ def compute_bursting_metrics(network_data, kwargs):
     
     return network_data
 
-def compute_unit_spike_metrics(unit, spike_times_by_unit, wfe, sampling_rate, plot_wfs, 
-                 recording_object, sorting_object, wf_well_folder, **pkwargs):
+def compute_unit_spike_metrics(
+    unit, 
+    spike_times_by_unit, 
+    #wfe, 
+    sampling_rate, plot_wfs, 
+    recording_object, 
+    sorting_object, 
+    sa_well_folder, **pkwargs):
     """Function to process a single unit."""
     try:
         print(f'Processing unit {unit}...')
         
-        if wfe is None:
+        #if wfe is None:
+        if sa_well_folder is None:
             try: isi_diffs = np.diff(spike_times_by_unit[unit])
             except: isi_diffs = None
             return unit, {
@@ -402,8 +410,12 @@ def compute_unit_spike_metrics(unit, spike_times_by_unit, wfe, sampling_rate, pl
             }        
         else:        
             # 
-            unit_wf_path = wf_well_folder.replace('waveforms', 'waveform_plots') + f"/unit_{unit}_waveforms.png"
-            unit_wfs = wfe.get_waveforms(unit)        
+            #unit_wf_path = wf_well_folder.replace('waveforms', 'waveform_plots') + f"/unit_{unit}_waveforms.png"
+            #unit_wfs = wfe.get_waveforms(unit)        
+            
+            unit_wf_path = sa_well_folder.replace('analyzer', 'wf_plots') + f"/unit_{unit}_waveforms.png"
+            sa = si.load_sorting_analyzer(sa_well_folder)
+            unit_wfs = sa.get_extension("waveforms").get_waveforms_one_unit(unit)  # Shape: (n_spikes, n_samples, n_channels)
             avg_waveform = np.nanmean(unit_wfs, axis=0)  # Shape: (n_samples, n_channels)
             best_channel_idx = np.argmax(np.max(np.abs(avg_waveform), axis=0))  # Index of best channel
             best_channel_waveforms = unit_wfs[:, :, best_channel_idx]
@@ -476,12 +488,14 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
     
     
     # Subfunctions =============================================================
-    def process_units_in_parallel(units, wfe, network_data, kwargs):
-        '''Process units in parallel.'''       
+    def process_units_in_parallel(units, sa, network_data, kwargs):
+        '''Process units in parallel.'''
+        
         #init
         indent_increase()
         max_workers = kwargs['max_workers']
         debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
+        #debug_mode = True
         if debug_mode:
             print(f'Debug mode: Only processing 10 units.')
             num_units = len(units)
@@ -494,13 +508,15 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
         # Set parameters for process_unit       
         pkwargs = {
             'spike_times_by_unit': network_data['spiking_data']['spiking_times_by_unit'],
-            'wfe': wfe,
+            #'wfe': wfe,
+            #'sorting_analyzer': sa,
+            'sa_well_folder': sa.folder._str if sa is not None else None,
             'sampling_rate': network_data['sampling_rate'],
             'plot_wfs': kwargs['plot_wfs'] if source == 'experimental' else False,
             'recording_object': kwargs.get('recording_object', None),
             'sorting_object': kwargs.get('sorting_object', None),
             'sorting_object': kwargs.get('sorting_object', None),
-            'wf_well_folder': wfe.folder._str if wfe is not None else None
+            #'wf_well_folder': wfe.folder._str if wfe is not None else None
         }
         
         # Process units in parallel
@@ -549,18 +565,55 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
         # units = sorting_object.get_unit_ids()
         # return units
     
+    def define_sa(source, network_data, kwargs):
+        '''Define waveform extractor for simulated or experimental data.'''
+        use_old_version = False
+        if not use_old_version:
+            if 'sorting_analyzer' not in kwargs:
+                kwargs['sorting_analyzer'] = None  # usual case for simulated data
+            elif kwargs['sorting_analyzer'] != None and 'simulated' in source:
+                pass  # this is an acceptable case for simulated data - just unexpected to see wf_extractor defined as None already.
+            elif kwargs['sorting_analyzer'] != None and 'experimental' in source:
+                pass  # this is the normal case for experimental data - just putting this here for clarity.
+            elif kwargs['sorting_analyzer'] == None and 'experimental' in source:
+                raise ValueError('No sorting analyzer provided for experimental data.')
+            sorting_analyzer = kwargs['sorting_analyzer']  # NOTE: this is none for simulated data ^^^
+            if sorting_analyzer == None:
+                return None, kwargs
+            #wfe = sorting_analyzer.get_extension("waveforms")
+            #return wfe, kwargs
+            return sorting_analyzer, kwargs    
+    
     def define_wfe(source, network_data, kwargs):
         '''Define waveform extractor for simulated or experimental data.'''
-        if 'wf_extractor' not in kwargs: 
-            kwargs['wf_extractor'] = None # usual case for simulated data
-        elif kwargs['wf_extractor'] is not None and 'simulated' in source:
-            pass # this is an acceptable case for simulated data - just unexpected to see wf_extractor defined as None already.
-        elif kwargs['wf_extractor'] is not None and 'experimental' in source:
-            pass # this is the normal case for experimental data - just putting this here for clarity.
-        elif kwargs['wf_extractor'] is None and 'experimental' in source:
-            raise ValueError('No waveform extractor provided for experimental data.')
-        wfe = kwargs['wf_extractor'] # NOTE: this is none for simulated data ^^^ 
-        return wfe, kwargs
+        use_old_version = False
+        if not use_old_version:
+            if 'sorting_analyzer' not in kwargs:
+                kwargs['sorting_analyzer'] = None  # usual case for simulated data
+            elif kwargs['sorting_analyzer'] != None and 'simulated' in source:
+                pass  # this is an acceptable case for simulated data - just unexpected to see wf_extractor defined as None already.
+            elif kwargs['sorting_analyzer'] != None and 'experimental' in source:
+                pass  # this is the normal case for experimental data - just putting this here for clarity.
+            elif kwargs['sorting_analyzer'] == None and 'experimental' in source:
+                raise ValueError('No sorting analyzer provided for experimental data.')
+            sorting_analyzer = kwargs['sorting_analyzer']  # NOTE: this is none for simulated data ^^^
+            if sorting_analyzer == None:
+                return None, kwargs
+            wfe = sorting_analyzer.get_extension("waveforms")
+            return wfe, kwargs
+        
+        elif use_old_version:
+            if 'wf_extractor' not in kwargs: 
+                kwargs['wf_extractor'] = None # usual case for simulated data
+            elif kwargs['wf_extractor'] is not None and 'simulated' in source:
+                pass # this is an acceptable case for simulated data - just unexpected to see wf_extractor defined as None already.
+            elif kwargs['wf_extractor'] is not None and 'experimental' in source:
+                pass # this is the normal case for experimental data - just putting this here for clarity.
+            elif kwargs['wf_extractor'] is None and 'experimental' in source:
+                raise ValueError('No waveform extractor provided for experimental data.')
+            wfe = kwargs['wf_extractor'] # NOTE: this is none for simulated data ^^^ 
+            return wfe, kwargs
+    
     # Main =====================================================================
     #runtime options
     debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
@@ -568,105 +621,21 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
     
     # set wf_extractor to None by default. If the data are experimental, this should be set.
     #print('Warning: not sure if I should get wfe from network_data or kwargs.')
-    wfe, kwargs = define_wfe(source, network_data, kwargs)
+    #wfe, kwargs = define_wfe(source, network_data, kwargs)
+    sa, kwargs = define_sa(source, network_data, kwargs)
     
     # get units
     units, network_data = get_units_ids(source, network_data, kwargs)
     
     # process units
-    if run_parallel: network_data = process_units_in_parallel(units, wfe, network_data, kwargs)
-    else: network_data = process_units_in_sequence(units, wfe, network_data, kwargs)
+    if run_parallel: 
+        network_data = process_units_in_parallel(units, sa, network_data, kwargs)
+    else: network_data = process_units_in_sequence(units, sa, network_data, kwargs)
     
     # end func =================================================================
     indent_decrease()
     print("Spiking metrics by unit computed!")
     return network_data
-        # ====================
-        # old code
-        # ====================
-        
-        # # Extract objects from kwargs
-        # recording_object = kwargs['recording_object']
-        # sorting_object = kwargs['sorting_object']
-        # wf_extractor = kwargs['wf_extractor']
-        # sampling_rate = recording_object.get_sampling_frequency()
-        
-        # #add immediately available data to network_data
-        # network_data['source'] = 'experimental'
-        # network_data['timeVector'] = timeVector
-        # network_data['spiking_data']['spike_times'] = spike_times
-        # network_data['spiking_data']['spiking_times_by_unit'] = spike_times_by_unit
-
-        # # Get unit IDs
-        # units = sorting_object.get_unit_ids()
-
-        # # Set directory for plot output
-        # plot_wfs = kwargs['plot_wfs']
-        # wf_posixpath = wf_extractor.folder
-        # #wf_well_folder = str(wf_posixpath) + '_plots/unit_wf_plots'  
-        # wf_well_folder = str(wf_posixpath)
-        
-        
-        # spiking_metrics_by_unit = {}
-        
-        # #set max workers and threads
-        # max_workers = kwargs['max_workers']
-        # max_threads = max_workers//2
-        
-        # #if debug mode, shorten units in units to speed things up. Shorten to 10.
-        # if debug_mode:
-        #     print(f'Debug mode: Only processing 10 units.')
-        #     units = units[:10]
-        #     max_workers = 10
-        #     max_threads = 5
-            
-
-        # threads = False
-        # procs = True
-        # # threads = True
-        # # procs = False
-        # if threads:
-        #     # Parallel processing with at most 25 threads at a time
-        #     #max_workers = 25  
-        #     #max_workers = 50 # Increase number of threads to 50 - should be same amount of cpus right?
-        #     #max_workers = kwargs['max_workers']
-        #     #max_threads = max_workers//2
-        #     with ThreadPoolExecutor(max_workers=max_threads) as executor:
-        #         future_to_unit = {
-        #             executor.submit(process_unit, unit, spike_times_by_unit, wf_extractor, sampling_rate, plot_wfs, 
-        #                             recording_object, sorting_object, wf_well_folder): unit for unit in units
-        #         }
-
-        #         # Collect results as they complete
-        #         for future in as_completed(future_to_unit):
-        #             unit, result = future.result()
-        #             if result is not None:
-        #                 spiking_metrics_by_unit[unit] = result
-
-        #     # Store computed spiking metrics
-        #     network_data['spiking_data']['spiking_metrics_by_unit'] = spiking_metrics_by_unit
-            
-        #     return network_data
-        # if procs:
-            # # Parallel processing with at most 25 processes at a time
-            # #max_workers = 25
-            # #max_workers = kwargs['max_workers']  
-            # with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            #     future_to_unit = {
-            #         executor.submit(process_unit, unit, spike_times_by_unit, wf_extractor, sampling_rate, plot_wfs, 
-            #                         recording_object, sorting_object, wf_well_folder): unit for unit in units
-            #     }
-
-            #     # Collect results as they complete
-            #     for future in as_completed(future_to_unit):
-            #         unit, result = future.result()
-            #         if result is not None:
-            #             spiking_metrics_by_unit[unit] = result
-
-            # # Store computed spiking metrics
-            # network_data['spiking_data']['spiking_metrics_by_unit'] = spiking_metrics_by_unit
-            
-            # return network_data
 
 def compute_network_metrics(conv_params, mega_params, source, **kwargs):
     '''
@@ -702,7 +671,8 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
         elif source == 'experimental':
             assert 'sorting_object' in kwargs, 'No sorting object provided'
             assert 'recording_object' in kwargs, 'No recording object provided'
-            assert 'wf_extractor' in kwargs, 'No waveform extractor provided'
+            #assert 'wf_extractor' in kwargs, 'No waveform extractor provided'
+            assert 'sorting_analyzer' in kwargs, 'No sorting analyzer provided'
         #return source, kwargs
     
     def initialize_data_dict(source, kwargs):
@@ -725,7 +695,8 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
                 network_data['recording_path'] = recording_object._kwargs.get('file_path', None)
                 network_data['sorting_output'] = sorting_object._kwargs.get('folder_path', None)
                 assert network_data['sorting_output'] is not None, 'No sorting object source found'
-                network_data['waveform_output'] = network_data['sorting_output'].replace('sorted', 'waveforms').replace('sorter_output', '')
+                #network_data['waveform_output'] = network_data['sorting_output'].replace('sorted', 'waveforms').replace('sorter_output', '')
+                network_data['sorting_analyzer_output'] = network_data['sorting_output'].replace('sorted', 'analyzer').replace('sorter_output', '')
                 network_data['network_metrics_output'] = network_data['sorting_output'].replace('sorted', 'network_metrics').replace('sorter_output', '')
                 network_data['spiking_data'] = {}
                 #network_data['spiking_metrics'] = {}
@@ -989,13 +960,18 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
             
             return network_data
         elif source == 'experimental':
-            we = kwargs.get('wf_extractor', None)
+            #we = kwargs.get('wf_extractor', None)
+            sa = kwargs.get('sorting_analyzer', None)
+            #wfs = sa.get_extension("waveforms")
             
             classification_output = network_data['classification_output']
             include_unit_ids = classification_output['include_units']
             # classified_units = classification_output['classified_units']
-        
-            unit_locations = spost.compute_unit_locations(we)
+
+            print(f'Getting unit locations for {len(include_unit_ids)} units...')            
+            if "templates" not in sa.extensions:
+                sa.compute("templates")
+            unit_locations = spost.compute_unit_locations(sa)
             unit_locations_dict = {unit_id: unit_locations[i] for i, unit_id in enumerate(include_unit_ids)}
             
             network_data['unit_locations'] = unit_locations_dict
@@ -2999,10 +2975,11 @@ def compute_unit_burst_participation(unit_metrics, convolved_data, max_workers=4
         max_workers = max_workers
     
     # debug_mode
+    #debug_mode = True
     if debug_mode:
-        print(f'Debug mode: only processing first 5 burst parts')
-        participation_by_burst = dict(list(participation_by_burst.items())[:5])
-        max_workers = 5
+        print(f'Debug mode: only processing first 2 burst parts')
+        participation_by_burst = dict(list(participation_by_burst.items())[:2])
+        max_workers = 2
     
     if max_workers is None:
         max_workers = 1
@@ -3059,60 +3036,149 @@ def compute_burst_metrics(unit_metrics, convolved_data, max_workers=4, debug_mod
         burst_parts = "Burst sequencing not enabled"
     
     #assemble dict
-    burst_metrics = {
-        'num_bursts': len(peak_times),
-        'burst_rate': len(peak_times) / (convolved_data['time_vector'][-1] - convolved_data['time_vector'][0]) if len(peak_times) > 1 else np.nan,
-        'burst_ids': list(range(len(peak_times))),
-        'ibi': {
-            'data': np.diff(peak_times),
-            'mean': np.nanmean(np.diff(peak_times)),
-            'std': np.nanstd(np.diff(peak_times)),
-            'cov': np.nanstd(np.diff(peak_times)) / np.nanmean(np.diff(peak_times)) if np.nanmean(np.diff(peak_times)) > 0 else np.nan,
-            'median': np.nanmedian(np.diff(peak_times)),
-            'min': np.nanmin(np.diff(peak_times)),
-            'max': np.nanmax(np.diff(peak_times)),
-        },
-        'burst_amp': {
-            'data': convolved_data['peak_values'],
-            'mean': np.nanmean(convolved_data['peak_values']),
-            'std': np.nanstd(convolved_data['peak_values']),
-            'cov': np.nanstd(convolved_data['peak_values']) / np.nanmean(convolved_data['peak_values']) if np.nanmean(convolved_data['peak_values']) > 0 else np.nan,
-            'median': np.nanmedian(convolved_data['peak_values']),
-            'min': np.nanmin(convolved_data['peak_values']),
-            'max': np.nanmax(convolved_data['peak_values']),
-        },
-        'burst_duration': {
-            'data': convolved_data['right_base_times'] - convolved_data['left_base_times'],
-            'mean': np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-            'std': np.nanstd(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-            'cov': np.nanstd(convolved_data['right_base_times'] - convolved_data['left_base_times']) / np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']) if np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']) > 0 else np.nan,
-            'median': np.nanmedian(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-            'min': np.nanmin(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-            'max': np.nanmax(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-        },
-        #'burst_parts': {**burst_parts},
-        'burst_parts': burst_parts,
-        'num_units_per_burst': {
-            'data': [burst_part['num_units_participating'] for burst_part in burst_parts.values()],
-            'mean': np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-            'std': np.nanstd([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-            'cov': np.nanstd([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) / np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) if np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) > 0 else np.nan,
-            'median': np.nanmedian([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-            'min': np.nanmin([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-            'max': np.nanmax([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-        } if burst_parts != "Burst sequencing not enabled" else "Burst sequencing not enabled",
-        'in_burst_fr': {
-            'data': [burst_part['spike_rate'] for burst_part in burst_parts.values()],
-            'mean': np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-            'std': np.nanstd([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-            'cov': np.nanstd([burst_part['spike_rate'] for burst_part in burst_parts.values()]) / np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]) if np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]) > 0 else np.nan,
-            'median': np.nanmedian([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-            'min': np.nanmin([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-            'max': np.nanmax([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-            } if burst_parts != "Burst sequencing not enabled" else "Burst sequencing not enabled",          
-    }
+    # burst_metrics = {
+    #     'num_bursts': len(peak_times),
+    #     'burst_rate': len(peak_times) / (convolved_data['time_vector'][-1] - convolved_data['time_vector'][0]) if len(peak_times) > 1 else np.nan,
+    #     'burst_ids': list(range(len(peak_times))),
+    #     'ibi': {
+    #         'data': np.diff(peak_times),
+    #         'mean': np.nanmean(np.diff(peak_times)),
+    #         'std': np.nanstd(np.diff(peak_times)),
+    #         'cov': np.nanstd(np.diff(peak_times)) / np.nanmean(np.diff(peak_times)) if np.nanmean(np.diff(peak_times)) > 0 else np.nan,
+    #         'median': np.nanmedian(np.diff(peak_times)),
+    #         'min': np.nanmin(np.diff(peak_times)),
+    #         'max': np.nanmax(np.diff(peak_times)),
+    #     },
+    #     'burst_amp': {
+    #         'data': convolved_data['peak_values'],
+    #         'mean': np.nanmean(convolved_data['peak_values']),
+    #         'std': np.nanstd(convolved_data['peak_values']),
+    #         'cov': np.nanstd(convolved_data['peak_values']) / np.nanmean(convolved_data['peak_values']) if np.nanmean(convolved_data['peak_values']) > 0 else np.nan,
+    #         'median': np.nanmedian(convolved_data['peak_values']),
+    #         'min': np.nanmin(convolved_data['peak_values']),
+    #         'max': np.nanmax(convolved_data['peak_values']),
+    #     },
+    #     'burst_duration': {
+    #         'data': convolved_data['right_base_times'] - convolved_data['left_base_times'],
+    #         'mean': np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']),
+    #         'std': np.nanstd(convolved_data['right_base_times'] - convolved_data['left_base_times']),
+    #         'cov': np.nanstd(convolved_data['right_base_times'] - convolved_data['left_base_times']) / np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']) if np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']) > 0 else np.nan,
+    #         'median': np.nanmedian(convolved_data['right_base_times'] - convolved_data['left_base_times']),
+    #         'min': np.nanmin(convolved_data['right_base_times'] - convolved_data['left_base_times']),
+    #         'max': np.nanmax(convolved_data['right_base_times'] - convolved_data['left_base_times']),
+    #     },
+    #     #'burst_parts': {**burst_parts},
+    #     'burst_parts': burst_parts,
+    #     'num_units_per_burst': {
+    #         'data': [burst_part['num_units_participating'] for burst_part in burst_parts.values()],
+    #         'mean': np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
+    #         'std': np.nanstd([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
+    #         'cov': np.nanstd([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) / np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) if np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) > 0 else np.nan,
+    #         'median': np.nanmedian([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
+    #         'min': np.nanmin([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
+    #         'max': np.nanmax([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
+    #     } if burst_parts != "Burst sequencing not enabled" else "Burst sequencing not enabled",
+    #     'in_burst_fr': {
+    #         'data': [burst_part['spike_rate'] for burst_part in burst_parts.values()],
+    #         'mean': np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
+    #         'std': np.nanstd([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
+    #         'cov': np.nanstd([burst_part['spike_rate'] for burst_part in burst_parts.values()]) / np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]) if np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]) > 0 else np.nan,
+    #         'median': np.nanmedian([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
+    #         'min': np.nanmin([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
+    #         'max': np.nanmax([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
+    #         } if burst_parts != "Burst sequencing not enabled" else "Burst sequencing not enabled",          
+    # }
     
-    print(f'Burst Metrics Computed')
+    # print(f'Burst Metrics Computed')
+    # return burst_metrics, warnings
+    
+    # assemble dict
+    burst_metrics = {}
+
+    # Number of bursts and burst rate
+    burst_metrics['num_bursts'] = len(peak_times)
+    burst_metrics['burst_rate'] = len(peak_times) / (convolved_data['time_vector'][-1] - convolved_data['time_vector'][0]) if len(peak_times) > 1 else np.nan
+    burst_metrics['burst_ids'] = list(range(len(peak_times)))
+    print("✔️ Basic burst counts and rates computed")
+
+    # Inter-burst interval (IBI)
+    ibi_values = np.diff(peak_times)
+    burst_metrics['ibi'] = {
+        'data': ibi_values,
+        'mean': np.nanmean(ibi_values),
+        'std': np.nanstd(ibi_values),
+        'cov': np.nanstd(ibi_values) / np.nanmean(ibi_values) if np.nanmean(ibi_values) > 0 else np.nan,
+        'median': np.nanmedian(ibi_values),
+        'min': np.nanmin(ibi_values),
+        'max': np.nanmax(ibi_values),
+    }
+    print("✔️ Inter-burst interval (IBI) stats computed")
+
+    # Burst amplitude
+    amp_values = convolved_data['peak_values']
+    burst_metrics['burst_amp'] = {
+        'data': amp_values,
+        'mean': np.nanmean(amp_values),
+        'std': np.nanstd(amp_values),
+        'cov': np.nanstd(amp_values) / np.nanmean(amp_values) if np.nanmean(amp_values) > 0 else np.nan,
+        'median': np.nanmedian(amp_values),
+        'min': np.nanmin(amp_values),
+        'max': np.nanmax(amp_values),
+    }
+    print("✔️ Burst amplitude stats computed")
+
+    # Burst duration
+    durations = convolved_data['right_base_times'] - convolved_data['left_base_times']
+    burst_metrics['burst_duration'] = {
+        'data': durations,
+        'mean': np.nanmean(durations),
+        'std': np.nanstd(durations),
+        'cov': np.nanstd(durations) / np.nanmean(durations) if np.nanmean(durations) > 0 else np.nan,
+        'median': np.nanmedian(durations),
+        'min': np.nanmin(durations),
+        'max': np.nanmax(durations),
+    }
+    print("✔️ Burst duration stats computed")
+
+    # Burst parts
+    burst_metrics['burst_parts'] = burst_parts
+    print("✔️ Burst parts registered")
+
+    # Num units per burst
+    if burst_parts != "Burst sequencing not enabled":
+        num_units_list = [burst_part['num_units_participating'] for burst_part in burst_parts.values()]
+        burst_metrics['num_units_per_burst'] = {
+            'data': num_units_list,
+            'mean': np.nanmean(num_units_list),
+            'std': np.nanstd(num_units_list),
+            'cov': np.nanstd(num_units_list) / np.nanmean(num_units_list) if np.nanmean(num_units_list) > 0 else np.nan,
+            'median': np.nanmedian(num_units_list),
+            'min': np.nanmin(num_units_list),
+            'max': np.nanmax(num_units_list),
+        }
+        print("✔️ Num units per burst stats computed")
+    else:
+        burst_metrics['num_units_per_burst'] = "Burst sequencing not enabled"
+        print("⚠️ Num units per burst skipped (Burst sequencing not enabled)")
+
+    # In-burst firing rate
+    if burst_parts != "Burst sequencing not enabled":
+        spike_rates = [burst_part['spike_rate'] for burst_part in burst_parts.values()]
+        burst_metrics['in_burst_fr'] = {
+            'data': spike_rates,
+            'mean': np.nanmean(spike_rates),
+            'std': np.nanstd(spike_rates),
+            'cov': np.nanstd(spike_rates) / np.nanmean(spike_rates) if np.nanmean(spike_rates) > 0 else np.nan,
+            'median': np.nanmedian(spike_rates),
+            'min': np.nanmin(spike_rates),
+            'max': np.nanmax(spike_rates),
+        }
+        print("✔️ In-burst firing rate stats computed")
+    else:
+        burst_metrics['in_burst_fr'] = "Burst sequencing not enabled"
+        print("⚠️ In-burst firing rate stats skipped (Burst sequencing not enabled)")
+
+    print(f"✅ Burst Metrics Computed")
     return burst_metrics, warnings
 
 def analyze_unit_activity(spike_times_by_unit, convolved_data):

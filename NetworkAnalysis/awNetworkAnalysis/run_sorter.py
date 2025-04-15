@@ -41,15 +41,15 @@ def run_sorter(
     
     #modify params as needed
     kilosort2_params['keep_good_only'] = True # false by default
-    #kilosort2_params['n_jobs'] = 32
+    kilosort2_params['n_jobs'] = 256 # full node
     # change chunk size from '1s' to half a second to help with memory issues
     #kilosort2_params['chunk_duration'] = '500ms'
     #kilosort2_params['NT'] = 100 # number of timepoints in waveforms
     #kilosort2_params['wave_length'] = 81 # increase from default of 61 to 100 to help capture more information for long refractory periods typical of excitatory neurons
     #kilosort2_params['n_jobs'] = 64
-    kilosort2_params['minfr_goodchannels'] = 0
-    kilosort2_params['minFR'] = 0
-    kilosort2_params['detect_threshold'] = 3
+    #kilosort2_params['minfr_goodchannels'] = 0
+    #kilosort2_params['minFR'] = 0
+    #kilosort2_params['detect_threshold'] = 3
     #kilosort2_params['nfilt_factor'] = 1
     
     
@@ -63,7 +63,8 @@ def run_sorter(
                                             #       still, in the even we use activity scans or axon tracking scans - there will be multiple segments that need to be 
                                             #       handled after spike sorting
             # define output folder
-            output_folder = os.path.join(sorted_output_dir, projectName, date, chipID, scanType, runID, wellid) #same filepath structure as the raw data + wellid
+            #output_folder = os.path.join(sorted_output_dir, projectName, date, chipID, scanType, runID, wellid) #same filepath structure as the raw data + wellid
+            output_folder = os.path.join(sorted_output_dir, wellid) #same filepath structure as the raw data + wellid
             
             # try to load the kilosort2 results if they already exist
             load_success = False
@@ -139,8 +140,12 @@ def run_sorter(
                 # seg_sort = si.SelectSegmentSorting(sorted_data, seg_index)
                 # seg_sort = si.remove_excess_spikes(seg_sort, rec_centered)
                 # seg_sort.register_recording(rec_centered)
-                waveform_output = os.path.join(waveform_output_dir, projectName, date, chipID, scanType, runID, wellid)
-                mea.extract_waveforms(segment, sorted_data, waveform_output, n_jobs=16, ms_before=1, ms_after=5) # aw 2025-02-14 13:26:25 increates ms_before and after to try and better capture excitatory neurons
+                #waveform_output = os.path.join(waveform_output_dir, projectName, date, chipID, scanType, runID, wellid)
+                analyzer_output_dir = waveform_output_dir
+                analyzer_output = os.path.join(analyzer_output_dir, wellid)
+                n_jobs = 256 # full node
+                #n_jobs = 16 # local testing
+                mea.extract_waveforms(segment, sorted_data, analyzer_output, n_jobs=n_jobs, ms_before=1, ms_after=5) # aw 2025-02-14 13:26:25 increates ms_before and after to try and better capture excitatory neurons
             except Exception as e:
                 print(f'Waveform extraction failed for {wellid} with error: {e}')
                 continue

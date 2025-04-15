@@ -204,8 +204,10 @@ def extract_recording_details(h5_dirs):
                 h5_subdirs = extract_raw_h5_filepaths(h5_dir)
                 assert len(h5_subdirs) > 0, "No .h5 files found in the directory."
                 assert len(h5_subdirs) == 1, "Ambiguous file selection. Multiple .h5 files found in the directory."
-                h5_dir = h5_subdirs[0]
-            except: logger.error("Some error occurred during the extraction of .h5 file paths."); continue
+                #h5_dir = h5_subdirs[0]
+            except: 
+                logger.error("Some error occurred during the extraction of .h5 file paths.")
+                continue
 
         parent_dir = os.path.dirname(h5_dir)
         runID = os.path.basename(parent_dir)

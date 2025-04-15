@@ -272,6 +272,8 @@ def dtw_burst_analysis(network_metrics, kwargs):
     # HACK
     if len(sequence_stacks) < 1000:
         batch_size = len(sequence_stacks)//4
+        if batch_size < 1:
+            batch_size = 1
         
     if len(mega_sequence_stacks) < 5:
         #mega_batch_size = len(mega_sequence_stacks)
