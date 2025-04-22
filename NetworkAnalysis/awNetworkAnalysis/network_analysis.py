@@ -23,7 +23,251 @@ import spikeinterface.postprocessing as spost
 import spikeinterface.full as si
 
 # Functions ===================================================================
-'''Newer Functions'''
+def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
+    """
+    Plot a 2-panel or 3-panel summary of network data,
+    auto-scaling x and y limits (nan-safe) unless overridden.
+
+    Parameters:
+      network_data: dict with keys 'sim_data_path', 'bursting_data', 'mega_bursting_data', 'spiking_data', 'unit_types'
+      x_lim: tuple (xmin, xmax) to override x-axis limits for all axes
+      y_lim: tuple (ymin, ymax) to override y-axis limits for all axes
+      limit_seconds: within kwargs, time to zoom x-axis to [0, limit_seconds]
+      network_summary_mode: within kwargs, '2p' or '3p'
+      output_dir: within kwargs, directory to save figures
+    """
+    # optional time limit
+    limit_seconds = kwargs.get('limit_seconds', None)
+    mode = kwargs.get('network_summary_mode', '2p')
+
+    # prepare save directory
+    sim_data_path = network_data.get('sim_data_path', '')
+    basename = os.path.basename(sim_data_path).replace('_data.pkl', '').replace('_data.json', '')
+    output_dir = kwargs.get('output_dir', '')
+    save_dir = os.path.join(output_dir, basename)
+    os.makedirs(save_dir, exist_ok=True)
+
+    # safely extract axes/data
+    bursting_ax = None
+    try:
+        bursting_ax = network_data['bursting_data'].get('ax', None)
+    except Exception:
+        pass
+    mega_ax = None
+    try:
+        mega_ax = network_data['mega_bursting_data'].get('ax', None)
+    except Exception:
+        pass
+    spiking_data = None
+    try:
+        spiking_data = network_data['spiking_data'].get('spiking_metrics_by_unit', None)
+    except Exception:
+        pass
+    unit_types = network_data.get('unit_types', None)
+
+    # define output paths
+    paths = {
+        '2p_pdf': os.path.join(save_dir, 'network_summary_2p.pdf'),
+        '2p_png': os.path.join(save_dir, 'network_summary_2p.png'),
+        '3p_pdf': os.path.join(save_dir, 'network_summary_3p.pdf'),
+        '3p_png': os.path.join(save_dir, 'network_summary_3p.png'),
+    }
+
+    # helpers for axis adjustments
+    def auto_limit(axes, getter, setter, direction='x'):
+        """
+        Automatically set the limits of the axes based on the minimum and maximum values
+        of the data in the axes.
+        Parameters:
+            axes: list of axes to set limits for
+            getter: function to get the current limits of the axes
+            setter: function to set the limits of the axes
+            direction: 'x' or 'y' to specify which axis to limit
+        """
+        values_min, values_max = [], []
+        for ax in axes:
+            # always skip ax[0] for the raster plot - rasterplot will have unique y axis from network bursting
+            if ax == axes[0] and direction == 'y':
+                continue            
+            try:
+                mn, mx = getter(ax)
+            except Exception:
+                mn, mx = np.nan, np.nan
+            values_min.append(mn)
+            values_max.append(mx)
+        overall_min = np.nanmin(values_min)
+        overall_max = np.nanmax(values_max)
+        for ax in axes:
+            # skip ax[0] for the raster plot - rasterplot will have unique y axis from network bursting
+            if ax == axes[0] and direction == 'y':
+                continue            
+            try:
+                setter(ax, overall_min, overall_max)
+            except Exception:
+                pass
+
+    if mode == '2p':
+        fig, axs = plt.subplots(2, 1, figsize=(16, 9))
+
+        print("Generating raster plot...")
+        axs[0] = plot_raster_plot_v2(axs[0], spiking_data, unit_types)
+
+        print("Generating network bursting plot...")
+        axs[1] = plot_network_bursting_v2(axs[1], bursting_ax, mega_ax=mega_ax)
+
+        print("Auto-scaling axes...")
+        auto_limit(axs, lambda a: a.get_xlim(), lambda a, mn, mx: a.set_xlim(mn, mx), direction='x')
+        auto_limit(axs, lambda a: a.get_ylim(), lambda a, mn, mx: a.set_ylim(mn, mx), direction='y')
+
+        # apply overrides if given
+        if x_lim is not None:
+            for ax in axs:
+                ax.set_xlim(*x_lim)
+        if y_lim is not None:
+            for ax in axs:
+                ax.set_ylim(*y_lim)
+
+        # apply time limit zoom
+        if limit_seconds is not None:
+            for ax in axs:
+                try:
+                    ax.set_xlim(0, limit_seconds)
+                except Exception:
+                    pass
+
+        # remove bursting legend
+        try:
+            axs[1].legend().remove()
+        except Exception:
+            pass
+
+        plt.tight_layout()
+        fig.savefig(paths['2p_pdf'])
+        print(f"Saved: {paths['2p_pdf']}")
+        fig.savefig(paths['2p_png'], dpi=600)
+        print(f"Saved: {paths['2p_png']}")
+
+    elif mode == '3p':
+        fig, axs = plt.subplots(3, 1, figsize=(16, 9))
+
+        print("Generating raster plot...")
+        axs[0] = plot_raster_plot_v2(axs[0], spiking_data, unit_types)
+
+        print("Generating network bursting plot...")
+        axs[1] = plot_network_bursting_v2(axs[1], bursting_ax)
+
+        print("Generating mega bursting plot...")
+        axs[2] = plot_network_bursting_v2(axs[2], mega_ax, mode='mega')
+
+        print("Auto-scaling axes...")
+        auto_limit(axs, lambda a: a.get_xlim(), lambda a, mn, mx: a.set_xlim(mn, mx), direction='x')
+        auto_limit(axs, lambda a: a.get_ylim(), lambda a, mn, mx: a.set_ylim(mn, mx), direction='y')
+
+        # apply overrides if given
+        if x_lim is not None:
+            for ax in axs:
+                ax.set_xlim(*x_lim)
+        if y_lim is not None:
+            for ax in axs:
+                ax.set_ylim(*y_lim)
+
+        # apply time limit zoom
+        if limit_seconds is not None:
+            for ax in axs:
+                try:
+                    ax.set_xlim(0, limit_seconds)
+                except Exception:
+                    pass
+
+        # remove bursting legends
+        for idx in (1, 2):
+            try:
+                axs[idx].legend().remove()
+            except Exception:
+                pass
+
+        plt.tight_layout()
+        fig.savefig(paths['3p_pdf'])
+        print(f"Saved: {paths['3p_pdf']}")
+        fig.savefig(paths['3p_png'], dpi=600)
+        print(f"Saved: {paths['3p_png']}")
+
+def _plot_one_network(network_data, base_kwargs):
+    """
+    Helper that can be run in a child process.
+    """
+    try:
+        # copy kwargs so each process has its own dict
+        #kwargs = copy.copy(base_kwargs)
+        kwargs = base_kwargs.copy()
+        # ensure output_dir comes from sim_data_path
+        sim_data_path = network_data['sim_data_path']
+        kwargs['output_dir'] = os.path.dirname(sim_data_path)
+
+        # run both 2p and 3p modes
+        for mode in ('2p', '3p'):
+            kwargs['network_summary_mode'] = mode
+            plot_network_summary_v3(network_data, **kwargs)
+
+    except Exception as e:
+        print(f"[ERROR] Network {sim_data_path}: {e}")
+        traceback.print_exc()
+
+def plot_network_metrics_v2(network_data_list, kwargs, parallel=False, num_workers=16):
+    """
+    Plot network summaries for each item in network_data_list.
+    
+    Args:
+      network_data_list: list of dicts, each with 'sim_data_path', etc.
+      kwargs: base kwargs to forward into plot_network_summary_v3
+      parallel: if True, use a ProcessPoolExecutor
+      num_workers: number of processes to spawn when parallel=True
+    """
+    indent_increase()
+
+    if parallel:
+        # spin up processes, map helper 
+        with ProcessPoolExecutor(max_workers=num_workers) as exe:
+            # map takes care of ordering; exceptions are printed in helper
+            exe.map(_plot_one_network,
+                    network_data_list,
+                    [kwargs]*len(network_data_list))
+    else:
+        # simple serial loop
+        for network_data in network_data_list:
+            _plot_one_network(network_data, kwargs)
+
+    indent_decrease()
+
+def plot_network_metrics(network_data_list, kwargs):
+    ''' plot network metrics for each permutation '''
+    # subfuncs ===================================================================================================
+    
+    # main ===================================================================================================
+    # init
+    indent_increase()
+    for network_data in network_data_list:
+        try:
+            # if output dir is not specified, save next to sim_data_path
+            #if 'output_dir' not in kwargs:
+                #kwargs['output_dir'] = network_data['output_dir']
+            sim_data_path = network_data['sim_data_path']
+            kwargs['output_dir'] = os.path.dirname(sim_data_path)
+            kwargs['network_summary_mode'] = '2p' #2 pannel
+            #plot_network_summary_v2(network_data, **kwargs)
+            plot_network_summary_v3(network_data, **kwargs)
+            kwargs['network_summary_mode'] = '3p' #3 pannel
+            #plot_network_summary_v2(network_data, **kwargs)
+            plot_network_summary_v3(network_data, **kwargs)
+        except Exception as e:
+            print(f'Error plotting network metrics: {e}')
+            traceback.print_exc()
+            continue
+    # end func
+    indent_decrease()
+    return
+    #raise NotImplementedError('plot_permutations not implemented yet.')
+
 def plot_raster_plot_v2(ax, spiking_data_by_unit, unit_types=None):
     """Plot a raster plot for spiking data."""
     
@@ -76,32 +320,33 @@ def plot_network_bursting_v2(ax, bursting_ax, mega_ax=None, mode='normal'):
     """Plot network bursting activity with clear differentiation between lines."""
     
     if mode == 'normal':
-        # Copy ax features to the new ax
-        ax.set_xlim(bursting_ax.get_xlim())
-        ax.set_ylim(bursting_ax.get_ylim())
-        ax.set_ylabel('Firing Rate (Hz)')
-        ax.set_xlabel('Time (s)')
-        ax.set_title(bursting_ax.get_title())
+        if bursting_ax is not None:
+            # Copy ax features to the new ax
+            ax.set_xlim(bursting_ax.get_xlim())
+            ax.set_ylim(bursting_ax.get_ylim())
+            ax.set_ylabel('Firing Rate (Hz)')
+            ax.set_xlabel('Time (s)')
+            ax.set_title(bursting_ax.get_title())
 
-        # Plot Line 1 (blue)
-        ax.plot(
-            bursting_ax.get_lines()[0].get_xdata(),
-            bursting_ax.get_lines()[0].get_ydata(),
-            color='blue',
-            #label='Bursting'
-        )
-        
-        # plot bursting peaks
-        ax.plot(
-            bursting_ax.get_lines()[1].get_xdata(),
-            bursting_ax.get_lines()[1].get_ydata(),
-            'o', color='red', 
-            label='Bursts'
-        )
+            # Plot Line 1 (blue)
+            ax.plot(
+                bursting_ax.get_lines()[0].get_xdata(),
+                bursting_ax.get_lines()[0].get_ydata(),
+                color='blue',
+                #label='Bursting'
+            )
+            
+            # plot bursting peaks
+            ax.plot(
+                bursting_ax.get_lines()[1].get_xdata(),
+                bursting_ax.get_lines()[1].get_ydata(),
+                'o', color='red', 
+                label='Bursts'
+            )
 
-        # # Mark peaks with vertical dotted lines
-        # for x_peak in bursting_ax.get_lines()[1].get_xdata():
-        #     ax.axvline(x=x_peak, linestyle='dotted', color='red', alpha=0.8)
+            # # Mark peaks with vertical dotted lines
+            # for x_peak in bursting_ax.get_lines()[1].get_xdata():
+            #     ax.axvline(x=x_peak, linestyle='dotted', color='red', alpha=0.8)
 
         # If mega_ax is not None, plot filled area and peaks
         if mega_ax is not None:
@@ -135,44 +380,52 @@ def plot_network_bursting_v2(ax, bursting_ax, mega_ax=None, mode='normal'):
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys())
 
-        # Add a legend for clarity
-        ax.legend()
-
-        return ax
+        if ax is not None:
+            # Add a legend for clarity
+            ax.legend()
+            return ax
+        else:
+            print("No bursting_ax provided for normal mode.")
+            return None
     elif mode == 'mega':
         # this is for the case where we're plotting mega bursts only
-        # Copy ax features to the new ax
-        ax.set_xlim(bursting_ax.get_xlim())
-        ax.set_ylim(bursting_ax.get_ylim())
-        ax.set_ylabel('Firing Rate (Hz)')
-        ax.set_xlabel('Time (s)')
-        ax.set_title(bursting_ax.get_title())
-        
-        # Plot Line 1 (red)
-        ax.plot(
-            bursting_ax.get_lines()[0].get_xdata(),
-            bursting_ax.get_lines()[0].get_ydata(),
-            color='red',
-            #label='Mega Bursts'
-        )
-        
-        # plot bursting peaks
-        ax.plot(
-            bursting_ax.get_lines()[1].get_xdata(),
-            bursting_ax.get_lines()[1].get_ydata(),
-            'o', 
-            color='orange',
-            label='Mega Bursts'
-        )
-        
-        # Mark peaks with vertical dotted lines
-        for x_peak in bursting_ax.get_lines()[1].get_xdata():
-            ax.axvline(x=x_peak, linestyle='dotted', color='red', alpha=0.8)
+        # in this case, bursting_ax is mega_ax
+        if bursting_ax is not None:
+            # Copy ax features to the new ax
+            ax.set_xlim(bursting_ax.get_xlim())
+            ax.set_ylim(bursting_ax.get_ylim())
+            ax.set_ylabel('Firing Rate (Hz)')
+            ax.set_xlabel('Time (s)')
+            ax.set_title(bursting_ax.get_title())
             
-        # Add a legend for clarity
-        ax.legend()
-        
-        return ax
+            # Plot Line 1 (red)
+            ax.plot(
+                bursting_ax.get_lines()[0].get_xdata(),
+                bursting_ax.get_lines()[0].get_ydata(),
+                color='red',
+                #label='Mega Bursts'
+            )
+            
+            # plot bursting peaks
+            ax.plot(
+                bursting_ax.get_lines()[1].get_xdata(),
+                bursting_ax.get_lines()[1].get_ydata(),
+                'o', 
+                color='orange',
+                label='Mega Bursts'
+            )
+            
+            # Mark peaks with vertical dotted lines
+            for x_peak in bursting_ax.get_lines()[1].get_xdata():
+                ax.axvline(x=x_peak, linestyle='dotted', color='red', alpha=0.8)
+                
+            # Add a legend for clarity
+            ax.legend()
+            
+            return ax
+        else:
+            print("No bursting_ax provided for mega mode.")
+            return None
 
 def plot_network_summary_v2(network_data, **kwargs):
         
@@ -190,9 +443,17 @@ def plot_network_summary_v2(network_data, **kwargs):
     #if sim_data_path is None: raise ValueError('No sim_data_path found in network_data')
     #save_dir = sim_data_path.replace('_data.pkl', '').replace('_data.json', '')
     #save_dir = kwargs.get('output_dir', None)
-    bursting_ax = network_data['bursting_data']['ax']
-    mega_bursting_ax = network_data['mega_bursting_data']['ax'] 
-    spiking_data_by_unit = network_data['spiking_data']['spiking_metrics_by_unit'] 
+    # bursting_ax = network_data['bursting_data']['ax']
+    # mega_bursting_ax = network_data['mega_bursting_data']['ax'] 
+    # spiking_data_by_unit = network_data['spiking_data']['spiking_metrics_by_unit']
+    
+    # unpack network data
+    try: bursting_ax = network_data['bursting_data'].get('ax', None)
+    except: bursting_ax = None
+    try: mega_bursting_ax = network_data['mega_bursting_data'].get('ax', None); 
+    except: mega_bursting_ax = None
+    try: spiking_data_by_unit = network_data['spiking_data'].get('spiking_metrics_by_unit', None); 
+    except: spiking_data_by_unit = None     
     unit_types = network_data['unit_types']
     
     # prep save paths
@@ -276,8 +537,27 @@ def plot_network_summary_v2(network_data, **kwargs):
         print("Adjusting axes...")
         # ensure x-axes are the same for both plots
         # get the narrowes x-axis range shared by both plots
-        x_min = min([ax[0].get_xlim()[0], ax[1].get_xlim()[0], ax[2].get_xlim()[0]])
-        x_max = max([ax[0].get_xlim()[1], ax[1].get_xlim()[1], ax[2].get_xlim()[1]])
+        
+        #patching this to work with nan axes
+        # x_min = min([ax[0].get_xlim()[0], ax[1].get_xlim()[0], ax[2].get_xlim()[0]])
+        # x_max = max([ax[0].get_xlim()[1], ax[1].get_xlim()[1], ax[2].get_xlim()[1]])
+
+        # assume ax is an iterable of axes (e.g. a list or array)
+        x_mins = []
+        x_maxs = []
+        for a in ax:
+            try:
+                lo, hi = a.get_xlim()
+            except Exception:
+                lo, hi = np.nan, np.nan
+            x_mins.append(lo)
+            x_maxs.append(hi)
+
+        # nan-aware min/max
+        x_min = np.nanmin(x_mins)
+        x_max = np.nanmax(x_maxs)
+
+        
         ax[0].set_xlim(x_min, x_max)
         ax[1].set_xlim(x_min, x_max)
         ax[2].set_xlim(x_min, x_max)
@@ -493,7 +773,8 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
         
         #init
         indent_increase()
-        max_workers = kwargs['max_workers']
+        #max_workers = kwargs['max_workers']
+        max_workers = kwargs.get('max_workers', 4) # default to 4 workers
         debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
         #debug_mode = True
         if debug_mode:
@@ -630,7 +911,8 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
     # process units
     if run_parallel: 
         network_data = process_units_in_parallel(units, sa, network_data, kwargs)
-    else: network_data = process_units_in_sequence(units, sa, network_data, kwargs)
+    else: 
+        network_data = process_units_in_sequence(units, sa, network_data, kwargs)
     
     # end func =================================================================
     indent_decrease()
@@ -685,7 +967,8 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
                 simData = kwargs['simData']
                 network_data['source'] = 'simulated'
                 network_data['spiking_data'] = {}
-                network_data['sim_data_path'] = kwargs.get('sim_data_path', None)
+                #network_data['sim_data_path'] = kwargs.get('sim_data_path', None)
+                network_data['sim_data_path'] = kwargs.get('data_file_path', None)
                 return network_data
             elif source == 'experimental':
                 sorting_object = kwargs['sorting_object']
@@ -765,6 +1048,7 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
             print(f'Error initializing spike data: {e}')
             traceback.print_exc()
             pass
+            #return None, None, None, network_data
     
     def compute_spike_metrics(network_data, kwargs):
 
@@ -3034,63 +3318,6 @@ def compute_burst_metrics(unit_metrics, convolved_data, max_workers=4, debug_mod
         burst_parts = {**burst_parts} # HACK: Convert to dict replacing how its send to dict below...probably can do this better
     else:
         burst_parts = "Burst sequencing not enabled"
-    
-    #assemble dict
-    # burst_metrics = {
-    #     'num_bursts': len(peak_times),
-    #     'burst_rate': len(peak_times) / (convolved_data['time_vector'][-1] - convolved_data['time_vector'][0]) if len(peak_times) > 1 else np.nan,
-    #     'burst_ids': list(range(len(peak_times))),
-    #     'ibi': {
-    #         'data': np.diff(peak_times),
-    #         'mean': np.nanmean(np.diff(peak_times)),
-    #         'std': np.nanstd(np.diff(peak_times)),
-    #         'cov': np.nanstd(np.diff(peak_times)) / np.nanmean(np.diff(peak_times)) if np.nanmean(np.diff(peak_times)) > 0 else np.nan,
-    #         'median': np.nanmedian(np.diff(peak_times)),
-    #         'min': np.nanmin(np.diff(peak_times)),
-    #         'max': np.nanmax(np.diff(peak_times)),
-    #     },
-    #     'burst_amp': {
-    #         'data': convolved_data['peak_values'],
-    #         'mean': np.nanmean(convolved_data['peak_values']),
-    #         'std': np.nanstd(convolved_data['peak_values']),
-    #         'cov': np.nanstd(convolved_data['peak_values']) / np.nanmean(convolved_data['peak_values']) if np.nanmean(convolved_data['peak_values']) > 0 else np.nan,
-    #         'median': np.nanmedian(convolved_data['peak_values']),
-    #         'min': np.nanmin(convolved_data['peak_values']),
-    #         'max': np.nanmax(convolved_data['peak_values']),
-    #     },
-    #     'burst_duration': {
-    #         'data': convolved_data['right_base_times'] - convolved_data['left_base_times'],
-    #         'mean': np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-    #         'std': np.nanstd(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-    #         'cov': np.nanstd(convolved_data['right_base_times'] - convolved_data['left_base_times']) / np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']) if np.nanmean(convolved_data['right_base_times'] - convolved_data['left_base_times']) > 0 else np.nan,
-    #         'median': np.nanmedian(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-    #         'min': np.nanmin(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-    #         'max': np.nanmax(convolved_data['right_base_times'] - convolved_data['left_base_times']),
-    #     },
-    #     #'burst_parts': {**burst_parts},
-    #     'burst_parts': burst_parts,
-    #     'num_units_per_burst': {
-    #         'data': [burst_part['num_units_participating'] for burst_part in burst_parts.values()],
-    #         'mean': np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-    #         'std': np.nanstd([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-    #         'cov': np.nanstd([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) / np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) if np.nanmean([burst_part['num_units_participating'] for burst_part in burst_parts.values()]) > 0 else np.nan,
-    #         'median': np.nanmedian([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-    #         'min': np.nanmin([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-    #         'max': np.nanmax([burst_part['num_units_participating'] for burst_part in burst_parts.values()]),
-    #     } if burst_parts != "Burst sequencing not enabled" else "Burst sequencing not enabled",
-    #     'in_burst_fr': {
-    #         'data': [burst_part['spike_rate'] for burst_part in burst_parts.values()],
-    #         'mean': np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-    #         'std': np.nanstd([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-    #         'cov': np.nanstd([burst_part['spike_rate'] for burst_part in burst_parts.values()]) / np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]) if np.nanmean([burst_part['spike_rate'] for burst_part in burst_parts.values()]) > 0 else np.nan,
-    #         'median': np.nanmedian([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-    #         'min': np.nanmin([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-    #         'max': np.nanmax([burst_part['spike_rate'] for burst_part in burst_parts.values()]),
-    #         } if burst_parts != "Burst sequencing not enabled" else "Burst sequencing not enabled",          
-    # }
-    
-    # print(f'Burst Metrics Computed')
-    # return burst_metrics, warnings
     
     # assemble dict
     burst_metrics = {}
