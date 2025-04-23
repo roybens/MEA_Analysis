@@ -217,6 +217,14 @@ def register_callbacks(app):
             ], style={'display': 'flex', 'alignItems': 'center'}))
 
         return div_options, unique_divs, chip_well_options, unique_chip_wells, color_inputs, neuron_checklist_items, html.Div([])
+    @app.callback(
+        Output('neuron-order-store', 'data'),
+        Input({'type': 'neuron-order', 'index': ALL}, 'value'),
+        State({'type': 'neuron-order', 'index': ALL}, 'id')
+    )
+    def update_neuron_order(order_values, ids):
+        neuron_order = [id['index'] for _, id in sorted(zip(order_values, ids), key=lambda pair: pair[0])]
+        return neuron_order
 
     @app.callback(
         [Output('graphs-container', 'children', allow_duplicate=True),
@@ -230,11 +238,13 @@ def register_callbacks(app):
          State('div-checklist', 'value'),
          State('chip-well-checklist', 'value'),
          State({'type': 'color-hex', 'index': ALL}, 'value'),
+         State({'type': 'color-hex', 'index': ALL}, 'id'),
          State('neuron-order-store', 'data'),
          State({'type': 'neuron-checklist', 'index': ALL}, 'value')],
         prevent_initial_call=True  # Add this to prevent initial call
     )
-    def update_graph(n_clicks, n_clicks_svg, n_clicks_png, contents, filename, selected_divs, selected_chip_wells, hex_codes, neuron_order, selected_neuron_types_lists):
+    def update_graph(n_clicks, n_clicks_svg, n_clicks_png, contents, filename, selected_divs, selected_chip_wells, hex_codes, hex_codes_ids, neuron_order, selected_neuron_types_lists):
+
         triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0]
 
         if contents is None or n_clicks == 0:
@@ -250,16 +260,18 @@ def register_callbacks(app):
         df = df[df['NeuronType'].isin(selected_neuron_types)]
         df = df[df['Chip_Well'].isin(selected_chip_wells)]
         unique_genotypes = df['NeuronType'].unique()
-
+        # Build the color mapping dictionary using IDs
+        selected_colors_dict = {hex_code_id['index']: hex_code for hex_code_id, hex_code in zip(hex_codes_ids, hex_codes)}
         hex_codes = hex_codes or {}
-        selected_colors_dict = {genotype: hex_codes[i] for i, genotype in enumerate(unique_genotypes)}
+        selected_colors_dict = {genotype: selected_colors_dict[genotype] for genotype in selected_neuron_types if genotype in selected_colors_dict}
+        #print("neuron order", neuron_order)
         ordered_genotypes = neuron_order if neuron_order else unique_genotypes
         ordered_genotypes = [genotype for genotype in ordered_genotypes if genotype in selected_neuron_types]
         if not ordered_genotypes:
             ordered_genotypes = unique_genotypes
 
         graphs = []
-        excluded_columns = ['DIV', 'NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time']
+        excluded_columns = ['DIV', 'NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time','IBI_List',	'Burst_Peak_List',	'Abs_Burst_Peak_List',	'Burst_Times_List',	'SpikesPerBurst_List']
         selected_metrics = [col for col in df.columns if col not in excluded_columns]
 
         all_svg_bytes_list = []
