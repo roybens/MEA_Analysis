@@ -15,12 +15,12 @@ slurm*.out
 **.png
 **.npz
 **.zip
+venv/
 **.log
 **.out
 nohup.out
 **.svg
 .DS_Store
 **.pdf
-StimulationAnalysis/*
-!StimulationAnalysis/*.ipynb
-!StimulationAnalysis/*.py
+
+
