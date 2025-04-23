@@ -7,6 +7,7 @@ IPNAnalysis/Sorting_Intermediate_files/*
 IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
+AxonReconPipeline/data/*
 **.mat
 .vscode
 **.pkl
@@ -15,4 +16,11 @@ slurm*.out
 **.npz
 **.zip
 venv/
+**.log
+**.out
+nohup.out
+**.svg
 .DS_Store
+**.pdf
+
+
