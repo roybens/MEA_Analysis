@@ -767,6 +767,50 @@ function [] = compileNetworkFiles(data)
                     
 
                     close(f);
+
+                     % II. Spike Rate Activity Map and Distribution
+                    try
+                        % get the mean firing rate for each electrode
+                        meanFiringRate = mxw.activityMap.computeSpikeRate(networkData);
+                        
+                        % define maximum firing rate used in plots as 99th percentile of firing
+                        % rate values
+                        maxFiringRate = mxw.util.percentile(meanFiringRate(meanFiringRate~=0),99);
+                        
+                        % plot the list of mean firing rates as a map, given the electrode 
+                        % x and y coordinates in 'fileManagerObj.processedMap'
+                        figure('Color','w','visible','off');
+                        subplot(2,1,1);
+                        mxw.plot.activityMap(networkData, meanFiringRate,'ColorMap','gray', 'Ylabel', '[Hz]',...
+                            'CaxisLim', [0.1 max(meanFiringRate)/5],'Interpolate',true,'Figure',false,'Title','Firing Rate Activity Map');
+                        % run the line above several times, experimenting with different 
+                        % [min max] range of the color gradient 'CaxisLim'
+                        
+                        % add scale bar 
+                        line([300 800],[2000+400 2000+400],'Color','k','LineWidth',4);
+                        axis off;
+                        text(340,2100+500,'0.5 mm','color','k');
+                        xlim([200 3750]);ylim([150 2500])
+                        
+                        % plot the distribution of firing rates across all of the electrodes
+                        subplot(2,1,2);
+                        thrFiringRate = 0.1; % set a minimum spike rate threshold (Hz)
+                        histogram(meanFiringRate(meanFiringRate>thrFiringRate),0:.1:ceil(maxFiringRate), ...
+                            'FaceColor','#135ba3', "EdgeColor",'#414042')
+                        xlim([thrFiringRate maxFiringRate])
+                        ylabel('Counts');xlabel('Firing Rate [Hz]');
+                        box off;
+                        legend(['Mean Firing Rate = ',num2str(mean(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f'),...
+                            ' Hz,  sd = ',num2str(std(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f')])
+                    
+                        print(gcf,append(opDir,'Network_outputs/',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+                   
+                        %exportgraphics(fig,fullfile(append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg')),'ContentType','vector','BackgroundColor','none');
+                    catch ME
+                        fprintf('Unable to plot Firing Rate Map for run s%/n',scan_runID_text)
+                        fprintf('%s\n',ME.message)
+                        %fprintf(logFile,'Unable to plot Firing Rate Map for run s%/n',scan_runID_text);
+                    end
                     %totalTime = toc;  % Measure the total elapsed time after the loop
     
                  % Display total elapsed time
