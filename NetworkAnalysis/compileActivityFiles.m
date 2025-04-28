@@ -59,10 +59,7 @@ run_ids = unique(refTable.Run_);
 div0_date = datetime(div0, "InputFormat",'MM/dd/yyyy');
 
 
-% finalWriteTable = table([], [], [], cell(0,1), [], cell(0,1), [], [],[],  ...
-%         'VariableNames', {
-%             'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', 'Mean_FiringRate','Mean_SpikeAmplitude','Active_percentage'...
-%     });
+
 
 
 %% iterate through ActivityScans
@@ -189,13 +186,14 @@ for k = 1 : numFiles
             scan_meanSpikeAmplitude = mean(amplitude90perc(amplitude90perc>thrAmp));
             idx = (meanFiringRate>thrFiringRate & amplitude90perc>thrAmp);
             Active_area = sum(idx)/length(idx)*100;
+          
             
-                  % Create a new row for the table
-            fileResults{z} = table(scan_runID,assayColumn, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
-                   scan_meanFiringRate, scan_meanSpikeAmplitude,Active_area,...
-                   'VariableNames', {
-            'Run_ID','AssayType', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-            'Mean_FiringRate','Mean_SpikeAmplitude','Active_area'...
+               % Save only summary metrics to main table
+            fileResults{z} = table(scan_runID, assayColumn, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
+                scan_meanFiringRate, scan_meanSpikeAmplitude, Active_area, ...
+                'VariableNames', {
+                    'Run_ID', 'AssayType', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
+                    'Mean_FiringRate', 'Mean_SpikeAmplitude', 'Active_area' ...
             });
             catch ME
                 disp(ME.message)
@@ -206,34 +204,8 @@ for k = 1 : numFiles
             end
             % plot amplitude and firing rate maps
             if plotFig
-            try
-                % I. Raster Plots
-                recNr = 3;
-                % sampling frequency
-                fsActivity = activityScanData.fileObj(recNr).samplingFreq;
-                % get spike time stamps 
-                tsActivity = double(activityScanData.fileObj(recNr).spikes.frameno - activityScanData.fileObj(recNr).firstFrameNum)/fsActivity;
-                % channel list, where spike time stamps where detected
-                chActivity = activityScanData.fileObj(recNr).spikes.channel;
-                
-                % plot raster
-                figure('Color','w','visible','off');
-                subplot(2,1,1)
-                plot(tsActivity, chActivity,'.','Color','#135ba3','MarkerSize',2)
-                box off 
-                xlabel('Time [s]') 
-                ylabel('Channel')
-                title('Activity Scan Raster Plot')
-                xmaxActivity = max(tsActivity);
-                xlim([0 xmaxActivity])
-                ylim([0 max(chActivity)])
-                
-                saveas(gcf,append(opDir,'ActivityScan_outputs/Raster_BurstActivity/ActivityRaster',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
-            catch
-                fprintf('Unable to plot raster for run %s/n', scan_runID_text)
-                %fprintf(logFile,'Unable to plot raster for run %s/n', scan_runID_text);
-            end
-        
+            
+
             % II. Spike Rate Activity Map and Distribution
             try
                 % get the mean firing rate for each electrode
@@ -242,12 +214,13 @@ for k = 1 : numFiles
                 % define maximum firing rate used in plots as 99th percentile of firing
                 % rate values
                 maxFiringRate = mxw.util.percentile(meanFiringRate(meanFiringRate~=0),99);
-                
+                    
                 % plot the list of mean firing rates as a map, given the electrode 
                 % x and y coordinates in 'fileManagerObj.processedMap'
+                customCmap = customDivergingColorMap(256); 
                 figure('Color','w','visible','off');
                 subplot(2,1,1);
-                mxw.plot.activityMap(activityScanData, meanFiringRate, 'Ylabel', '[Hz]',...
+                mxw.plot.activityMap(activityScanData, meanFiringRate,'ColorMap',customCmap, 'Ylabel', '[Hz]',...
                     'CaxisLim', [0.1 max(meanFiringRate)/5],'Interpolate',true,'Figure',false,'Title','Firing Rate Activity Map');
                 % run the line above several times, experimenting with different 
                 % [min max] range of the color gradient 'CaxisLim'
@@ -269,9 +242,12 @@ for k = 1 : numFiles
                 legend(['Mean Firing Rate = ',num2str(mean(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f'),...
                     ' Hz,  sd = ',num2str(std(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f')])
             
-                saveas(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
-            catch
+                print(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+           
+                %exportgraphics(fig,fullfile(append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg')),'ContentType','vector','BackgroundColor','none');
+            catch ME
                 fprintf('Unable to plot Firing Rate Map for run s%/n',scan_runID_text)
+                fprintf('%s\n',ME.message)
                 %fprintf(logFile,'Unable to plot Firing Rate Map for run s%/n',scan_runID_text);
             end
             
@@ -287,7 +263,7 @@ for k = 1 : numFiles
                 % x and y coordinates in 'fileManagerObj.processedMap'
                 figure('Color','w','visible','off');
                 subplot(2,1,1);
-                mxw.plot.activityMap(activityScanData, amplitude90perc,'Ylabel', '[\muV]',...
+                mxw.plot.activityMap(activityScanData, amplitude90perc,'ColorMap',customCmap,'Ylabel', '[\muV]',...
                     'CaxisLim', [10 maxAmp], 'Interpolate',true,'Figure',false,'Title','Spike Amplitude Activity Map');
                 % run the line above several times, experimenting with different 
                 % [min max] range of the color gradient 'CaxisLim'
@@ -310,11 +286,31 @@ for k = 1 : numFiles
                 legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
                     ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
             
-                saveas(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.png'))
-            catch
-                fprintf('Unable to plot Amplitude Map for run %s/n', scan_runID_text)
+                print(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+                %exportgraphics(fig,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),"ContentType",'vector','BackgroundColor','none');
+            catch ME
+                fprintf('Unable to plot Amplitude Map for run %s\n', scan_runID_text)
+                fprintf('%s\n',ME.message)
                 %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
             end
+
+            try
+
+                matFileName = sprintf('Distributions_Run%s_Chip%s_Well%d_DIV%d.mat', ...
+                    scan_runID_text, scan_chipID, wellID, scan_div);
+                matFilePath = fullfile(opDir, 'ActivityScan_outputs', 'Distributions', matFileName);
+                
+                % Ensure folder exists
+                if ~exist(fullfile(opDir, 'ActivityScan_outputs', 'Distributions'), 'dir')
+                    mkdir(fullfile(opDir, 'ActivityScan_outputs', 'Distributions'));
+                end
+                
+                % Save variables to MAT file
+                save(matFilePath, 'meanFiringRate', 'amplitude90perc', 'scan_runID', ...
+                    'scan_chipID', 'wellID', 'scan_div');
+            catch ME
+                fprintf('%s\n',ME.message)
+            end 
           % active area
         end
         end
