@@ -27,7 +27,7 @@ opDir = data.opDir;
 
     
 % make output folder
-outputFolders = {'AmplitudeMap', 'FiringRateMap','Raster_BurstActivity'};
+outputFolders = {'AmplitudeMap', 'FiringRateMap','Active_Area'};
 
 
 for i = 1:length(outputFolders)
@@ -139,7 +139,7 @@ for k = 1 : numFiles
         fileResults = cell(numWells, 1);
         skippedWells = cell(numWells,1);
        
-        parfor z = 1:numWells
+        for z = 1:numWells
             wellID=wellsIDs(z);
             fprintf(1, 'Processing Well %d\n', wellID);
             neuronSourceType = neuronTypes(z);
@@ -186,6 +186,9 @@ for k = 1 : numFiles
             scan_meanSpikeAmplitude = mean(amplitude90perc(amplitude90perc>thrAmp));
             idx = (meanFiringRate>thrFiringRate & amplitude90perc>thrAmp);
             Active_area = sum(idx)/length(idx)*100;
+
+            xpos_elec = activityScanData.processedMap.xpos(idx);
+            ypos_elec= activityScanData.processedMap.ypos(idx);
           
             
                % Save only summary metrics to main table
@@ -293,6 +296,61 @@ for k = 1 : numFiles
                 fprintf('%s\n',ME.message)
                 %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
             end
+            % === Active Area Gray Heatmap ===
+            try
+                figure('Color', 'w', 'Visible', 'off');  % create invisible figure
+                
+                % Correct Maxwell Chip Physical Area
+                xlim_chip = [0 3850];  % 3.85 mm = 3850 microns
+                ylim_chip = [0 2100];  % 2.10 mm = 2100 microns
+                BinSize = 30;
+                % Define bin edges
+                xedges = xlim_chip(1):BinSize:xlim_chip(2);
+                yedges = ylim_chip(1):BinSize:ylim_chip(2);
+            
+                % Compute 2D histogram (density)
+                N = histcounts2(ypos_elec, xpos_elec, yedges, xedges);  % Note (y,x) order!
+            
+                % Plot the heatmap
+                imagesc(xedges, yedges, N);
+                axis xy;
+                axis equal;
+                hold on;
+            
+                % Set colormap
+                colormap("gray");
+                colorbar;
+                CaxisLim =[];
+                % Set color limits
+                if isempty(CaxisLim)
+                    caxis([0 max(N(:))]);
+                else
+                    caxis(CaxisLim);
+                end
+            
+                % Scalebar
+                line([300 800], [1800 1800], 'Color', 'k', 'LineWidth', 4);  % Adjusted position
+                text(340, 1850, '0.5 mm', 'color', 'k', 'FontSize', 8);
+            
+                % Set axis limits correctly
+                xlim(xlim_chip);
+                ylim(ylim_chip);
+            
+                axis off;
+                box off;
+
+   
+                title(append('Active Area ', num2str(Active_area, '%.1f'), '%'), 'FontSize', 12);
+            
+                % Save figure
+                activeHeatmapPath = append(opDir,'ActivityScan_outputs/Active_Area/ActiveAreaDensity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg');
+                print(gcf, activeHeatmapPath, '-dsvg');
+            
+            catch ME
+                fprintf('Unable to plot Active Area Density Heatmap for run %s\n', scan_runID_text)
+                fprintf('%s\n', ME.message)
+            end
+
 
             try
 
