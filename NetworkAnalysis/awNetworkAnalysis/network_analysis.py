@@ -1,4 +1,5 @@
 
+
 # Notes =======================================================================
 '''
 '''
@@ -39,13 +40,22 @@ def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
     # optional time limit
     limit_seconds = kwargs.get('limit_seconds', None)
     mode = kwargs.get('network_summary_mode', '2p')
-
+    source = network_data.get('source', None)
+    assert source is not None, 'No source provided for network data'
+    
     # prepare save directory
-    sim_data_path = network_data.get('sim_data_path', '')
-    basename = os.path.basename(sim_data_path).replace('_data.pkl', '').replace('_data.json', '')
-    output_dir = kwargs.get('output_dir', '')
-    save_dir = os.path.join(output_dir, basename)
-    os.makedirs(save_dir, exist_ok=True)
+    if 'simulated' in source: 
+        sim_data_path = network_data.get('sim_data_path', '')
+        basename = os.path.basename(sim_data_path).replace('_data.pkl', '').replace('_data.json', '')
+        output_dir = kwargs.get('output_dir', '')
+        save_dir = os.path.join(output_dir, basename)
+        os.makedirs(save_dir, exist_ok=True)
+    elif 'experimental' in source: 
+        metrics_dir = network_data.get('network_metrics_output', None)
+        assert metrics_dir is not None, 'No network metrics output directory provided'
+        basename = metrics_dir.replace('network_analysis', 'network_plots')
+        save_dir = basename
+        os.makedirs(save_dir, exist_ok=True)
 
     # safely extract axes/data
     bursting_ax = None
@@ -66,12 +76,37 @@ def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
     unit_types = network_data.get('unit_types', None)
 
     # define output paths
-    paths = {
-        '2p_pdf': os.path.join(save_dir, 'network_summary_2p.pdf'),
-        '2p_png': os.path.join(save_dir, 'network_summary_2p.png'),
-        '3p_pdf': os.path.join(save_dir, 'network_summary_3p.pdf'),
-        '3p_png': os.path.join(save_dir, 'network_summary_3p.png'),
-    }
+    x_lim_max = x_lim[1] if x_lim is not None else None
+    y_lim_max = y_lim[1] if y_lim is not None else None
+    if x_lim_max is None:
+        paths = {
+            '2p_pdf': os.path.join(save_dir, 'network_summary_2p.pdf'),
+            '2p_png': os.path.join(save_dir, 'network_summary_2p.png'),
+            '2p_svg': os.path.join(save_dir, 'network_summary_2p.svg'),
+            '3p_pdf': os.path.join(save_dir, 'network_summary_3p.pdf'),
+            '3p_png': os.path.join(save_dir, 'network_summary_3p.png'),
+            '3p_svg': os.path.join(save_dir, 'network_summary_3p.svg'),
+        }
+    elif x_lim_max is not None and y_lim_max is None:
+        paths = {
+            '2p_pdf': os.path.join(save_dir, f'network_summary_2p_{x_lim_max}s.pdf'),
+            '2p_png': os.path.join(save_dir, f'network_summary_2p_{x_lim_max}s.png'),
+            '2p_svg': os.path.join(save_dir, f'network_summary_2p_{x_lim_max}s.svg'),
+            '3p_pdf': os.path.join(save_dir, f'network_summary_3p_{x_lim_max}s.pdf'),
+            '3p_png': os.path.join(save_dir, f'network_summary_3p_{x_lim_max}s.png'),
+            '3p_svg': os.path.join(save_dir, f'network_summary_3p_{x_lim_max}s.svg'),
+        }
+    elif x_lim_max is not None and y_lim_max is not None:
+        paths = {
+            '2p_pdf': os.path.join(save_dir, f'network_summary_2p_{x_lim_max}s_{y_lim_max}Hz.pdf'),
+            '2p_png': os.path.join(save_dir, f'network_summary_2p_{x_lim_max}s_{y_lim_max}Hz.png'),
+            '2p_svg': os.path.join(save_dir, f'network_summary_2p_{x_lim_max}s_{y_lim_max}Hz.svg'),
+            '3p_pdf': os.path.join(save_dir, f'network_summary_3p_{x_lim_max}s_{y_lim_max}Hz.pdf'),
+            '3p_png': os.path.join(save_dir, f'network_summary_3p_{x_lim_max}s_{y_lim_max}Hz.png'),
+            '3p_svg': os.path.join(save_dir, f'network_summary_3p_{x_lim_max}s_{y_lim_max}Hz.svg'),
+        }
+    
+    
 
     # helpers for axis adjustments
     def auto_limit(axes, getter, setter, direction='x'):
@@ -125,6 +160,8 @@ def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
                 ax.set_xlim(*x_lim)
         if y_lim is not None:
             for ax in axs:
+                if ax == axs[0]:
+                    continue
                 ax.set_ylim(*y_lim)
 
         # apply time limit zoom
@@ -146,6 +183,8 @@ def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
         print(f"Saved: {paths['2p_pdf']}")
         fig.savefig(paths['2p_png'], dpi=600)
         print(f"Saved: {paths['2p_png']}")
+        fig.savefig(paths['2p_svg'], dpi=600)
+        print(f"Saved: {paths['2p_svg']}")
 
     elif mode == '3p':
         fig, axs = plt.subplots(3, 1, figsize=(16, 9))
@@ -169,6 +208,8 @@ def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
                 ax.set_xlim(*x_lim)
         if y_lim is not None:
             for ax in axs:
+                if ax == axs[0]:
+                    continue
                 ax.set_ylim(*y_lim)
 
         # apply time limit zoom
@@ -191,6 +232,8 @@ def plot_network_summary_v3(network_data, x_lim=None, y_lim=None, **kwargs):
         print(f"Saved: {paths['3p_pdf']}")
         fig.savefig(paths['3p_png'], dpi=600)
         print(f"Saved: {paths['3p_png']}")
+        fig.savefig(paths['3p_svg'], dpi=600)
+        print(f"Saved: {paths['3p_svg']}")
 
 def _plot_one_network(network_data, base_kwargs):
     """
@@ -225,17 +268,21 @@ def plot_network_metrics_v2(network_data_list, kwargs, parallel=False, num_worke
     """
     indent_increase()
 
-    if parallel:
-        # spin up processes, map helper 
-        with ProcessPoolExecutor(max_workers=num_workers) as exe:
-            # map takes care of ordering; exceptions are printed in helper
-            exe.map(_plot_one_network,
-                    network_data_list,
-                    [kwargs]*len(network_data_list))
-    else:
-        # simple serial loop
-        for network_data in network_data_list:
-            _plot_one_network(network_data, kwargs)
+    try:
+        if parallel:
+            # spin up processes, map helper 
+            with ProcessPoolExecutor(max_workers=num_workers) as exe:
+                # map takes care of ordering; exceptions are printed in helper
+                exe.map(_plot_one_network,
+                        network_data_list,
+                        [kwargs]*len(network_data_list))
+        else:
+            # simple serial loop
+            for network_data in network_data_list:
+                _plot_one_network(network_data, kwargs)
+    except:
+        print("[ERROR] Exception in plot_network_metrics_v2")
+        traceback.print_exc()
 
     indent_decrease()
 
@@ -302,10 +349,13 @@ def plot_raster_plot_v2(ax, spiking_data_by_unit, unit_types=None):
             spike_times = spiking_data_by_unit[gid]['spike_times']
             spike_times = [spike_times] if isinstance(spike_times, (int, float)) else spike_times
             if spike_times is not None:
-                if unit_types[gid] == 'E':
-                    ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'b.', markersize=2)
-                elif unit_types[gid] == 'I':
-                    ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'r.', markersize=2)
+                try:
+                    if unit_types[gid] == 'E':
+                        ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'b.', markersize=2)
+                    elif unit_types[gid] == 'I':
+                        ax.plot(spike_times, [gid_to_ypos[gid]] * len(spike_times), 'r.', markersize=2)
+                except:
+                    print(f"Warning: Unit {gid} not found in unit_types. Skipping.")
 
         # Add legend with proxy markers
         ax.legend(handles=[exc_marker, inh_marker])
@@ -658,6 +708,108 @@ def compute_bursting_metrics(network_data, kwargs):
 def compute_unit_spike_metrics(
     unit, 
     spike_times_by_unit, 
+    sampling_rate, 
+    plot_wfs, 
+    recording_object, 
+    sorting_object, 
+    sa_well_folder, 
+    **pkwargs
+    ):
+    """Compute spike and waveform metrics for a single unit with robust error handling."""
+    try:
+        print(f'Processing unit {unit}...')
+        spike_times = spike_times_by_unit.get(unit, np.array([]))
+        num_spikes = len(spike_times)
+        isi_diffs = np.diff(spike_times) if num_spikes > 1 else np.array([])
+
+        # Compute basic metrics regardless of waveform availability
+        fr = np.nan
+        try:
+            if num_spikes > 1:
+                fr = num_spikes / (spike_times[-1] - spike_times[0])
+        except Exception as e:
+            print(f"⚠️ Error computing firing rate: {e}")
+
+        isi_metrics = {
+            'data': isi_diffs,
+            'mean': np.nan,
+            'std': np.nan,
+            'median': np.nan,
+            'cov': np.nan,
+            'max': np.nan,
+            'min': np.nan,
+        }
+
+        try:
+            if isi_diffs.size > 0:
+                isi_metrics.update({
+                    'mean': np.nanmean(isi_diffs),
+                    'std': np.nanstd(isi_diffs),
+                    'median': np.nanmedian(isi_diffs),
+                    'cov': np.nanstd(isi_diffs) / np.nanmean(isi_diffs) if np.nanmean(isi_diffs) > 0 else np.nan,
+                    'max': np.nanmax(isi_diffs),
+                    'min': np.nanmin(isi_diffs),
+                })
+        except Exception as e:
+            print(f"⚠️ Error computing ISI stats for unit {unit}: {e}")
+
+        # If no waveform folder, skip waveform analysis
+        if sa_well_folder is None:
+            return unit, {
+                'num_spikes': num_spikes,
+                'wf_metrics': 'Not implemented...yet',
+                'fr': fr,
+                'isi': isi_metrics,
+                'spike_times': spike_times,
+            }
+
+        # Otherwise, get waveform metrics
+        try:
+            sa = si.load_sorting_analyzer(sa_well_folder)
+            unit_wfs = sa.get_extension("waveforms").get_waveforms_one_unit(unit)
+            avg_waveform = np.nanmean(unit_wfs, axis=0)
+            best_channel_idx = np.argmax(np.max(np.abs(avg_waveform), axis=0))
+            best_channel_waveforms = unit_wfs[:, :, best_channel_idx]
+        except Exception as e:
+            print(f"⚠️ Error loading waveform data for unit {unit}: {e}")
+            return unit, {
+                'num_spikes': num_spikes,
+                'wf_metrics': 'Error loading waveform data',
+                'fr': fr,
+                'isi': isi_metrics,
+                'spike_times': spike_times,
+            }
+
+        try:
+            unit_wf_path = sa_well_folder.replace('analyzer', 'wf_plots') + f"/unit_{unit}_waveforms.png"
+            wf_metrics = compute_wf_metrics(
+                best_channel_waveforms,
+                sampling_rate,
+                plot_wf=plot_wfs,
+                save_fig=True,
+                unit=unit,
+                fig_name=unit_wf_path
+            )
+        except Exception as e:
+            print(f"⚠️ Error computing waveform metrics for unit {unit}: {e}")
+            wf_metrics = 'Error computing waveform metrics'
+
+        return unit, {
+            'num_spikes': num_spikes,
+            'wf_metrics': wf_metrics,
+            'fr': fr,
+            'isi': isi_metrics,
+            'spike_times': spike_times,
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f'❌ Fatal error processing unit {unit}: {e}')
+        return unit, None
+
+def compute_unit_spike_metrics_dep(
+    unit, 
+    spike_times_by_unit, 
     #wfe, 
     sampling_rate, plot_wfs, 
     recording_object, 
@@ -729,23 +881,6 @@ def compute_unit_spike_metrics(
                 traceback.print_exc()
                 print(f'Error processing unit {unit}: {e}')
                 return unit, None
-                        
-                        
-            # return unit, {
-            #     'num_spikes': len(spike_times_by_unit[unit]),
-            #     'wf_metrics': wf_metrics,
-            #     'fr': get_unit_fr(recording_object, sorting_object, unit, sampling_rate),
-            #     'isi': {
-            #         'data': isi_diffs,
-            #         'mean': np.nanmean(isi_diffs) if isi_diffs is not None else np.nan,
-            #         'std': np.nanstd(isi_diffs) if isi_diffs is not None else np.nan,
-            #         'median': np.nanmedian(isi_diffs) if isi_diffs is not None else np.nan,
-            #         'cov': np.nanstd(isi_diffs) / np.nanmean(isi_diffs) if isi_diffs is not None and np.nanmean(isi_diffs) > 0 else np.nan,
-            #         'max': np.nanmax(isi_diffs) if isi_diffs is not None else np.nan,
-            #         'min': np.nanmin(isi_diffs) if isi_diffs is not None else np.nan,
-            #     },
-            #     'spike_times': spike_times_by_unit[unit],
-            # }
             return unit, results
 
     except Exception as e:
@@ -754,18 +889,7 @@ def compute_unit_spike_metrics(
         return unit, None  # Return None in case of an error
 
 def compute_spike_metrics_by_unit(network_data, kwargs):
-    """Parallelized function to extract spiking metrics from experimental data using ThreadPoolExecutor."""
-    # init function ============================================================
-    print("Computing spiking metrics by unit...")
-    indent_increase()
-    source = network_data['source'] # important to treat simulated and experimental data differently at this step.
-        
-    # just for testing #TODO: move to the run script later
-    # kwargs['run_parallel'] = True
-    # kwargs['debug_mode'] = False
-    # kwargs['max_workers'] = 2
-    # kwargs['plot_wfs'] = True
-    
+    """Parallelized function to extract spiking metrics from experimental data using ThreadPoolExecutor."""    
     
     # Subfunctions =============================================================
     def process_units_in_parallel(units, sa, network_data, kwargs):
@@ -773,46 +897,52 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
         
         #init
         indent_increase()
-        #max_workers = kwargs['max_workers']
-        max_workers = kwargs.get('max_workers', 4) # default to 4 workers
-        debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
-        #debug_mode = True
-        if debug_mode:
-            print(f'Debug mode: Only processing 10 units.')
-            num_units = len(units)
-            if num_units > 10:
-                units = units[:10]
-                max_workers = 10
-            else:
-                max_workers = num_units
-                
-        # Set parameters for process_unit       
-        pkwargs = {
-            'spike_times_by_unit': network_data['spiking_data']['spiking_times_by_unit'],
-            #'wfe': wfe,
-            #'sorting_analyzer': sa,
-            'sa_well_folder': sa.folder._str if sa is not None else None,
-            'sampling_rate': network_data['sampling_rate'],
-            'plot_wfs': kwargs['plot_wfs'] if source == 'experimental' else False,
-            'recording_object': kwargs.get('recording_object', None),
-            'sorting_object': kwargs.get('sorting_object', None),
-            'sorting_object': kwargs.get('sorting_object', None),
-            #'wf_well_folder': wfe.folder._str if wfe is not None else None
-        }
         
-        # Process units in parallel
-        print(f'Processing {len(units)} units in parallel using {max_workers} workers...')
-        spiking_metrics_by_unit = {}
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            future_to_unit = {
-                executor.submit(compute_unit_spike_metrics, unit, **pkwargs): unit for unit in units
+        try:
+            #max_workers = kwargs['max_workers']
+            max_workers = kwargs.get('max_workers', 4) # default to 4 workers
+            debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
+            #debug_mode = True
+            if debug_mode:
+                print(f'Debug mode: Only processing 10 units.')
+                num_units = len(units)
+                if num_units > 10:
+                    units = units[:10]
+                    max_workers = 10
+                else:
+                    max_workers = num_units
+                    
+            # Set parameters for process_unit       
+            pkwargs = {
+                'spike_times_by_unit': network_data['spiking_data']['spiking_times_by_unit'],
+                #'wfe': wfe,
+                #'sorting_analyzer': sa,
+                'sa_well_folder': sa.folder._str if sa is not None else None,
+                'sampling_rate': network_data['sampling_rate'],
+                'plot_wfs': kwargs['plot_wfs'] if source == 'experimental' else False,
+                'recording_object': kwargs.get('recording_object', None),
+                'sorting_object': kwargs.get('sorting_object', None),
+                'sorting_object': kwargs.get('sorting_object', None),
+                #'wf_well_folder': wfe.folder._str if wfe is not None else None
             }
+            
+            # Process units in parallel
+            print(f'Processing {len(units)} units in parallel using {max_workers} workers...')
+            spiking_metrics_by_unit = {}
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                future_to_unit = {
+                    executor.submit(compute_unit_spike_metrics, unit, **pkwargs): unit for unit in units
+                }
 
-            # Collect results as they complete
-            for future in as_completed(future_to_unit):
-                unit, result = future.result()
-                if result is not None:
-                    spiking_metrics_by_unit[unit] = result
+                # Collect results as they complete
+                for future in as_completed(future_to_unit):
+                    unit, result = future.result()
+                    if result is not None:
+                        spiking_metrics_by_unit[unit] = result
+        except Exception as e:
+            print(f'Error processing units in parallel: {e}')
+            traceback.print_exc()
+            spiking_metrics_by_unit = {}
 
         indent_decrease()
         network_data['spiking_data']['spiking_metrics_by_unit'] = spiking_metrics_by_unit
@@ -896,28 +1026,45 @@ def compute_spike_metrics_by_unit(network_data, kwargs):
             return wfe, kwargs
     
     # Main =====================================================================
-    #runtime options
-    debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
-    run_parallel = kwargs.get('run_parallel', False) # Run in parallel or sequential mode
+    # init function ============================================================
+    print("Computing spiking metrics by unit...")
+    indent_increase()
+    source = network_data['source'] # important to treat simulated and experimental data differently at this step.
+        
+    # just for testing #TODO: move to the run script later
+    # kwargs['run_parallel'] = True
+    # kwargs['debug_mode'] = False
+    # kwargs['max_workers'] = 2
+    # kwargs['plot_wfs'] = True
     
-    # set wf_extractor to None by default. If the data are experimental, this should be set.
-    #print('Warning: not sure if I should get wfe from network_data or kwargs.')
-    #wfe, kwargs = define_wfe(source, network_data, kwargs)
-    sa, kwargs = define_sa(source, network_data, kwargs)
+    try:
+        #runtime options
+        debug_mode = kwargs.get('debug_mode', False) # Impose limit on number of units for debugging purposes
+        run_parallel = kwargs.get('run_parallel', False) # Run in parallel or sequential mode
+        
+        # set wf_extractor to None by default. If the data are experimental, this should be set.
+        #print('Warning: not sure if I should get wfe from network_data or kwargs.')
+        #wfe, kwargs = define_wfe(source, network_data, kwargs)
+        sa, kwargs = define_sa(source, network_data, kwargs)
+        
+        # get units
+        units, network_data = get_units_ids(source, network_data, kwargs)
+        
+        # process units
+        if run_parallel: 
+            network_data = process_units_in_parallel(units, sa, network_data, kwargs)
+        else: 
+            network_data = process_units_in_sequence(units, sa, network_data, kwargs)
+        print("Spiking metrics by unit computed!")
     
-    # get units
-    units, network_data = get_units_ids(source, network_data, kwargs)
-    
-    # process units
-    if run_parallel: 
-        network_data = process_units_in_parallel(units, sa, network_data, kwargs)
-    else: 
-        network_data = process_units_in_sequence(units, sa, network_data, kwargs)
-    
-    # end func =================================================================
-    indent_decrease()
-    print("Spiking metrics by unit computed!")
-    return network_data
+        # end func =================================================================
+        indent_decrease()
+        return network_data
+    except Exception as e:
+        print(f'Error computing spiking metrics by unit: {e}')
+        traceback.print_exc()
+        indent_decrease()
+        return network_data
 
 def compute_network_metrics(conv_params, mega_params, source, **kwargs):
     '''
@@ -1013,6 +1160,28 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
             traceback.print_exc()
             pass
     
+    def trim_simulated_data(network_data, kwargs):
+        '''Trim simulated data to remove initial transient period.'''
+        try:
+            trim_start_time = kwargs['trimed_start_time']
+            timeVector = network_data['timeVector']
+            spike_times = network_data['spiking_data']['spike_times']
+            spike_times_by_unit = network_data['spiking_data']['spiking_times_by_unit']
+            # trim data
+            timeVector = timeVector[timeVector >= trim_start_time]
+            spike_times = spike_times[spike_times >= trim_start_time]
+            for unit in spike_times_by_unit.keys():
+                spike_times_by_unit[unit] = spike_times_by_unit[unit][spike_times_by_unit[unit] >= trim_start_time]
+            network_data['timeVector'] = timeVector
+            network_data['spiking_data']['spike_times'] = spike_times
+            network_data['spiking_data']['spike_times_by_unit'] = spike_times_by_unit
+            return network_data
+        except Exception as e:
+            print(f'Error trimming simulated data: {e}')
+            traceback.print_exc()
+            raise ValueError('Failed to trim simulated data.')
+            #pass
+    
     def initialize_spike_data(network_data, kwargs):
         '''Initialize spike data for simulated or experimental data.'''
         try:
@@ -1031,6 +1200,19 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
                 network_data['sampling_rate'] = 'Not currently implemented for simulated data'
                 network_data['spiking_data']['spike_times'] = spike_times
                 network_data['spiking_data']['spiking_times_by_unit'] = spike_times_by_unit
+                
+                # TODO: put this into kwargs options later - for now, default
+                kwargs['trim_simulated_data'] = True
+                kwargs['trimed_start_time'] = 20
+                if kwargs['trim_simulated_data']:
+                    network_data = trim_simulated_data(network_data, kwargs)
+                    spike_times = network_data['spiking_data']['spike_times']
+                    timeVector = network_data['timeVector']
+                    spike_times_by_unit = network_data['spiking_data']['spiking_times_by_unit']
+                    network_data['trimmed'] = True
+                else:
+                    network_data['trimmed'] = False
+                
                 return spike_times, timeVector, spike_times_by_unit, network_data
             elif source == 'experimental':
                 sorting_object = kwargs['sorting_object']
@@ -1046,9 +1228,11 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
                 return spike_times, timeVector, spike_times_by_unit, network_data
         except Exception as e:
             print(f'Error initializing spike data: {e}')
-            traceback.print_exc()
-            pass
-            #return None, None, None, network_data
+            # if 'No spike times found in rasterData' in e:
+            #     pass
+            # traceback.print_exc()
+            #pass
+            return None, None, None, network_data
     
     def compute_spike_metrics(network_data, kwargs):
 
@@ -1067,10 +1251,15 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
     def compute_burst_metrics(network_data, kwargs):
         #extract bursting metrics from simulated data (but this one works for both simulated and experimental data)
         try: 
+            # assert network data has spike_times and spiking_times_by_unit
+            assert 'spike_times' in network_data['spiking_data'], 'No spike times found in network data'
+            assert 'spiking_times_by_unit' in network_data['spiking_data'], 'No spiking times by unit found in network data'
+            #assert 'sampling_rate' in network_data, 'No sampling rate found in network data'
+            
             network_data = compute_bursting_metrics(network_data, kwargs)
         except Exception as e:
             print(f'Error calculating bursting activity: {e}')
-            traceback.print_exc()
+            #traceback.print_exc()
             pass
         
         return network_data
@@ -1099,7 +1288,7 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
                 network_data['unit_types'] = unit_types
         except Exception as e:
             print(f'Error classifying neurons: {e}')
-            traceback.print_exc()
+            #traceback.print_exc()
             pass
         
         return network_data
@@ -1272,32 +1461,40 @@ def compute_network_metrics(conv_params, mega_params, source, **kwargs):
         return network_data
     
     # Main =====================================================================
-    # check data source and validate inputs based on source
-    validate_inputs(source, kwargs)
     
-    #init
-    network_data = initialize_data_dict(source, kwargs)
-    kwargs = update_kwargs(conv_params, mega_params, source, kwargs) # NOTE: source folded back into kwargs - so no need to explicitly pass source to other functions
-    _, _, _, network_data = initialize_spike_data(network_data, kwargs)
-    
-    # main computation steps
-    network_data = compute_spike_metrics(network_data, kwargs)
-    network_data = compute_burst_metrics(network_data, kwargs)
-    network_data = classify_units(network_data, kwargs)
-    network_data = locate_units(network_data, kwargs)
-    if source == 'experimental': # for now only do with with experimental data
-        network_data = compute_dynamic_time_warping(network_data, kwargs)
-    if source == 'simulated': 
-        network_data = add_sim_specific_data(network_data, kwargs) # for now only do with simulated data
-    network_data = compute_summary_metrics(network_data, kwargs)
-    
-    # debug
-    # unit_types = network_data['unit_types']
-    # print(f'Unit types: {unit_types}')
-    # import sys
-    # sys.exit()
-    
-    return network_data
+    try:
+        # check data source and validate inputs based on source
+        validate_inputs(source, kwargs)
+        
+        #init
+        network_data = initialize_data_dict(source, kwargs)
+        kwargs = update_kwargs(conv_params, mega_params, source, kwargs) # NOTE: source folded back into kwargs - so no need to explicitly pass source to other functions
+        _, _, _, network_data = initialize_spike_data(network_data, kwargs)
+        
+        # main computation steps
+        network_data = compute_spike_metrics(network_data, kwargs)
+        network_data = compute_burst_metrics(network_data, kwargs)
+        network_data = classify_units(network_data, kwargs)
+        network_data = locate_units(network_data, kwargs)
+        if source == 'experimental': # for now only do with with experimental data
+            network_data = compute_dynamic_time_warping(network_data, kwargs)
+        if source == 'simulated': 
+            network_data = add_sim_specific_data(network_data, kwargs) # for now only do with simulated data
+        network_data = compute_summary_metrics(network_data, kwargs)
+        
+        # debug
+        # unit_types = network_data['unit_types']
+        # print(f'Unit types: {unit_types}')
+        # import sys
+        # sys.exit()
+        
+        return network_data
+    except Exception as e:
+        print(f'Error in compute_network_metrics: {e}')
+        #traceback.print_exc()
+        #raise ValueError('Failed to compute network metrics.')
+        #pass
+        return None
 
 '''# aw 2025-02-26+ updates above this point'''
     
@@ -3191,24 +3388,65 @@ def process_burst(burst_id, burst_part):
             'max': np.nanmax(isi_values),
         }
         
-        # Firing sequence
-        sequence = []
-        sequence_times = []
-        for spike_time in sorted_spike_times:
-            for unit, spike_times in zip(burst_part['participating_units'], burst_part['spike_times_by_unit']):
-                if spike_time in spike_times:
-                    sequence.append(unit)
-                    sequence_times.append(spike_time)
-                    #break  # Ensure each spike is only counted once
-        #result['firing_sequence'] = sequence
-        result['unit_seqeunce'] = sequence
-        result['time_sequence'] = sequence_times
-        result['relative_time_sequence'] = [time - sequence_times[0] for time in sequence_times]
+        # # Firing sequence
+        # sequence = []
+        # sequence_times = []
+        # for spike_time in sorted_spike_times:
+        #     for unit, spike_times in zip(burst_part['participating_units'], burst_part['spike_times_by_unit']):
+        #         if spike_time in spike_times:
+        #             sequence.append(unit)
+        #             sequence_times.append(spike_time)
+        #             #break  # Ensure each spike is only counted once
+        # #result['firing_sequence'] = sequence
+        # result['unit_seqeunce'] = sequence
+        # result['time_sequence'] = sequence_times
+        # result['relative_time_sequence'] = [time - sequence_times[0] for time in sequence_times]
         
-        # #confirm sequence is at long as spike times
-        # if len(sequence) != len(sorted_spike_times):
-        #     print(f'Error: Sequence length does not match spike times')
+        # Firing sequence - more efficient - dict lookup
+        # Build a flat lookup: spike_time -> unit
+        # spike_lookup = {}
+        # for unit, spike_times in zip(burst_part['participating_units'], burst_part['spike_times_by_unit']):
+        #     for t in spike_times:
+        #         spike_lookup[t] = unit  # assume spike_times are unique across units in a burst
 
+        # # Now reconstruct sequence efficiently
+        # sequence = []
+        # sequence_times = []
+
+        # for spike_time in sorted_spike_times:
+        #     unit = spike_lookup.get(spike_time)
+        #     if unit is not None:
+        #         sequence.append(unit)
+        #         sequence_times.append(spike_time)
+
+        # # Store results
+        # result['unit_seqeunce'] = sequence
+        # result['time_sequence'] = sequence_times
+        # result['relative_time_sequence'] = [t - sequence_times[0] for t in sequence_times] if sequence_times else []
+
+        # Even more efficient for large datasets - vectorized approach # aw 2025-04-23 02:46:26
+        # Step 1: Flatten all spike times and match to units
+        all_spike_times = []
+        all_unit_ids = []
+
+        for unit, times in zip(burst_part['participating_units'], burst_part['spike_times_by_unit']):
+            all_spike_times.extend(times)
+            all_unit_ids.extend([unit] * len(times))
+
+        # Step 2: Convert to arrays
+        all_spike_times = np.array(all_spike_times)
+        all_unit_ids = np.array(all_unit_ids)
+
+        # Step 3: Sort spike times
+        sort_idx = np.argsort(all_spike_times)
+        sorted_spike_times = all_spike_times[sort_idx]
+        sorted_units = all_unit_ids[sort_idx]
+
+        # Step 4: Save to result
+        result['unit_seqeunce'] = sorted_units.tolist()
+        result['time_sequence'] = sorted_spike_times.tolist()
+        result['relative_time_sequence'] = (sorted_spike_times - sorted_spike_times[0]).tolist() if sorted_spike_times.size else []
+        
         print(f'Burst {burst_id} sequenced')
         
         return burst_id, result
@@ -3302,7 +3540,133 @@ def compute_unit_burst_participation(unit_metrics, convolved_data, max_workers=4
         indent_decrease()
         return {}        
 
-def compute_burst_metrics(unit_metrics, convolved_data, max_workers=4, debug_mode = False, **kwargs):
+def compute_burst_metrics(unit_metrics, convolved_data, max_workers=4, debug_mode=False, **kwargs):
+    burst_sequencing = kwargs.get('burst_sequencing', False)
+    warnings = None
+
+    peak_times = convolved_data.get('peak_times', np.array([]))
+    burst_parts = "Burst sequencing not enabled"
+    if burst_sequencing:
+        try:
+            burst_parts = compute_unit_burst_participation(unit_metrics, convolved_data, max_workers=max_workers, debug_mode=debug_mode)
+            burst_parts = {**burst_parts}
+        except Exception as e:
+            burst_parts = {}
+            print(f"⚠️ Error computing burst participation: {e}")
+
+    burst_metrics = {}
+
+    try:
+        burst_metrics['num_bursts'] = len(peak_times)
+        burst_metrics['burst_rate'] = len(peak_times) / (convolved_data['time_vector'][-1] - convolved_data['time_vector'][0]) if len(peak_times) > 1 else np.nan
+        burst_metrics['burst_ids'] = list(range(len(peak_times)))
+        print("✔️ Basic burst counts and rates computed")
+    except Exception as e:
+        print(f"❌ Error computing basic burst stats: {e}")
+        burst_metrics['num_bursts'] = 0
+        burst_metrics['burst_rate'] = np.nan
+        burst_metrics['burst_ids'] = []
+
+    # IBI stats
+    try:
+        ibi_values = np.diff(peak_times)
+        burst_metrics['ibi'] = {
+            'data': ibi_values,
+            'mean': np.nanmean(ibi_values) if ibi_values.size else np.nan,
+            'std': np.nanstd(ibi_values) if ibi_values.size else np.nan,
+            'cov': np.nanstd(ibi_values) / np.nanmean(ibi_values) if np.nanmean(ibi_values) > 0 else np.nan,
+            'median': np.nanmedian(ibi_values) if ibi_values.size else np.nan,
+            'min': np.nanmin(ibi_values) if ibi_values.size else np.nan,
+            'max': np.nanmax(ibi_values) if ibi_values.size else np.nan,
+        }
+        print("✔️ Inter-burst interval (IBI) stats computed")
+    except Exception as e:
+        print(f"❌ Error computing IBI: {e}")
+        burst_metrics['ibi'] = {'data': [], 'mean': np.nan, 'std': np.nan, 'cov': np.nan, 'median': np.nan, 'min': np.nan, 'max': np.nan}
+
+    # Amplitude
+    try:
+        amp_values = convolved_data.get('peak_values', np.array([]))
+        burst_metrics['burst_amp'] = {
+            'data': amp_values,
+            'mean': np.nanmean(amp_values) if amp_values.size else np.nan,
+            'std': np.nanstd(amp_values) if amp_values.size else np.nan,
+            'cov': np.nanstd(amp_values) / np.nanmean(amp_values) if np.nanmean(amp_values) > 0 else np.nan,
+            'median': np.nanmedian(amp_values) if amp_values.size else np.nan,
+            'min': np.nanmin(amp_values) if amp_values.size else np.nan,
+            'max': np.nanmax(amp_values) if amp_values.size else np.nan,
+        }
+        print("✔️ Burst amplitude stats computed")
+    except Exception as e:
+        print(f"❌ Error computing amplitude: {e}")
+        burst_metrics['burst_amp'] = {'data': [], 'mean': np.nan, 'std': np.nan, 'cov': np.nan, 'median': np.nan, 'min': np.nan, 'max': np.nan}
+
+    # Duration
+    try:
+        left = convolved_data.get('left_base_times', np.array([]))
+        right = convolved_data.get('right_base_times', np.array([]))
+        durations = right - left if left.size and right.size else np.array([])
+        burst_metrics['burst_duration'] = {
+            'data': durations,
+            'mean': np.nanmean(durations) if durations.size else np.nan,
+            'std': np.nanstd(durations) if durations.size else np.nan,
+            'cov': np.nanstd(durations) / np.nanmean(durations) if np.nanmean(durations) > 0 else np.nan,
+            'median': np.nanmedian(durations) if durations.size else np.nan,
+            'min': np.nanmin(durations) if durations.size else np.nan,
+            'max': np.nanmax(durations) if durations.size else np.nan,
+        }
+        print("✔️ Burst duration stats computed")
+    except Exception as e:
+        print(f"❌ Error computing duration: {e}")
+        burst_metrics['burst_duration'] = {'data': [], 'mean': np.nan, 'std': np.nan, 'cov': np.nan, 'median': np.nan, 'min': np.nan, 'max': np.nan}
+
+    burst_metrics['burst_parts'] = burst_parts
+    print("✔️ Burst parts registered")
+
+    # Units per burst
+    try:
+        if isinstance(burst_parts, dict):
+            num_units_list = [bp.get('num_units_participating', np.nan) for bp in burst_parts.values()]
+            burst_metrics['num_units_per_burst'] = {
+                'data': num_units_list,
+                'mean': np.nanmean(num_units_list),
+                'std': np.nanstd(num_units_list),
+                'cov': np.nanstd(num_units_list) / np.nanmean(num_units_list) if np.nanmean(num_units_list) > 0 else np.nan,
+                'median': np.nanmedian(num_units_list),
+                'min': np.nanmin(num_units_list),
+                'max': np.nanmax(num_units_list),
+            }
+            print("✔️ Num units per burst stats computed")
+        else:
+            raise ValueError("Burst sequencing not enabled")
+    except Exception as e:
+        print(f"⚠️ Num units per burst skipped: {e}")
+        burst_metrics['num_units_per_burst'] = "Burst sequencing not enabled"
+
+    # In-burst firing rate
+    try:
+        if isinstance(burst_parts, dict):
+            spike_rates = [bp.get('spike_rate', np.nan) for bp in burst_parts.values()]
+            burst_metrics['in_burst_fr'] = {
+                'data': spike_rates,
+                'mean': np.nanmean(spike_rates),
+                'std': np.nanstd(spike_rates),
+                'cov': np.nanstd(spike_rates) / np.nanmean(spike_rates) if np.nanmean(spike_rates) > 0 else np.nan,
+                'median': np.nanmedian(spike_rates),
+                'min': np.nanmin(spike_rates),
+                'max': np.nanmax(spike_rates),
+            }
+            print("✔️ In-burst firing rate stats computed")
+        else:
+            raise ValueError("Burst sequencing not enabled")
+    except Exception as e:
+        print(f"⚠️ In-burst firing rate stats skipped: {e}")
+        burst_metrics['in_burst_fr'] = "Burst sequencing not enabled"
+
+    print("✅ Burst Metrics Computed")
+    return burst_metrics, warnings
+
+def compute_burst_metrics_dep(unit_metrics, convolved_data, max_workers=4, debug_mode = False, **kwargs):
     ## unpack kwargs
     burst_sequencing = kwargs.get('burst_sequencing', False)
     
@@ -3332,8 +3696,8 @@ def compute_burst_metrics(unit_metrics, convolved_data, max_workers=4, debug_mod
     ibi_values = np.diff(peak_times)
     burst_metrics['ibi'] = {
         'data': ibi_values,
-        'mean': np.nanmean(ibi_values),
-        'std': np.nanstd(ibi_values),
+        'mean': np.nanmean(ibi_values) if len(ibi_values) > 0 else np.nan,
+        'std': np.nanstd(ibi_values) if len(ibi_values) > 0 else np.nan,
         'cov': np.nanstd(ibi_values) / np.nanmean(ibi_values) if np.nanmean(ibi_values) > 0 else np.nan,
         'median': np.nanmedian(ibi_values),
         'min': np.nanmin(ibi_values),
@@ -3408,7 +3772,7 @@ def compute_burst_metrics(unit_metrics, convolved_data, max_workers=4, debug_mod
     print(f"✅ Burst Metrics Computed")
     return burst_metrics, warnings
 
-def analyze_unit_activity(spike_times_by_unit, convolved_data):
+def analyze_unit_activity_dep(spike_times_by_unit, convolved_data):
     """Analyze bursts, quiet periods, firing rates, and ISIs for each unit."""
     total_number_of_bursts_in_convolved_data = len(convolved_data['peak_times'])
     left_base_times, right_base_times = convolved_data['left_base_times'], convolved_data['right_base_times']
@@ -3565,8 +3929,7 @@ def analyze_unit_activity(spike_times_by_unit, convolved_data):
                 'in_burst': compute_stats(spike_count_in_burst),
                 'out_burst': compute_stats(spike_count_out_burst)
             }
-
-            
+     
         def fano_factor_analytics():
             spike_count_in_burst = spike_count_analytics()['in_burst']['data']
             spike_count_out_burst = spike_count_analytics()['out_burst']['data']
@@ -3592,7 +3955,7 @@ def analyze_unit_activity(spike_times_by_unit, convolved_data):
                 'quiet_durations': quiet_durations,
                 'burst_part_rate': len(bursts) / time_range,
                 'quiet_part_rate': len(non_bursts) / time_range,
-                'burst_part_perc': len(bursts) / total_number_of_bursts_in_convolved_data,
+                'burst_part_perc': len(bursts) / total_number_of_bursts_in_convolved_data if total_number_of_bursts_in_convolved_data > 0 else np.nan,
                 'fr': fr_analytics_dict,
                 'isi': isi_analytics_dict,
                 'spike_counts': spike_count_analytics_dict,            
@@ -3601,7 +3964,7 @@ def analyze_unit_activity(spike_times_by_unit, convolved_data):
                 }
         except Exception as e:
             print(f'Error in building unit data structure: {e}')
-            return None
+            return None, e
         
         # print(f'Unit {unit}: {len(bursts)} bursts, {len(non_bursts)} non-bursts')
     if len(warnings) == 0:
@@ -3610,6 +3973,157 @@ def analyze_unit_activity(spike_times_by_unit, convolved_data):
     # fr_by_unit = {unit: len(spikes) / time_range for unit, spikes in spike_times_by_unit.items()}
     # isis_by_unit = {unit: np.diff(spikes) for unit, spikes in spike_times_by_unit.items()}
     # return bursts_by_unit, non_bursts_by_unit, fr_by_unit, isis_by_unit, warnings
+
+def analyze_unit_activity(spike_times_by_unit, convolved_data):
+    """Analyze bursts, quiet periods, firing rates, and ISIs for each unit, safely handling empty spike_times."""
+
+    if convolved_data.get('time_vector') is None or len(convolved_data['time_vector']) == 0:
+        print("[Info] convolved_data['time_vector'] is empty. Skipping unit activity analysis.")
+        return {}, None  # no units, no warnings
+    
+    total_number_of_bursts_in_convolved_data = len(convolved_data['peak_times'])
+    left_base_times, right_base_times = convolved_data['left_base_times'], convolved_data['right_base_times']
+    time_range = convolved_data['time_vector'][-1] - convolved_data['time_vector'][0]
+
+    bursts_by_unit, non_bursts_by_unit, burst_durations, quiet_durations, warnings = {}, {}, {}, {}, []
+    unit_data = {}
+
+    for unit, spike_times in spike_times_by_unit.items():
+        spike_times = np.asarray(spike_times)
+        bursts, non_bursts = {}, {}
+        burst_id, quiet_id = 0, 0
+
+        if spike_times.size == 0:
+            bursts_by_unit[unit] = {}
+            non_bursts_by_unit[unit] = {}
+            unit_data[unit] = {
+                'burst_id': [],
+                'quiet_id': [],
+                'bursts': {},
+                'quiets': {},
+                'burst_durations': {},
+                'quiet_durations': {},
+                'burst_part_rate': 0.0,
+                'quiet_part_rate': 0.0,
+                'burst_part_perc': 0.0,
+                'fr': {'in_burst': {}, 'out_burst': {}},
+                'isi': {'in_burst': {}, 'out_burst': {}},
+                'spike_counts': {'in_burst': {}, 'out_burst': {}},
+                'fano_factor': {'in_burst': np.nan, 'out_burst': np.nan},
+                'note': "No spikes in this unit."
+            }
+            continue
+
+        for left, right in zip(left_base_times, right_base_times):
+            burst_spikes = spike_times[(spike_times >= left) & (spike_times <= right)]
+            burst_durations[burst_id] = right - left
+            if burst_spikes.size > 0:
+                bursts[burst_id] = burst_spikes
+                if np.any(np.diff(burst_spikes) < 0):
+                    warnings.append(f'Negative ISI in unit {unit} (burst {burst_id})')
+            burst_id += 1
+
+        quiet_left = np.concatenate([[0], right_base_times[:-1]])
+        last_time = spike_times[-1] if spike_times.size > 0 else convolved_data['time_vector'][-1]
+        quiet_right = np.concatenate([left_base_times[1:], [last_time]])
+
+        for left, right in zip(quiet_left, quiet_right):
+            quiet_spikes = spike_times[(spike_times >= left) & (spike_times <= right)]
+            quiet_durations[quiet_id] = right - left
+            if quiet_spikes.size > 0:
+                non_bursts[quiet_id] = quiet_spikes
+                if np.any(np.diff(quiet_spikes) < 0):
+                    warnings.append(f'Negative ISI in unit {unit} (non-burst {quiet_id})')
+            quiet_id += 1
+
+        bursts_by_unit[unit] = bursts
+        non_bursts_by_unit[unit] = non_bursts
+
+        # Define analytics functions inside the loop
+        def compute_isi_metrics(isis):
+            try:
+                all_isis = np.concatenate([np.diff(burst) for burst in isis.values() if len(burst) > 1])
+                return {
+                    'data': all_isis,
+                    'mean': np.nanmean(all_isis),
+                    'std': np.nanstd(all_isis),
+                    'cov': np.nanstd(all_isis) / np.nanmean(all_isis) if np.nanmean(all_isis) > 0 else np.nan,
+                    'median': np.nanmedian(all_isis),
+                    'min': np.nanmin(all_isis),
+                    'max': np.nanmax(all_isis),
+                }
+            except Exception:
+                return dict.fromkeys(['data', 'mean', 'std', 'cov', 'median', 'min', 'max'], np.nan)
+
+        def compute_fr(bursts, durations):
+            fr_data = {i: len(b) / durations[i] if durations[i] > 0 else np.nan for i, b in bursts.items()}
+            valid_values = [v for v in fr_data.values() if not np.isnan(v)]
+            return {
+                'data': fr_data,
+                'mean': np.nanmean(valid_values) if valid_values else np.nan,
+                'std': np.nanstd(valid_values) if valid_values else np.nan,
+                'cov': np.nanstd(valid_values) / np.nanmean(valid_values) if valid_values and np.nanmean(valid_values) > 0 else np.nan,
+                'median': np.nanmedian(valid_values) if valid_values else np.nan,
+                'min': np.nanmin(valid_values) if valid_values else np.nan,
+                'max': np.nanmax(valid_values) if valid_values else np.nan,
+            }
+
+        def compute_spike_counts(bursts):
+            counts = {i: len(b) for i, b in bursts.items()}
+            values = np.array(list(counts.values()))
+            return {
+                'data': counts,
+                'mean': np.mean(values) if values.size > 0 else np.nan,
+                'std': np.std(values) if values.size > 0 else np.nan,
+                'cov': np.std(values) / np.mean(values) if values.size > 0 and np.mean(values) > 0 else np.nan,
+                'median': np.median(values) if values.size > 0 else np.nan,
+                'min': np.min(values) if values.size > 0 else np.nan,
+                'max': np.max(values) if values.size > 0 else np.nan,
+            }
+
+        def compute_fano(counts):
+            values = list(counts.values())
+            return np.var(values) / np.mean(values) if values and np.mean(values) > 0 else np.nan
+
+        # Compose all metrics
+        fr_analytics_dict = {
+            'in_burst': compute_fr(bursts, burst_durations),
+            'out_burst': compute_fr(non_bursts, quiet_durations)
+        }
+        isi_analytics_dict = {
+            'in_burst': compute_isi_metrics(bursts),
+            'out_burst': compute_isi_metrics(non_bursts)
+        }
+        spike_count_analytics_dict = {
+            'in_burst': compute_spike_counts(bursts),
+            'out_burst': compute_spike_counts(non_bursts)
+        }
+        fano_factor_dict = {
+            'in_burst': compute_fano(spike_count_analytics_dict['in_burst']['data']),
+            'out_burst': compute_fano(spike_count_analytics_dict['out_burst']['data'])
+        }
+
+        unit_data[unit] = {
+            'burst_id': list(bursts.keys()),
+            'quiet_id': list(non_bursts.keys()),
+            'bursts': bursts,
+            'quiets': non_bursts,
+            'burst_durations': burst_durations,
+            'quiet_durations': quiet_durations,
+            'burst_part_rate': len(bursts) / time_range if time_range > 0 else np.nan,
+            'quiet_part_rate': len(non_bursts) / time_range if time_range > 0 else np.nan,
+            'burst_part_perc': len(bursts) / total_number_of_bursts_in_convolved_data if total_number_of_bursts_in_convolved_data > 0 else np.nan,
+            'fr': fr_analytics_dict,
+            'isi': isi_analytics_dict,
+            'spike_counts': spike_count_analytics_dict,
+            'fano_factor': fano_factor_dict,
+            'note': "The same spike may be represented in multiple bursts if they compound in overlapping epochs",
+        }
+
+    if not warnings:
+        warnings = None
+
+    return unit_data, warnings
 
 def compute_summary_metrics(unit_data):
     """Compute mean, standard deviation, and coefficient of variation for firing rates and ISIs."""
@@ -3631,14 +4145,17 @@ def analyze_bursting_activity_v4(spike_times, spike_times_by_unit, min_peak_dist
     ''' 
     
     '''
+    indent_increase()
+    
     # init warnings
     unit_warnings = None
+    burst_warnings = None
          
     #
     try:
         # 
         start = time.time()
-        indent_increase()
+
         
         # Step 1: Generate convolved data from network activity plot
         try:
@@ -3652,7 +4169,8 @@ def analyze_bursting_activity_v4(spike_times, spike_times_by_unit, min_peak_dist
             traceback.print_exc()
             print(f'Error in plotting network activity: {e}')
             #line_debug(ax)
-            plt.close(fig)            
+            plt.close(fig)
+            indent_decrease()            
             return None
 
         # Step 2: Analyze individual units
@@ -3666,6 +4184,7 @@ def analyze_bursting_activity_v4(spike_times, spike_times_by_unit, min_peak_dist
             print(f'Error in analyzing unit activity: {e}')
             #line_debug(ax)
             plt.close(fig)
+            indent_decrease()
             return {
                 'ax' : ax,
                 'convolved_data': convolved_data,
@@ -3686,10 +4205,12 @@ def analyze_bursting_activity_v4(spike_times, spike_times_by_unit, min_peak_dist
         except Exception as e:
             traceback.print_exc()
             print(f'Error in computing burst metrics: {e}')
+            #burst_warnings = e
             indent_decrease()
             #debug - check if zero lines in ax
             #line_debug(ax)
             plt.close(fig) # NOTE: for some reason this is required for ax to persist later in the code -- I dont fully understand why
+            indent_decrease()
             return {
                 'ax' : ax,
                 'convolved_data': convolved_data,
@@ -3902,7 +4423,7 @@ def analyze_bursting_activity_v3(
         print(f'Error in bursting activity analysis: {e}')
         return None
 
-def plot_network_activity_aw(ax,SpikeTimes, min_peak_distance=1.0, 
+def plot_network_activity_aw_dep(ax,SpikeTimes, min_peak_distance=1.0, 
                              binSize=0.1, 
                              gaussianSigma=0.16, 
                              thresholdBurst=1.2, 
@@ -4033,6 +4554,89 @@ def plot_network_activity_aw(ax,SpikeTimes, min_peak_distance=1.0,
     
     #return ax, network_data
     #return ax, signal, peaks
+    return ax, convolved_data
+
+import numpy as np
+from scipy.stats import norm
+from scipy.signal import convolve, find_peaks
+
+def plot_network_activity_aw(ax, SpikeTimes, min_peak_distance=1.0, 
+                             binSize=0.1, 
+                             gaussianSigma=0.16, 
+                             thresholdBurst=1.2, 
+                             prominence=1, 
+                             figSize=(10, 6),
+                             title='Network Activity'
+                             ):
+    relativeSpikeTimes = []
+    units = 0
+    for unit_id, spike_times in SpikeTimes.items():
+        temp_spike_times = spike_times
+        if isinstance(temp_spike_times, np.ndarray):
+            relativeSpikeTimes.extend(temp_spike_times.tolist())
+        elif isinstance(temp_spike_times, (float, int)):
+            relativeSpikeTimes.append(temp_spike_times)
+        else:
+            print(f'[Warning] Unit {unit_id} has spike times that are not float/int/array.')
+            continue
+        units += 1
+
+    if not relativeSpikeTimes:
+        print("[Info] No spike times provided. Skipping network activity plot.")
+        return ax, {
+            'convolved_FR': np.array([]),
+            'peak_idxs': np.array([]),
+            'peak_times': np.array([]),
+            'peak_values': np.array([]),
+            'prominences': np.array([]),
+            'left_base_idxs': np.array([]),
+            'right_base_idxs': np.array([]),
+            'left_base_times': np.array([]),
+            'right_base_times': np.array([]),
+            'time_vector': np.array([]),
+        }
+
+    relativeSpikeTimes = np.sort(np.array(relativeSpikeTimes))
+
+    # Step 1: Bin all spike times into small time windows
+    timeVector = np.arange(min(relativeSpikeTimes), max(relativeSpikeTimes), binSize)
+    binnedTimes, _ = np.histogram(relativeSpikeTimes, bins=timeVector)
+    binnedTimes = np.append(binnedTimes, 0)
+
+    # Step 2: Smooth the binned spike times with a Gaussian kernel
+    kernelRange = np.arange(-3 * gaussianSigma, 3 * gaussianSigma + binSize, binSize)
+    kernel = norm.pdf(kernelRange, 0, gaussianSigma)
+    kernel *= binSize
+    firingRate = convolve(binnedTimes, kernel, mode='same') / binSize
+    firingRate = firingRate / max(units, 1)
+
+    # Plot
+    ax.plot(timeVector, firingRate, color='royalblue')
+    ax.set_xlim([min(relativeSpikeTimes), max(relativeSpikeTimes)])
+    ax.set_ylim([min(firingRate) * 0.85, max(firingRate) * 1.15])
+    ax.set_ylabel('Firing Rate [Hz]')
+    ax.set_xlabel('Time [ms]')
+    ax.set_title(title, fontsize=11)
+
+    peaks, properties = find_peaks(firingRate, prominence=prominence, distance=min_peak_distance)
+    burstPeakTimes = timeVector[peaks]
+    burstPeakValues = firingRate[peaks]
+
+    ax.plot(burstPeakTimes, burstPeakValues, 'or')
+
+    convolved_data = {
+        'convolved_FR': firingRate,
+        'peak_idxs': peaks,
+        'peak_times': burstPeakTimes,
+        'peak_values': burstPeakValues,
+        'prominences': properties.get('prominences', np.array([])),
+        'left_base_idxs': properties.get('left_bases', np.array([])),
+        'right_base_idxs': properties.get('right_bases', np.array([])),
+        'left_base_times': timeVector[properties['left_bases']] if 'left_bases' in properties else np.array([]),
+        'right_base_times': timeVector[properties['right_bases']] if 'right_bases' in properties else np.array([]),
+        'time_vector': timeVector,
+    }
+
     return ax, convolved_data
 
 def analyze_bursting_activity_v2_unfinished(
