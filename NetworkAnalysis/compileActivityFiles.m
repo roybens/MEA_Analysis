@@ -5,6 +5,8 @@
 
 function [] = compileActivityFiles(data)
 
+customAmpOutsideLoop =90;  % or customAmpOutsideLoop = [];
+
 tic;
 mfilename('fullpath')
 fileDir = [pwd,'/',mfilename];
@@ -27,7 +29,7 @@ opDir = data.opDir;
 
     
 % make output folder
-outputFolders = {'AmplitudeMap', 'FiringRateMap','Active_Area'};
+outputFolders = {'AmplitudeMap', 'FiringRateMap','Active_Area','ElectrodeAmp'};
 
 
 for i = 1:length(outputFolders)
@@ -139,7 +141,8 @@ for k = 1 : numFiles
         fileResults = cell(numWells, 1);
         skippedWells = cell(numWells,1);
        
-        for z = 1:numWells
+            parfor z = 1:numWells
+            customAmp = customAmpOutsideLoop;
             wellID=wellsIDs(z);
             fprintf(1, 'Processing Well %d\n', wellID);
             neuronSourceType = neuronTypes(z);
@@ -150,7 +153,7 @@ for k = 1 : numFiles
                 diceyFunction(mxw.fileManager(pathFileActivityScan,wellID));
                 [warnMsg,WarnID] = lastwarn();
                 if isempty(warnID)
-                    noProblem();
+                      noProblem();
                 else
                     error_l = [error_l string(scan_runID_text)];
                 end
@@ -266,8 +269,11 @@ for k = 1 : numFiles
                 % x and y coordinates in 'fileManagerObj.processedMap'
                 figure('Color','w','visible','off');
                 subplot(2,1,1);
+                if isempty(customAmp)
+                    customAmp = maxAmp;
+                end
                 mxw.plot.activityMap(activityScanData, amplitude90perc,'ColorMap',customCmap,'Ylabel', '[\muV]',...
-                    'CaxisLim', [10 maxAmp], 'Interpolate',true,'Figure',false,'Title','Spike Amplitude Activity Map');
+                    'CaxisLim', [10 customAmp], 'Interpolate',true,'Figure',false,'Title','Spike Amplitude Activity Map');
                 % run the line above several times, experimenting with different 
                 % [min max] range of the color gradient 'CaxisLim'
                 
@@ -296,61 +302,125 @@ for k = 1 : numFiles
                 fprintf('%s\n',ME.message)
                 %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
             end
-            % === Active Area Gray Heatmap ===
-            try
-                figure('Color', 'w', 'Visible', 'off');  % create invisible figure
-                
-                % Correct Maxwell Chip Physical Area
-                xlim_chip = [0 3850];  % 3.85 mm = 3850 microns
-                ylim_chip = [0 2100];  % 2.10 mm = 2100 microns
-                BinSize = 30;
-                % Define bin edges
-                xedges = xlim_chip(1):BinSize:xlim_chip(2);
-                yedges = ylim_chip(1):BinSize:ylim_chip(2);
+          try
+            figure('Color', 'w', 'Visible', 'off');  % create invisible figure
+        
+            % Correct Maxwell Chip Physical Area
+            xlim_chip = [0 3850];  % 3.85 mm = 3850 microns
+            ylim_chip = [0 2100];  % 2.10 mm = 2100 microns
+        
+            % === [NEW] Use finer bin size ===
+            BinSize = 10;  % Higher resolution than previous BinSize = 30
+        
+            % Define bin edges
+            xedges = xlim_chip(1):BinSize:xlim_chip(2);
+            yedges = ylim_chip(1):BinSize:ylim_chip(2);
+        
+            % Compute 2D histogram (density)
+            N = histcounts2(ypos_elec, xpos_elec, yedges, xedges);  % Note (y,x) order!
+        
+            % === [NEW] Apply Gaussian smoothing to reduce graininess ===
+           % Define a Gaussian kernel manually
+            sigma = 2;
+            kernelSize = 5;
+            [xg, yg] = meshgrid(-kernelSize:kernelSize, -kernelSize:kernelSize);
+            gKernel = exp(-(xg.^2 + yg.^2) / (2 * sigma^2));
+            gKernel = gKernel / sum(gKernel(:));  % Normalize
             
-                % Compute 2D histogram (density)
-                N = histcounts2(ypos_elec, xpos_elec, yedges, xedges);  % Note (y,x) order!
-            
-                % Plot the heatmap
-                imagesc(xedges, yedges, N);
-                axis xy;
-                axis equal;
-                hold on;
-            
-                % Set colormap
-                colormap("gray");
-                colorbar;
-                CaxisLim =[];
-                % Set color limits
-                if isempty(CaxisLim)
-                    caxis([0 max(N(:))]);
-                else
-                    caxis(CaxisLim);
-                end
-            
-                % Scalebar
-                line([300 800], [1800 1800], 'Color', 'k', 'LineWidth', 4);  % Adjusted position
-                text(340, 1850, '0.5 mm', 'color', 'k', 'FontSize', 8);
-            
-                % Set axis limits correctly
-                xlim(xlim_chip);
-                ylim(ylim_chip);
-            
-                axis off;
-                box off;
-
-   
-                title(append('Active Area ', num2str(Active_area, '%.1f'), '%'), 'FontSize', 12);
-            
-                % Save figure
-                activeHeatmapPath = append(opDir,'ActivityScan_outputs/Active_Area/ActiveAreaDensity_',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg');
-                print(gcf, activeHeatmapPath, '-dsvg');
-            
-            catch ME
-                fprintf('Unable to plot Active Area Density Heatmap for run %s\n', scan_runID_text)
-                fprintf('%s\n', ME.message)
+            % Apply smoothing using convolution
+            N_smooth = conv2(N, gKernel, 'same');
+        
+            % Plot the heatmap
+            imagesc(xedges(1:end-1), yedges(1:end-1), N_smooth);  % Align with bin centers
+            axis xy;
+            axis equal;
+            hold on;
+        
+            % Set colormap and colorbar
+            colormap("gray");
+            colorbar;
+        
+            % Set color limits dynamically or manually
+            CaxisLim = [];
+            if isempty(CaxisLim)
+                caxis([0 max(N_smooth(:))]);
+            else
+                caxis(CaxisLim);
             end
-
+        
+            % Scalebar
+            line([300 800], [1800 1800], 'Color', 'k', 'LineWidth', 4);  % Adjusted position
+            text(340, 1850, '0.5 mm', 'color', 'k', 'FontSize', 8);
+        
+            % Set axis limits correctly
+            xlim(xlim_chip);
+            ylim(ylim_chip);
+        
+            axis off;
+            box off;
+        
+            % Add title with active area percentage
+            title(append('Active Area ', num2str(Active_area, '%.1f'), '%'), 'FontSize', 12);
+        
+            % Save figure
+            activeHeatmapPath = append(opDir, 'ActivityScan_outputs/Active_Area/ActiveAreaDensity_', ...
+                scan_runID_text, '_WellID_', num2str(wellID), '_', num2str(scan_chipID), ...
+                '_DIV', num2str(scan_div), '_', strrep(neuronSourceType{1}, ' ', ''), '.svg');
+            print(gcf, activeHeatmapPath, '-dsvg');
+        
+        catch ME
+            fprintf('Unable to plot Active Area Density Heatmap for run %s\n', scan_runID_text)
+            fprintf('%s\n', ME.message)
+        end
+            % % III. Electrodes 
+            % try
+            %     % get th 90th percentile spike amplitude value for each electrode
+            %     amplitude90perc = abs(mxw.activityMap.computeAmplitude90percentile(activityScanData));
+            % 
+            %     % define maximum amplitude used in plots as 99th percentile of amplitude values
+            %     maxAmp = mxw.util.percentile(amplitude90perc(amplitude90perc~=0),99);
+            % 
+            %     % plot the mean firing rate vector as a map, given the electrode 
+            %     % x and y coordinates in 'fileManagerObj.processedMap'
+            %     figure('Color','w','visible','off');
+            %     subplot(2,1,1);
+            %     if isempty(customAmp)
+            %         customAmp = maxAmp;
+            %     end
+            %     mxw.plot.activityMap(activityScanData, amplitude90perc,'ColorMap',customCmap,'Ylabel', '[\muV]',...
+            %         'CaxisLim', [10 customAmp], 'Interpolate',true,'Figure',false,'Title','Spike Amplitude Activity Map');
+            %     % run the line above several times, experimenting with different 
+            %     % [min max] range of the color gradient 'CaxisLim'
+            %     selectNetworkElectrodes = mxw.util.electrodeSelection.networkRec(activityScanData,'ActivityThreshold',thrFiringRate,'AmplitudeThreshold',thrAmp);
+            %     hold
+            %     %scatter(activityScanData.processedMap.xpos(selectNetworkElectrodes.electrodes), activityScanData.processedMap.ypos(selectNetworkElectrodes.electrodes), 15, 'r','s', 'filled');
+            %     scatter(selectNetworkElectrodes.xpos, selectNetworkElectrodes.ypos, 15, 'r','s', 'filled');
+            % 
+            %     % add scale bar 
+            %     line([300 800],[2000+400 2000+400],'Color','k','LineWidth',4);
+            %     axis off;
+            %     text(340,2100+500,'0.5 mm','color','k');
+            %     xlim([200 3750])
+            %     ylim([150 2500])
+            % 
+            %     % plot the distribution of spike amplitudes across all of the electrodes
+            %     subplot(2,1,2);
+            %     thrAmp = 10;  % set a minimum spike amplitude threshold (uV)
+            %     histogram(amplitude90perc(amplitude90perc>thrAmp),ceil(0:1:maxAmp), ...
+            %         'FaceColor','#135ba3', "EdgeColor",'#414042')
+            %     xlim([thrAmp maxAmp])
+            %     ylabel('Counts');xlabel('Spike Amplitude [\muV]');
+            %     box off;
+            %     legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
+            %         ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
+            % 
+            %     print(gcf,append(opDir,'ActivityScan_outputs/ElectrodeAmp/ElectrodeAmp',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+            %     %exportgraphics(fig,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),"ContentType",'vector','BackgroundColor','none');
+            % catch ME
+            %     fprintf('Unable to plot Amplitude Map for run %s\n', scan_runID_text)
+            %     fprintf('%s\n',ME.message)
+            %     %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
+            % end
 
             try
 
@@ -364,8 +434,8 @@ for k = 1 : numFiles
                 end
                 
                 % Save variables to MAT file
-                save(matFilePath, 'meanFiringRate', 'amplitude90perc', 'scan_runID', ...
-                    'scan_chipID', 'wellID', 'scan_div');
+               % parsave(matFilePath, 'meanFiringRate', 'amplitude90perc', 'scan_runID', ...
+               %      'scan_chipID', 'wellID', 'scan_div');
             catch ME
                 fprintf('%s\n',ME.message)
             end 

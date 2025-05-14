@@ -12,7 +12,7 @@ function [] = compileNetworkFiles(data)
     extMetricsFlag = data.extMetricsFlag;
 
     epsPlot= false;
-
+    customAmpOutside =[];
     plotFRmatrix = false;
 
     % Unpack the data structure
@@ -38,6 +38,7 @@ function [] = compileNetworkFiles(data)
 
     
     % outputFolders = {'Plot60s', 'Plot120s', 'Plot300s', 'Plot600s', 'Figureformat'};
+    
     % for i = 1:length(outputFolders)
     %     folderPath = fullfile(opDir, 'Network_outputs/Raster_BurstActivity', outputFolders{i});
     %     if ~isfolder(folderPath)
@@ -186,7 +187,7 @@ function [] = compileNetworkFiles(data)
                         end
                     end
                 networkData = mxw.fileManager(pathFileNetwork,wellID);
-                
+                customAmp= customAmpOutside;
                
                 % get the startTime of the recordings
                 hd5_time = networkData.fileObj.stopTime;
@@ -768,49 +769,64 @@ function [] = compileNetworkFiles(data)
 
                     close(f);
 
-                     % II. Spike Rate Activity Map and Distribution
-                    try
-                        % get the mean firing rate for each electrode
-                        meanFiringRate = mxw.activityMap.computeSpikeRate(networkData);
-                        
-                        % define maximum firing rate used in plots as 99th percentile of firing
-                        % rate values
-                        maxFiringRate = mxw.util.percentile(meanFiringRate(meanFiringRate~=0),99);
-                        
-                        % plot the list of mean firing rates as a map, given the electrode 
-                        % x and y coordinates in 'fileManagerObj.processedMap'
-                        figure('Color','w','visible','off');
-                        subplot(2,1,1);
-                        mxw.plot.activityMap(networkData, meanFiringRate,'ColorMap','gray', 'Ylabel', '[Hz]',...
-                            'CaxisLim', [0.1 max(meanFiringRate)/5],'Interpolate',true,'Figure',false,'Title','Firing Rate Activity Map');
-                        % run the line above several times, experimenting with different 
-                        % [min max] range of the color gradient 'CaxisLim'
-                        
-                        % add scale bar 
-                        line([300 800],[2000+400 2000+400],'Color','k','LineWidth',4);
-                        axis off;
-                        text(340,2100+500,'0.5 mm','color','k');
-                        xlim([200 3750]);ylim([150 2500])
-                        
-                        % plot the distribution of firing rates across all of the electrodes
-                        subplot(2,1,2);
-                        thrFiringRate = 0.1; % set a minimum spike rate threshold (Hz)
-                        histogram(meanFiringRate(meanFiringRate>thrFiringRate),0:.1:ceil(maxFiringRate), ...
-                            'FaceColor','#135ba3', "EdgeColor",'#414042')
-                        xlim([thrFiringRate maxFiringRate])
-                        ylabel('Counts');xlabel('Firing Rate [Hz]');
-                        box off;
-                        legend(['Mean Firing Rate = ',num2str(mean(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f'),...
-                            ' Hz,  sd = ',num2str(std(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f')])
-                    
-                        print(gcf,append(opDir,'Network_outputs/',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+                  try
+                    customCmap = customDivergingColorMap(256);  
+                    % get th 90th percentile spike amplitude value for each electrode
+                    amplitude90perc = abs(mxw.activityMap.computeAmplitude90percentile(networkData));
+
+                    % define maximum amplitude used in plots as 99th percentile of amplitude values
+                    maxAmp = mxw.util.percentile(amplitude90perc(amplitude90perc~=0),99);
+
+                    % plot the mean firing rate vector as a map, given the electrode 
+                    %x and y coordinates in 'fileManagerObj.processedMap'
+                    figure('Color','w','visible','off');
+                    subplot(2,1,1);
                    
-                        %exportgraphics(fig,fullfile(append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg')),'ContentType','vector','BackgroundColor','none');
-                    catch ME
-                        fprintf('Unable to plot Firing Rate Map for run s%/n',scan_runID_text)
-                        fprintf('%s\n',ME.message)
-                        %fprintf(logFile,'Unable to plot Firing Rate Map for run s%/n',scan_runID_text);
+                    scatter(networkData.processedMap.xpos, networkData.processedMap.ypos, 20, 'r','s', 'filled');
+                    % add scale bar 
+                    chipX = 0;
+                    chipY = 0;
+                    chipW = 3850;  % 3845 µm
+                    chipH = 2100;  % 2095 µm
+                    hold 
+
+                    rectangle('Position', [chipX, chipY, chipW, chipH], ...
+                     'EdgeColor', 'k', 'LineWidth', 0.5);  % 'k' for black border
+                    axis off;
+                    text(340,2100+500,'0.5 mm','color','k');
+                    xlim([chipX - 50, chipX + chipW + 50]);
+                    ylim([chipY - 50, chipY + chipH + 50]);
+
+                    % plot the distribution of spike amplitudes across all of the electrodes
+                    subplot(2,1,2);
+                    thrAmp = 10;  % set a minimum spike amplitude threshold (uV)
+                    histogram(amplitude90perc(amplitude90perc>thrAmp),ceil(0:1:maxAmp), ...
+                        'FaceColor','#135ba3', "EdgeColor",'#414042')
+                    xlim([thrAmp maxAmp])
+                    ylabel('Counts');xlabel('Spike Amplitude [\muV]');
+                    box off;
+                    legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
+                        ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
+                                        % Define the folder path
+                    EampfolderPath = fullfile(opDir, 'Network_outputs/ElectrodesAmplitudeMap');
+                    
+                    % Check if the folder exists; if not, create it
+                    if ~exist(EampfolderPath, 'dir')
+                        mkdir(EampfolderPath);
                     end
+
+                    %print(gcf,append(EampfolderPath,scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+                    % Save the figure as SVG
+                    print(gcf, fullfile(EampfolderPath, ...
+                        [scan_runID_text, '_WellID_', num2str(wellID), ...
+                        '_', num2str(scan_chipID), '_DIV', num2str(scan_div), ...
+                        '_', strrep(neuronSourceType{1}, ' ', ''), '.svg']), '-dsvg');
+                    %exportgraphics(fig,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),"ContentType",'vector','BackgroundColor','none');
+                catch ME
+                    fprintf('Unable to plot Amplitude Map for run %s\n', scan_runID_text)
+                    fprintf('%s\n',ME.message)
+                    %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
+                end
                     %totalTime = toc;  % Measure the total elapsed time after the loop
     
                  % Display total elapsed time

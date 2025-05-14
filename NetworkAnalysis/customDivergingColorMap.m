@@ -9,8 +9,8 @@ end
 % [Position (0-1), R, G, B]
 controlPoints = [
    
-    0.00, 0.0, 0.0, 0.0;  % Dark Blue
-    0.02,0.0,0.0,0.5;
+    0.00, 0.0, 0.0, 0.0;  
+    0.01,0.0,0.4,0.7;
     0.05, 0.0, 0.5, 1.0;    % Light Blue
     0.75, 1.0, 1.0, 1.0;    % White (center at 75%)
     0.95, 1.0, 0.5, 0.2;    % Light Orange
