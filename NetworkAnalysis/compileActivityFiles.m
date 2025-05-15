@@ -5,7 +5,7 @@
 
 function [] = compileActivityFiles(data)
 
-customAmpOutsideLoop =90;  % or customAmpOutsideLoop = [];
+customAmpOutsideLoop =[];  % or customAmpOutsideLoop = [] write the value to fix the color maps if needed
 
 tic;
 mfilename('fullpath')
