@@ -134,9 +134,9 @@ def run_kilosort(recording,output_folder):
     # default_KS2_params['detect_threshold'] = 12
     # default_KS2_params['projection_threshold']=[18, 10]
     # default_KS2_params['preclust_threshold'] = 14
-    #run_sorter=run_sorter_local(sorter_name="kilosort2",recording=recording, output_folder=output_folder, delete_output_folder=False,verbose=True,with_output=True,**default_KS2_params)
+    run_sorter=run_sorter_local(sorter_name="kilosort2",recording=recording, output_folder=output_folder, delete_output_folder=False,verbose=True,with_output=True,**default_KS2_params)
     #sorting=run_sorter(sorter_name="kilosort2",recording=recording,output_folder=output_folder,remove_existing_folder=True, delete_output_folder=False,verbose=True,docker_image="rohanmalige/rohan_si-98:v8",with_output=True, **default_KS2_params)
-    run_sorter = ss.run_sorter('kilosort2',recording=recording, output_folder=output_folder,docker_image= "rohanmalige/benshalom:v3",verbose=True, **default_KS2_params)
+    #run_sorter = ss.run_sorter('kilosort2',recording=recording, output_folder=output_folder,docker_image= "rohanmalige/benshalom:v3",verbose=True, **default_KS2_params)
     #run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params) #depreciation warning 
     #sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
     return run_sorter
@@ -180,7 +180,7 @@ def remove_violated_units(metrics, thresholds=None):
     """
     # Default thresholds
     default_thresholds = {
-        'num_spikes': 100,
+        'num_spikes': 200,
         'presence_ratio': 0.98,
         'isi_violations_ratio': 0.98,
         'firing_rate': 0.01,
@@ -358,7 +358,7 @@ def get_data_maxwell(file_path,stream_id,rec_num):
 
 
 
-def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, sorting_folder = f"{BASE_FILE_PATH}/Sorting_Intermediate_files",clear_temp_files=True,thresholds=None):
+def process_block(file_path,time_in_s= None,stream_id = 'well000',recnumber=0, sorting_folder = f"{BASE_FILE_PATH}/Sorting_Intermediate_files",clear_temp_files=True,thresholds=None):
     
     
     #check if sorting_folder exists and empty
@@ -370,9 +370,9 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
     recording,rec_name = get_data_maxwell(file_path,stream_id,recnumber)
     logging.info(f"Processing recording: {rec_name}")
     fs, num_chan, channel_ids, total_rec_time= get_channel_recording_stats(recording)
-    if total_rec_time < time_in_s:  # sometimes the recording are less than 300s
+    if time_in_s == None:  # sometimes the recording are less than 300s
 
-        time_in_s = total_rec_time
+        time_in_s = total_rec_time - 1
     time_start = 0
     time_end = time_start+time_in_s
     recording_chunk = recording.frame_slice(start_frame= int(time_start*fs),end_frame=int(time_end*fs))
@@ -470,7 +470,17 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         #rohan made change here 
         qual_metrics = qual_metrics.loc[non_violated_units]
         qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics.xlsx")
-       
+        import seaborn as sns
+        # After calculating qual_metrics but before saving to Excel
+        plt.figure(figsize=(8, 6))
+        sns.histplot(data=qual_metrics['firing_rate'], bins='auto', kde=False)
+        plt.title('Distribution of Firing Rates')
+        plt.xlabel('Firing Rate (Hz)')
+        plt.ylabel('Count')
+        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/firing_rate_distribution.png")
+        plt.close()
+        
+
         unit_ids = waveforms.unit_ids
         
         unit_locations =dict(zip(unit_ids,locations))
@@ -580,7 +590,7 @@ def process_block(file_path,time_in_s= 300,stream_id = 'well000',recnumber=0, so
         print(f"Subplots saved to: {pdf_file}")
         fs=recording_chunk.get_sampling_frequency()
         t_start = 0 
-        t_end = int(300 * fs)
+        t_end = int(time_in_s * fs)
         dt = 1
         frame_numbers = t_end
         spike_times = {}    
@@ -754,7 +764,9 @@ def main():
     if os.path.isfile(path):
         logger.debug(f"'{path}' is a file.")
         # Perform actions for a file here
-        process_block(path,clear_temp_files=False)
+        for stream_id in ['well001','well002','well003','well004','well005']:
+        	_ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
+        
 
 
     # Check if the path is a folder

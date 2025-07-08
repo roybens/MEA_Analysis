@@ -1,301 +1,237 @@
-2024-07-17 23:51:51 - mea_pipeline - DEBUG - '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/' is a folder. - mea_analysis_pipeline_new - 724
-2024-07-17 23:51:52 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline_new - 345
-2024-07-17 23:51:52 - root - DEBUG - current directory of the file.:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis - mea_analysis_pipeline_new - 356
-2024-07-17 23:51:52 - root - DEBUG - pattern of the file: KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063 - mea_analysis_pipeline_new - 367
-2024-07-17 23:51:52 - root - DEBUG - Sorting directory: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 370
-2024-07-17 23:51:52 - root - DEBUG - CUrrent directory after change: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 372
-2024-07-17 23:51:52 - root - INFO - ks folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well000/kilosort2__rec0000 - mea_analysis_pipeline_new - 376
-2024-07-17 23:51:52 - root - DEBUG - run_kilosort_output folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well000/kilosort2__rec0000 - mea_analysis_pipeline_new - 125
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:51:52 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:51:52 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:51:52 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:51:52 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/images/rohanmalige/benshalom:v3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:51:52 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/create HTTP/1.1" 201 88 - connectionpool - 453
-2024-07-17 23:51:52 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:51:53 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/start HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:51:53 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:51:53 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/f24fe766d726c58d4c9dc8d7ca9efe89364c9e2597787d401d29eba23cbf3824/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:51:54 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/f24fe766d726c58d4c9dc8d7ca9efe89364c9e2597787d401d29eba23cbf3824/json HTTP/1.1" 200 435 - connectionpool - 453
-2024-07-17 23:51:54 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:51:54 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/452312163a4c55cc1001e7d7ef08b07dd6897d5334b2d3b6a6f128b4827c75c8/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:51:55 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/452312163a4c55cc1001e7d7ef08b07dd6897d5334b2d3b6a6f128b4827c75c8/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:51:55 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:51:55 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/ff565dbca307002b7f8967a55655fda279883f22f1002211e3a2ecaae8556f14/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:51:56 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/ff565dbca307002b7f8967a55655fda279883f22f1002211e3a2ecaae8556f14/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:51:56 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:51:56 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/22dc0cc4e6ebc33164f102bca0dce65140f896dc6ced44642273ec7003d09c95/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:51:59 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/22dc0cc4e6ebc33164f102bca0dce65140f896dc6ced44642273ec7003d09c95/json HTTP/1.1" 200 441 - connectionpool - 453
-2024-07-17 23:51:59 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:51:59 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/21b102638768857864f1ca9901281562d925ffb5a5b70ba1611a76e0dcc8bf98/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:52:00 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/21b102638768857864f1ca9901281562d925ffb5a5b70ba1611a76e0dcc8bf98/json HTTP/1.1" 200 442 - connectionpool - 453
-2024-07-17 23:52:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:52:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/37c582c88fe49e51f1d65f851e51bcbccd86c2911da7f6b5ef5e0a3651b6c780/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:52:02 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/37c582c88fe49e51f1d65f851e51bcbccd86c2911da7f6b5ef5e0a3651b6c780/json HTTP/1.1" 200 534 - connectionpool - 453
-2024-07-17 23:52:02 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:52:02 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/d0626fcb845b92a4fdad32720ffef36f21d34e59ebf80eeab348d691619ceca2/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:52:02 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/d0626fcb845b92a4fdad32720ffef36f21d34e59ebf80eeab348d691619ceca2/json HTTP/1.1" 200 539 - connectionpool - 453
-2024-07-17 23:52:02 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24/stop HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:52:02 - urllib3.connectionpool - DEBUG - http://localhost:None "DELETE /v1.45/containers/54b4cf6113ac486ad4217e6c4c9f270c9d8552902d25c88d552df8318ddaff24?v=False&link=False&force=True HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:52:02 - root - DEBUG - Sorting complete - mea_analysis_pipeline_new - 379
-2024-07-17 23:52:03 - root - INFO - waveform folder: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well000/waveforms__rec0000 - mea_analysis_pipeline_new - 400
-2024-07-17 23:52:03 - root - INFO - Extracting waveforms - mea_analysis_pipeline_new - 401
-2024-07-17 23:52:03 - root - DEBUG - waveforms_folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well000/waveforms__rec0000 - mea_analysis_pipeline_new - 141
-2024-07-17 23:52:31 - root - DEBUG - Sort and extract waveforms takes: 39.22380943293683 - mea_analysis_pipeline_new - 404
-2024-07-17 23:52:53 - root - DEBUG - Removing redundant items takes-0.00017024902626872063 - mea_analysis_pipeline_new - 423
-2024-07-17 23:54:24 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline_new - 345
-2024-07-17 23:54:24 - root - DEBUG - current directory of the file.:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis - mea_analysis_pipeline_new - 356
-2024-07-17 23:54:24 - root - DEBUG - pattern of the file: KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063 - mea_analysis_pipeline_new - 367
-2024-07-17 23:54:24 - root - DEBUG - Sorting directory: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 370
-2024-07-17 23:54:24 - root - DEBUG - CUrrent directory after change: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 372
-2024-07-17 23:54:24 - root - INFO - ks folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well001/kilosort2__rec0000 - mea_analysis_pipeline_new - 376
-2024-07-17 23:54:24 - root - DEBUG - run_kilosort_output folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well001/kilosort2__rec0000 - mea_analysis_pipeline_new - 125
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:54:24 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/images/rohanmalige/benshalom:v3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/create HTTP/1.1" 201 88 - connectionpool - 453
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/start HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:24 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/c656ae697f75d5e8c4c7d0d23b093c6e7a133c20eede7c9d1b9543ba7302abf5/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:25 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/c656ae697f75d5e8c4c7d0d23b093c6e7a133c20eede7c9d1b9543ba7302abf5/json HTTP/1.1" 200 435 - connectionpool - 453
-2024-07-17 23:54:25 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:25 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/548376709d9a68241f016752c329a52d8e77d2d8cad9d00a2c09514c81d3ab5f/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:26 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/548376709d9a68241f016752c329a52d8e77d2d8cad9d00a2c09514c81d3ab5f/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:54:26 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:26 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/7812335bc271aea04480952784fbaa67564b7c333004f83c966cd6477a04d4d2/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:27 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/7812335bc271aea04480952784fbaa67564b7c333004f83c966cd6477a04d4d2/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:54:27 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:27 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/094d17b0d725e378237e140dcb506ff53be6e7772f9db3626514fa0ead2a82e3/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/094d17b0d725e378237e140dcb506ff53be6e7772f9db3626514fa0ead2a82e3/json HTTP/1.1" 200 441 - connectionpool - 453
-2024-07-17 23:54:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/10f17d8e3d476486a1e4cdf2d1174dfbf7ab6719feb047612f19fc2ea4629d23/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:31 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/10f17d8e3d476486a1e4cdf2d1174dfbf7ab6719feb047612f19fc2ea4629d23/json HTTP/1.1" 200 442 - connectionpool - 453
-2024-07-17 23:54:31 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:31 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/7d755d61d7c3d5957da2ed65c7a4beb75bcd49a11268bd2927e553b6c7ff6c37/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:32 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/7d755d61d7c3d5957da2ed65c7a4beb75bcd49a11268bd2927e553b6c7ff6c37/json HTTP/1.1" 200 534 - connectionpool - 453
-2024-07-17 23:54:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:54:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/c066fe7578de6960993e63406bd1ed9c6a49198354705ad2642d558306883710/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:54:32 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/c066fe7578de6960993e63406bd1ed9c6a49198354705ad2642d558306883710/json HTTP/1.1" 200 539 - connectionpool - 453
-2024-07-17 23:54:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca/stop HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:54:32 - urllib3.connectionpool - DEBUG - http://localhost:None "DELETE /v1.45/containers/15fdc8608210ce6d00f00eae2adc37224543124c02150417c6c263d5531775ca?v=False&link=False&force=True HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:54:33 - root - DEBUG - Sorting complete - mea_analysis_pipeline_new - 379
-2024-07-17 23:54:33 - root - INFO - waveform folder: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well001/waveforms__rec0000 - mea_analysis_pipeline_new - 400
-2024-07-17 23:54:33 - root - INFO - Extracting waveforms - mea_analysis_pipeline_new - 401
-2024-07-17 23:54:33 - root - DEBUG - waveforms_folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well001/waveforms__rec0000 - mea_analysis_pipeline_new - 141
-2024-07-17 23:55:00 - root - DEBUG - Sort and extract waveforms takes: 36.62883059098385 - mea_analysis_pipeline_new - 404
-2024-07-17 23:55:22 - root - DEBUG - Removing redundant items takes-0.00018155202269554138 - mea_analysis_pipeline_new - 423
-2024-07-17 23:57:13 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline_new - 345
-2024-07-17 23:57:13 - root - DEBUG - current directory of the file.:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis - mea_analysis_pipeline_new - 356
-2024-07-17 23:57:13 - root - DEBUG - pattern of the file: KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063 - mea_analysis_pipeline_new - 367
-2024-07-17 23:57:13 - root - DEBUG - Sorting directory: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 370
-2024-07-17 23:57:13 - root - DEBUG - CUrrent directory after change: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 372
-2024-07-17 23:57:13 - root - INFO - ks folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well002/kilosort2__rec0000 - mea_analysis_pipeline_new - 376
-2024-07-17 23:57:13 - root - DEBUG - run_kilosort_output folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well002/kilosort2__rec0000 - mea_analysis_pipeline_new - 125
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:57:13 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/images/rohanmalige/benshalom:v3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/create HTTP/1.1" 201 88 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/start HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/886e75712d9a85f9e9e1a6df7a3fe0f245c4a8fec8ece8a2c47309ed06666b36/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/886e75712d9a85f9e9e1a6df7a3fe0f245c4a8fec8ece8a2c47309ed06666b36/json HTTP/1.1" 200 435 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:13 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/6913c33de3ba34ec2c967ce031dbfa7eb8b38d890d4ce86e73a706262f3ab456/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:15 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/6913c33de3ba34ec2c967ce031dbfa7eb8b38d890d4ce86e73a706262f3ab456/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:57:15 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:15 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/eb6652e64c9cf0dc9539f9416b831a7086f8fcdd7bb045c11052fb737f799bd4/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:16 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/eb6652e64c9cf0dc9539f9416b831a7086f8fcdd7bb045c11052fb737f799bd4/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:57:16 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:16 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/8bbd38d52e4c313b4758e446dfd879eb1ccfd3bffc0de126f3cf0914770000e4/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:18 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/8bbd38d52e4c313b4758e446dfd879eb1ccfd3bffc0de126f3cf0914770000e4/json HTTP/1.1" 200 441 - connectionpool - 453
-2024-07-17 23:57:18 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:18 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/e910e039f720e764ee37bca30b1b4b43835f9b431f073ef131247d3db80c96c2/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:20 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/e910e039f720e764ee37bca30b1b4b43835f9b431f073ef131247d3db80c96c2/json HTTP/1.1" 200 442 - connectionpool - 453
-2024-07-17 23:57:20 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:20 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/19cff5d1ed9b4840d1252c242b227c1f0332d1399adca9bac85594605a448863/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:21 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/19cff5d1ed9b4840d1252c242b227c1f0332d1399adca9bac85594605a448863/json HTTP/1.1" 200 534 - connectionpool - 453
-2024-07-17 23:57:21 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:57:21 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/b1c914b49a7cc5897f7b74e5a77df6910b7d591a633c5e29d04104868c222ec8/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:57:21 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/b1c914b49a7cc5897f7b74e5a77df6910b7d591a633c5e29d04104868c222ec8/json HTTP/1.1" 200 539 - connectionpool - 453
-2024-07-17 23:57:21 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3/stop HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:57:21 - urllib3.connectionpool - DEBUG - http://localhost:None "DELETE /v1.45/containers/59ff9b31f7db3813f86559fc9c370ba18392204ffe73589dd95f3ec9a42bc1b3?v=False&link=False&force=True HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:57:21 - root - DEBUG - Sorting complete - mea_analysis_pipeline_new - 379
-2024-07-17 23:57:22 - root - INFO - waveform folder: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well002/waveforms__rec0000 - mea_analysis_pipeline_new - 400
-2024-07-17 23:57:22 - root - INFO - Extracting waveforms - mea_analysis_pipeline_new - 401
-2024-07-17 23:57:22 - root - DEBUG - waveforms_folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well002/waveforms__rec0000 - mea_analysis_pipeline_new - 141
-2024-07-17 23:57:47 - root - DEBUG - Sort and extract waveforms takes: 34.718677383847535 - mea_analysis_pipeline_new - 404
-2024-07-17 23:58:10 - root - DEBUG - Removing redundant items takes-0.00019312300719320774 - mea_analysis_pipeline_new - 423
-2024-07-17 23:59:29 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline_new - 345
-2024-07-17 23:59:29 - root - DEBUG - current directory of the file.:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis - mea_analysis_pipeline_new - 356
-2024-07-17 23:59:29 - root - DEBUG - pattern of the file: KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063 - mea_analysis_pipeline_new - 367
-2024-07-17 23:59:29 - root - DEBUG - Sorting directory: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 370
-2024-07-17 23:59:29 - root - DEBUG - CUrrent directory after change: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 372
-2024-07-17 23:59:29 - root - INFO - ks folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well003/kilosort2__rec0000 - mea_analysis_pipeline_new - 376
-2024-07-17 23:59:29 - root - DEBUG - run_kilosort_output folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well003/kilosort2__rec0000 - mea_analysis_pipeline_new - 125
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:59:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-17 23:59:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-17 23:59:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-17 23:59:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/images/rohanmalige/benshalom:v3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:59:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/create HTTP/1.1" 201 88 - connectionpool - 453
-2024-07-17 23:59:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-17 23:59:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/start HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-17 23:59:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:59:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/7474f56a5b247d87ed8d8bf87371b7a9327de9c02d34c7c2f04269da74bdc5c5/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:59:30 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/7474f56a5b247d87ed8d8bf87371b7a9327de9c02d34c7c2f04269da74bdc5c5/json HTTP/1.1" 200 435 - connectionpool - 453
-2024-07-17 23:59:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:59:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/43e1f8fe99197b47a262f5e3c5d633533a959719a238ad167540cfa18c470136/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:59:31 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/43e1f8fe99197b47a262f5e3c5d633533a959719a238ad167540cfa18c470136/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:59:31 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:59:31 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/7b5d0fb534df21f9ea6c79df00856f3371d930a9e66e5dfad7d2bc84fb5eeb90/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:59:32 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/7b5d0fb534df21f9ea6c79df00856f3371d930a9e66e5dfad7d2bc84fb5eeb90/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-17 23:59:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:59:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/46ade777cf0cff32fffccef61a9d1fffbbc4aae7e3e86ce88bc65c253c641664/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:59:34 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/46ade777cf0cff32fffccef61a9d1fffbbc4aae7e3e86ce88bc65c253c641664/json HTTP/1.1" 200 441 - connectionpool - 453
-2024-07-17 23:59:34 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:59:34 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/40ba893de9a555e937abe7453b4812639b83ad4364bdef45534615103ab958e1/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-17 23:59:36 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/40ba893de9a555e937abe7453b4812639b83ad4364bdef45534615103ab958e1/json HTTP/1.1" 200 442 - connectionpool - 453
-2024-07-17 23:59:36 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-17 23:59:36 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/a50bde12b4ece78ce6c4e7ae7fc618f7d44d598785df67c3e6b5a2c9945eb629/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:02:00 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/a50bde12b4ece78ce6c4e7ae7fc618f7d44d598785df67c3e6b5a2c9945eb629/json HTTP/1.1" 200 534 - connectionpool - 453
-2024-07-18 00:02:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:02:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/c2585af588244c9571e4a1e6448a7739cd2081273e822bfe1a48d057cfa2adcc/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:02:00 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/c2585af588244c9571e4a1e6448a7739cd2081273e822bfe1a48d057cfa2adcc/json HTTP/1.1" 200 539 - connectionpool - 453
-2024-07-18 00:02:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da/stop HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:02:00 - urllib3.connectionpool - DEBUG - http://localhost:None "DELETE /v1.45/containers/490ce828424f62879a88e21b28de03099e3d8413587a567ad102b07d3c4f14da?v=False&link=False&force=True HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:02:00 - root - DEBUG - Sorting complete - mea_analysis_pipeline_new - 379
-2024-07-18 00:02:01 - root - INFO - waveform folder: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well003/waveforms__rec0000 - mea_analysis_pipeline_new - 400
-2024-07-18 00:02:01 - root - INFO - Extracting waveforms - mea_analysis_pipeline_new - 401
-2024-07-18 00:02:01 - root - DEBUG - waveforms_folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well003/waveforms__rec0000 - mea_analysis_pipeline_new - 141
-2024-07-18 00:02:18 - root - DEBUG - Sort and extract waveforms takes: 169.30925279902294 - mea_analysis_pipeline_new - 404
-2024-07-18 00:02:42 - root - DEBUG - Removing redundant items takes-0.0001871159765869379 - mea_analysis_pipeline_new - 423
-2024-07-18 00:03:58 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline_new - 345
-2024-07-18 00:03:58 - root - DEBUG - current directory of the file.:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis - mea_analysis_pipeline_new - 356
-2024-07-18 00:03:58 - root - DEBUG - pattern of the file: KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063 - mea_analysis_pipeline_new - 367
-2024-07-18 00:03:58 - root - DEBUG - Sorting directory: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 370
-2024-07-18 00:03:58 - root - DEBUG - CUrrent directory after change: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 372
-2024-07-18 00:03:58 - root - INFO - ks folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well004/kilosort2__rec0000 - mea_analysis_pipeline_new - 376
-2024-07-18 00:03:58 - root - DEBUG - run_kilosort_output folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well004/kilosort2__rec0000 - mea_analysis_pipeline_new - 125
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:03:58 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/images/rohanmalige/benshalom:v3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/create HTTP/1.1" 201 88 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/start HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/a4368d30ac17d88d376e324872860535bd615446dd76cc18b204de1fff549fba/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/a4368d30ac17d88d376e324872860535bd615446dd76cc18b204de1fff549fba/json HTTP/1.1" 200 435 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:03:58 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/28e0f3116770745da5856de75f114fa1ffe743f2dfd64d3226f934148428893e/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:04:00 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/28e0f3116770745da5856de75f114fa1ffe743f2dfd64d3226f934148428893e/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-18 00:04:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:04:00 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/14a92ff33b7b4a1aa5e57d8f7f96a15ba923f221525219fff488bbde6a96cecf/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:04:01 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/14a92ff33b7b4a1aa5e57d8f7f96a15ba923f221525219fff488bbde6a96cecf/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-18 00:04:01 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:04:01 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/3f646b4c9b4897e601ac6cbead1b2f303c1e38181c849426c168bfa9a52e82a1/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:04:03 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/3f646b4c9b4897e601ac6cbead1b2f303c1e38181c849426c168bfa9a52e82a1/json HTTP/1.1" 200 441 - connectionpool - 453
-2024-07-18 00:04:03 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:04:03 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/16714d2ba465f83e6d8fd503b760b0295bee54b7ef625cf1ed0001da454ea482/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:04:04 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/16714d2ba465f83e6d8fd503b760b0295bee54b7ef625cf1ed0001da454ea482/json HTTP/1.1" 200 442 - connectionpool - 453
-2024-07-18 00:04:04 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:04:04 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/5f08e265c3e8c39a6a94fd1d7e79c6ec507a082157251a0022ececa9098fbe4c/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:06:23 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/5f08e265c3e8c39a6a94fd1d7e79c6ec507a082157251a0022ececa9098fbe4c/json HTTP/1.1" 200 534 - connectionpool - 453
-2024-07-18 00:06:23 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:06:23 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/46f1e310484a720be588c7c3f57906d94e4b9cbb444f139e2ac5d9e8ea47f43d/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:06:23 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/46f1e310484a720be588c7c3f57906d94e4b9cbb444f139e2ac5d9e8ea47f43d/json HTTP/1.1" 200 539 - connectionpool - 453
-2024-07-18 00:06:23 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806/stop HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:06:23 - urllib3.connectionpool - DEBUG - http://localhost:None "DELETE /v1.45/containers/a22a41c75152a1ae5cc9479f2072b08edfb2118ea2f0a72f753884c64fa25806?v=False&link=False&force=True HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:06:23 - root - DEBUG - Sorting complete - mea_analysis_pipeline_new - 379
-2024-07-18 00:06:24 - root - INFO - waveform folder: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well004/waveforms__rec0000 - mea_analysis_pipeline_new - 400
-2024-07-18 00:06:24 - root - INFO - Extracting waveforms - mea_analysis_pipeline_new - 401
-2024-07-18 00:06:24 - root - DEBUG - waveforms_folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well004/waveforms__rec0000 - mea_analysis_pipeline_new - 141
-2024-07-18 00:06:42 - root - DEBUG - Sort and extract waveforms takes: 164.32181080803275 - mea_analysis_pipeline_new - 404
-2024-07-18 00:07:06 - root - DEBUG - Removing redundant items takes-0.00020126905292272568 - mea_analysis_pipeline_new - 423
-2024-07-18 00:08:29 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline_new - 345
-2024-07-18 00:08:29 - root - DEBUG - current directory of the file.:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis - mea_analysis_pipeline_new - 356
-2024-07-18 00:08:29 - root - DEBUG - pattern of the file: KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063 - mea_analysis_pipeline_new - 367
-2024-07-18 00:08:29 - root - DEBUG - Sorting directory: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 370
-2024-07-18 00:08:29 - root - DEBUG - CUrrent directory after change: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline_new - 372
-2024-07-18 00:08:29 - root - INFO - ks folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well005/kilosort2__rec0000 - mea_analysis_pipeline_new - 376
-2024-07-18 00:08:29 - root - DEBUG - run_kilosort_output folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well005/kilosort2__rec0000 - mea_analysis_pipeline_new - 125
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - Trying paths: ['/home/mmp/.docker/config.json', '/home/mmp/.dockercfg'] - config - 21
-2024-07-18 00:08:29 - docker.utils.config - DEBUG - No config file found - config - 28
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /version HTTP/1.1" 200 822 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/images/rohanmalige/benshalom:v3/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/create HTTP/1.1" 201 88 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/json HTTP/1.1" 200 None - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/start HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/d2d034a478bac7f0fd5d0c46fb75efd20588c72a30d23bbc0332662060055b98/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/d2d034a478bac7f0fd5d0c46fb75efd20588c72a30d23bbc0332662060055b98/json HTTP/1.1" 200 435 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:08:29 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/fc2f2dfcf09212c4ef6ef8759ae34cc1eacd875691c200357b4c7513375994fe/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:08:30 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/fc2f2dfcf09212c4ef6ef8759ae34cc1eacd875691c200357b4c7513375994fe/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-18 00:08:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:08:30 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/4efba2cf46a9473e1fec591e1b077659e085601df6dc313d26c81ea02d231c3e/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:08:32 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/4efba2cf46a9473e1fec591e1b077659e085601df6dc313d26c81ea02d231c3e/json HTTP/1.1" 200 430 - connectionpool - 453
-2024-07-18 00:08:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:08:32 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/6122dd29d839d562a208a96f85a6fd21749f244c569a73be3b5cecd6e556dccf/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:08:34 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/6122dd29d839d562a208a96f85a6fd21749f244c569a73be3b5cecd6e556dccf/json HTTP/1.1" 200 441 - connectionpool - 453
-2024-07-18 00:08:34 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:08:34 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/2aeb1ec83c86388d424812bc6832d98bd605b6c8e7642cbba38f78367f159651/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:08:36 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/2aeb1ec83c86388d424812bc6832d98bd605b6c8e7642cbba38f78367f159651/json HTTP/1.1" 200 442 - connectionpool - 453
-2024-07-18 00:08:36 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:08:36 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/f606b49450fba3eedf764062079c2954a07494a3d7ff04a8e85b04e72414adc5/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:10:35 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/f606b49450fba3eedf764062079c2954a07494a3d7ff04a8e85b04e72414adc5/json HTTP/1.1" 200 534 - connectionpool - 453
-2024-07-18 00:10:35 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/exec HTTP/1.1" 201 74 - connectionpool - 453
-2024-07-18 00:10:35 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/exec/9efa9204d2119fb3740dfd7784aa5aa7c4a88eb46689c92953a3ee58db36d469/start HTTP/1.1" 101 0 - connectionpool - 453
-2024-07-18 00:10:35 - urllib3.connectionpool - DEBUG - http://localhost:None "GET /v1.45/exec/9efa9204d2119fb3740dfd7784aa5aa7c4a88eb46689c92953a3ee58db36d469/json HTTP/1.1" 200 539 - connectionpool - 453
-2024-07-18 00:10:35 - urllib3.connectionpool - DEBUG - http://localhost:None "POST /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5/stop HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:10:35 - urllib3.connectionpool - DEBUG - http://localhost:None "DELETE /v1.45/containers/772613b71690142aa287231c7e90a8a64d8259a2e24704b34335cfbaad0a1ef5?v=False&link=False&force=True HTTP/1.1" 204 0 - connectionpool - 453
-2024-07-18 00:10:36 - root - DEBUG - Sorting complete - mea_analysis_pipeline_new - 379
-2024-07-18 00:10:36 - root - INFO - waveform folder: /mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well005/waveforms__rec0000 - mea_analysis_pipeline_new - 400
-2024-07-18 00:10:36 - root - INFO - Extracting waveforms - mea_analysis_pipeline_new - 401
-2024-07-18 00:10:36 - root - DEBUG - waveforms_folder:/mnt/disk15tb/mmpatil/MEA_Analysis_dev/IPNAnalysis/../AnalyzedData/KCNT1_T3_C1_03122024/KCNT1_T3_C1_03122024/240402/M07037/Network/000063/well005/waveforms__rec0000 - mea_analysis_pipeline_new - 141
-2024-07-18 00:10:55 - root - DEBUG - Sort and extract waveforms takes: 146.3381019991357 - mea_analysis_pipeline_new - 404
-2024-07-18 00:11:19 - root - DEBUG - Removing redundant items takes-0.0002109869383275509 - mea_analysis_pipeline_new - 423
+2025-04-22 23:56:29 - mea_pipeline - DEBUG - '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/' is a folder. - mea_analysis_pipeline - 775
+2025-04-22 23:56:29 - mea_pipeline - DEBUG - Reference file not provided, so analysing all the files in the folder. - mea_analysis_pipeline - 808
+2025-04-22 23:56:29 - mea_pipeline - DEBUG - ['/mnt/disk20tb/PrimaryNeuronData/Maxtwo/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/data.raw.h5', '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/data.raw.h5', '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/data.raw.h5'] - mea_analysis_pipeline - 809
+2025-04-22 23:56:29 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-22 23:56:29 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-22 23:56:29 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147 - mea_analysis_pipeline - 393
+2025-04-22 23:56:29 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-22 23:56:29 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-22 23:56:29 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well000/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-22 23:56:29 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well000/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 00:09:20 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 00:09:21 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well000/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 00:09:21 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 00:09:21 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well000/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 00:10:51 - root - DEBUG - Sort and extract waveforms takes: 862.3154269199999 - mea_analysis_pipeline - 430
+2025-04-23 00:12:34 - root - DEBUG - Removing redundant items takes-0.00016766299995651934 - mea_analysis_pipeline - 449
+2025-04-23 00:16:31 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 00:16:31 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 00:16:31 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147 - mea_analysis_pipeline - 393
+2025-04-23 00:16:31 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 00:16:31 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 00:16:31 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well001/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 00:16:31 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well001/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 00:23:46 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 00:23:46 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well001/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 00:23:46 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 00:23:46 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well001/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 00:25:20 - root - DEBUG - Sort and extract waveforms takes: 529.3389977809998 - mea_analysis_pipeline - 430
+2025-04-23 00:27:05 - root - DEBUG - Removing redundant items takes-0.17007193500012363 - mea_analysis_pipeline - 449
+2025-04-23 00:30:51 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 00:30:51 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 00:30:51 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147 - mea_analysis_pipeline - 393
+2025-04-23 00:30:51 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 00:30:51 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 00:30:51 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well002/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 00:30:51 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well002/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 00:38:49 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 00:38:49 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well002/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 00:38:49 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 00:38:49 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well002/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 00:41:01 - root - DEBUG - Sort and extract waveforms takes: 609.8861608010002 - mea_analysis_pipeline - 430
+2025-04-23 00:42:50 - root - DEBUG - Removing redundant items takes-0.06558852999978626 - mea_analysis_pipeline - 449
+2025-04-23 00:49:43 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 00:49:43 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 00:49:43 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147 - mea_analysis_pipeline - 393
+2025-04-23 00:49:43 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 00:49:43 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 00:49:43 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well003/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 00:49:43 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well003/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 00:50:50 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 00:50:50 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well003/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 00:50:50 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 00:50:50 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well003/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 00:51:00 - root - DEBUG - Sort and extract waveforms takes: 77.40487521199975 - mea_analysis_pipeline - 430
+2025-04-23 00:51:15 - root - DEBUG - Removing redundant items takes-0.0003391260001990304 - mea_analysis_pipeline - 449
+2025-04-23 00:51:21 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 00:51:21 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 00:51:21 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147 - mea_analysis_pipeline - 393
+2025-04-23 00:51:21 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 00:51:21 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 00:51:21 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well004/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 00:51:21 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well004/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 00:59:26 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 00:59:26 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well004/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 00:59:26 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 00:59:26 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well004/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 01:01:30 - root - DEBUG - Sort and extract waveforms takes: 609.0728598529995 - mea_analysis_pipeline - 430
+2025-04-23 01:03:20 - root - DEBUG - Removing redundant items takes-0.05388128000049619 - mea_analysis_pipeline - 449
+2025-04-23 01:09:49 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 01:09:49 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 01:09:49 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147 - mea_analysis_pipeline - 393
+2025-04-23 01:09:49 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 01:09:49 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 01:09:49 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well005/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 01:09:49 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well005/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 01:20:20 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 01:20:20 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well005/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 01:20:20 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 01:20:20 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000147/well005/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 01:23:11 - root - DEBUG - Sort and extract waveforms takes: 801.6671590149999 - mea_analysis_pipeline - 430
+2025-04-23 01:25:03 - root - DEBUG - Removing redundant items takes-0.05702837799981353 - mea_analysis_pipeline - 449
+2025-04-23 01:35:06 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 01:35:06 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 01:35:06 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149 - mea_analysis_pipeline - 393
+2025-04-23 01:35:06 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 01:35:06 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 01:35:06 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well000/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 01:35:06 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well000/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 01:41:54 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 01:41:55 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well000/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 01:41:55 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 01:41:55 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well000/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 01:43:21 - root - DEBUG - Sort and extract waveforms takes: 494.82273247300054 - mea_analysis_pipeline - 430
+2025-04-23 01:45:03 - root - DEBUG - Removing redundant items takes-0.00019567599974834593 - mea_analysis_pipeline - 449
+2025-04-23 01:47:49 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 01:47:49 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 01:47:49 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149 - mea_analysis_pipeline - 393
+2025-04-23 01:47:49 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 01:47:49 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 01:47:49 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well001/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 01:47:49 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well001/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 01:53:39 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 01:53:39 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well001/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 01:53:39 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 01:53:39 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well001/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 01:55:06 - root - DEBUG - Sort and extract waveforms takes: 437.03376943500007 - mea_analysis_pipeline - 430
+2025-04-23 01:56:50 - root - DEBUG - Removing redundant items takes-0.0002050220000455738 - mea_analysis_pipeline - 449
+2025-04-23 01:58:59 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 01:58:59 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 01:58:59 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149 - mea_analysis_pipeline - 393
+2025-04-23 01:58:59 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 01:58:59 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 01:58:59 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well002/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 01:58:59 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well002/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 02:05:20 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 02:05:20 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well002/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 02:05:20 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 02:05:20 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well002/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 02:06:54 - root - DEBUG - Sort and extract waveforms takes: 475.2301436409998 - mea_analysis_pipeline - 430
+2025-04-23 02:08:41 - root - DEBUG - Removing redundant items takes-0.022409418001188897 - mea_analysis_pipeline - 449
+2025-04-23 02:12:01 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 02:12:01 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 02:12:01 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149 - mea_analysis_pipeline - 393
+2025-04-23 02:12:01 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 02:12:01 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 02:12:01 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well003/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 02:12:01 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well003/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 02:13:17 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 02:13:17 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well003/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 02:13:17 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 02:13:17 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well003/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 02:13:35 - root - DEBUG - Sort and extract waveforms takes: 93.06891873299901 - mea_analysis_pipeline - 430
+2025-04-23 02:14:00 - root - DEBUG - Removing redundant items takes-0.00017925500105775427 - mea_analysis_pipeline - 449
+2025-04-23 02:14:08 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 02:14:08 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 02:14:08 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149 - mea_analysis_pipeline - 393
+2025-04-23 02:14:08 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 02:14:08 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 02:14:08 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well004/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 02:14:08 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well004/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 02:20:33 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 02:20:34 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well004/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 02:20:34 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 02:20:34 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well004/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 02:22:06 - root - DEBUG - Sort and extract waveforms takes: 478.4722557489986 - mea_analysis_pipeline - 430
+2025-04-23 02:23:55 - root - DEBUG - Removing redundant items takes-0.016818771000544075 - mea_analysis_pipeline - 449
+2025-04-23 02:27:13 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 02:27:13 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 02:27:13 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149 - mea_analysis_pipeline - 393
+2025-04-23 02:27:13 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 02:27:13 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 02:27:13 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well005/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 02:27:13 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well005/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 02:34:40 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 02:34:40 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well005/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 02:34:40 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 02:34:40 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000149/well005/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 02:36:24 - root - DEBUG - Sort and extract waveforms takes: 550.8351710219995 - mea_analysis_pipeline - 430
+2025-04-23 02:38:14 - root - DEBUG - Removing redundant items takes-0.03557854800055793 - mea_analysis_pipeline - 449
+2025-04-23 02:44:00 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 02:44:00 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 02:44:00 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148 - mea_analysis_pipeline - 393
+2025-04-23 02:44:00 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 02:44:00 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 02:44:00 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well000/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 02:44:00 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well000/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 02:51:39 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 02:51:39 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well000/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 02:51:39 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 02:51:39 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well000/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 02:53:26 - root - DEBUG - Sort and extract waveforms takes: 565.8617062339999 - mea_analysis_pipeline - 430
+2025-04-23 02:55:18 - root - DEBUG - Removing redundant items takes-0.01824774299893761 - mea_analysis_pipeline - 449
+2025-04-23 03:00:16 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 03:00:16 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 03:00:16 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148 - mea_analysis_pipeline - 393
+2025-04-23 03:00:16 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 03:00:16 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 03:00:16 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well001/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 03:00:16 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well001/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 03:07:21 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 03:07:22 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well001/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 03:07:22 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 03:07:22 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well001/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 03:09:01 - root - DEBUG - Sort and extract waveforms takes: 525.2389098460008 - mea_analysis_pipeline - 430
+2025-04-23 03:10:45 - root - DEBUG - Removing redundant items takes-0.07165233299929241 - mea_analysis_pipeline - 449
+2025-04-23 03:14:40 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 03:14:40 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 03:14:40 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148 - mea_analysis_pipeline - 393
+2025-04-23 03:14:40 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 03:14:40 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 03:14:40 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well002/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 03:14:40 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well002/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 03:23:24 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 03:23:24 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well002/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 03:23:24 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 03:23:24 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well002/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 03:26:21 - root - DEBUG - Sort and extract waveforms takes: 701.568809815999 - mea_analysis_pipeline - 430
+2025-04-23 03:28:07 - root - DEBUG - Removing redundant items takes-0.017018516000462114 - mea_analysis_pipeline - 449
+2025-04-23 03:35:39 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 03:35:39 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 03:35:39 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148 - mea_analysis_pipeline - 393
+2025-04-23 03:35:39 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 03:35:39 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 03:35:39 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well003/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 03:35:39 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well003/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 03:36:58 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 03:36:58 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well003/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 03:36:58 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 03:36:58 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well003/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 03:37:13 - root - DEBUG - Sort and extract waveforms takes: 94.26007043000027 - mea_analysis_pipeline - 430
+2025-04-23 03:37:36 - root - DEBUG - Removing redundant items takes-0.00032003600063035265 - mea_analysis_pipeline - 449
+2025-04-23 03:37:42 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 03:37:42 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 03:37:42 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148 - mea_analysis_pipeline - 393
+2025-04-23 03:37:42 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 03:37:42 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 03:37:42 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well004/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 03:37:42 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well004/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 03:46:53 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 03:46:53 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well004/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 03:46:53 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 03:46:53 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well004/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 03:49:49 - root - DEBUG - Sort and extract waveforms takes: 726.8138601230003 - mea_analysis_pipeline - 430
+2025-04-23 03:51:38 - root - DEBUG - Removing redundant items takes-0.12835716100016725 - mea_analysis_pipeline - 449
+2025-04-23 03:59:14 - root - INFO - Processing recording: rec0000 - mea_analysis_pipeline - 371
+2025-04-23 03:59:14 - root - DEBUG - current directory of the file.:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis - mea_analysis_pipeline - 382
+2025-04-23 03:59:14 - root - DEBUG - pattern of the file: Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148 - mea_analysis_pipeline - 393
+2025-04-23 03:59:14 - root - DEBUG - Sorting directory: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 396
+2025-04-23 03:59:14 - root - DEBUG - CUrrent directory after change: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/Sorting_Intermediate_files - mea_analysis_pipeline - 398
+2025-04-23 03:59:14 - root - INFO - ks folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well005/kilosort2__rec0000 - mea_analysis_pipeline - 402
+2025-04-23 03:59:14 - root - DEBUG - run_kilosort_output folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well005/kilosort2__rec0000 - mea_analysis_pipeline - 129
+2025-04-23 04:12:33 - root - DEBUG - Sorting complete - mea_analysis_pipeline - 405
+2025-04-23 04:12:33 - root - INFO - waveform folder: /mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well005/waveforms__rec0000 - mea_analysis_pipeline - 426
+2025-04-23 04:12:33 - root - INFO - Extracting waveforms - mea_analysis_pipeline - 427
+2025-04-23 04:12:33 - root - DEBUG - waveforms_folder:/mmpatil/MEA_Analysis_FEB25/IPNAnalysis/../AnalyzedData/Stimulation_experiments_MP/Stimulation_experiments_MP/250421/M07735/Network/000148/well005/waveforms__rec0000 - mea_analysis_pipeline - 147
+2025-04-23 04:19:14 - root - DEBUG - Sort and extract waveforms takes: 1200.3514926029984 - mea_analysis_pipeline - 430
+2025-04-23 04:21:20 - root - DEBUG - Removing redundant items takes-0.022454271002061432 - mea_analysis_pipeline - 449

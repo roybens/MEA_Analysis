@@ -109,7 +109,7 @@ function processActivityButtonCallback(~, ~)
     data.fig = fig;
     
     % Log the data into a log file
-    logFileName = './network_log_file.txt';
+    logFileName = './activity_log_file.txt';
     logFile = fopen(logFileName, 'a'); % 'a' for append mode
         
     if logFile == -1
@@ -141,7 +141,7 @@ function processActivityButtonCallback(~, ~)
 
     disp('Process Data button clicked.');
     disp('Activity File');
-    compileActivityFiles(data);
+    compileActivityFilesV2(data);
 
     % Close the log file
     fclose(logFile);
@@ -157,7 +157,7 @@ function processActivityButtonCallback(~, ~)
       % Get the values from the sliders
     gaussianSigma = gaussianSigmaEdit.Value;
     binSize = binSizeEdit.Value;
-    minProminience = minProminenceEdit.Value;
+    minPeakProminence = minProminenceEdit.Value;
     minPeakDistance = minPeakDistanceEdit.Value;
     thresholdBurst = thresholdBurstEdit.Value;
     thresholdStartStop = thresholdStartStopEdit.Value;
@@ -192,7 +192,7 @@ function processActivityButtonCallback(~, ~)
     data.refDir = refDir;
     data.gaussianSigma = gaussianSigma;
     data.binSize = binSize;
-    data.minProminience = minProminience;
+    data.minPeakProminence = minPeakProminence;
     data.minPeakDistance = minPeakDistance;
     data.thresholdBurst = thresholdBurst;
     data.thresholdStartStop = thresholdStartStop;
@@ -205,7 +205,7 @@ function processActivityButtonCallback(~, ~)
     
 
     % Log the data into a log file
-    logFileName = './activity_log_file.txt';
+    logFileName = './network_log_file.txt';
     logFile = fopen(logFileName, 'a'); % 'a' for append mode
 
     if logFile == -1
@@ -224,7 +224,7 @@ function processActivityButtonCallback(~, ~)
     fprintf(logFile, 'Gaussian Sigma: %f\n', data.gaussianSigma);
     fprintf(logFile, 'Bin Size: %f\n', data.binSize);
     fprintf(logFile,'MinPeakDistance : %f\n',data.minPeakDistance);
-    fprintf(logFile, 'Min Peak Prominence: %f\n',  data.minProminience );
+    fprintf(logFile, 'Min Peak Prominence: %f\n',  data.minPeakProminence );
     fprintf(logFile, 'Threshold Burst: %f\n', data.thresholdBurst);
     fprintf(logFile, 'Threshold Start-Stop: %f\n', data.thresholdStartStop);
     fprintf(logFile, 'Output Directory: %s\n', data.opDir);
