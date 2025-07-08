@@ -120,44 +120,40 @@ for k = 1 : numFiles
         fprintf(logFile, 'Now reading %s\n', pathFileActivityScan);
         % create fileManager object for the Activity Scan
             
-            idx = refTable.Run_ == scan_runID;
+        idx = refTable.Run_ == scan_runID;
 
-        wellsIDs = refTable.Wells_Recorded(idx);
-
-        if iscell(wellsIDs)
-        wellsIDs = strsplit(wellsIDs{1}, ',');
-        wellsIDs = cellfun(@str2double,wellsIDs);
+        % --- Wells ---
+        if iscell(refTable.Wells_Recorded(idx))
+            wells_str = refTable.Wells_Recorded{idx};
+        else
+            wells_str = refTable.Wells_Recorded(idx);
         end
-
+        wellsIDs = str2double(strsplit(strtrim(wells_str), ','));
         
-        neuronTypes = refTable.NeuronSource(idx);
+        % --- Neuron Types ---
+        if iscell(refTable.NeuronSource(idx))
+            neuron_str = refTable.NeuronSource{idx};
+        else
+            neuron_str = refTable.NeuronSource(idx);
+        end
+        neuronTypes = strtrim(strsplit(neuron_str, ','));
         
-        if iscell(neuronTypes)
-        neuronTypes = strsplit(neuronTypes{1}, ',');
-
+        % --- Enforce correspondence ---
+        if length(neuronTypes) ~= length(wellsIDs)
+            error('Mismatch: Each well must have a corresponding neuron type.');
         end
         assayColumn = refTable.Assay(idx);
         numWells = length(wellsIDs);
         fileResults = cell(numWells, 1);
         skippedWells = cell(numWells,1);
        
-            parfor z = 1:numWells
+            for z = 1:numWells
             customAmp = customAmpOutsideLoop;
             wellID=wellsIDs(z);
             fprintf(1, 'Processing Well %d\n', wellID);
             neuronSourceType = neuronTypes(z);
             try
-                %wellID = 1; % select which well to analyze
-                %{
-                lastwarn('','');
-                diceyFunction(mxw.fileManager(pathFileActivityScan,wellID));
-                [warnMsg,WarnID] = lastwarn();
-                if isempty(warnID)
-                      noProblem();
-                else
-                    error_l = [error_l string(scan_runID_text)];
-                end
-                %}
+
                 activityScanData = mxw.fileManager(pathFileActivityScan,wellID);
             catch
                 skippedWells{z} = [pathFileActivityScan,num2str(wellID)];
@@ -177,6 +173,7 @@ for k = 1 : numFiles
             scan_div = floor(days(hd5Date - div0_datetime));
     
             % compute means
+
             % get the mean firing rate for each electrode
             meanFiringRate = mxw.activityMap.computeSpikeRate(activityScanData);
             % calculate the overall mean firing rate of the scan
@@ -190,16 +187,59 @@ for k = 1 : numFiles
             idx = (meanFiringRate>thrFiringRate & amplitude90perc>thrAmp);
             Active_area = sum(idx)/length(idx)*100;
 
-            xpos_elec = activityScanData.processedMap.xpos(idx);
-            ypos_elec= activityScanData.processedMap.ypos(idx);
-          
+            %xpos_elec = activityScanData.processedMap.xpos(idx);
+            %ypos_elec= activityScanData.processedMap.ypos(idx);
+
+            %compute ISI metrics
+            nRecordings = length(activityScanData.extractedSpikes);
+            nElectrodes = length(activityScanData.extractedSpikes(1).frameno);
+            spikeTimesCell = cell(nElectrodes, 1);
+            for r = 1:nRecordings
+                for e = 1:nElectrodes
+                    spikeTimesCell{e} = [spikeTimesCell{e}; activityScanData.extractedSpikes(r).frameno{e}./activityScanData.fileObj(1).samplingFreq];
+                end
+            end
+            % Preallocate
+            meanISI = NaN(nElectrodes, 1);
+            stdISI  = NaN(nElectrodes, 1);
+            isiCV   = NaN(nElectrodes, 1);
+            fano    = NaN(nElectrodes, 1);
             
-               % Save only summary metrics to main table
+            % Compute ISI stats in vectorized fashion using cellfun
+            isiCell = cellfun(@diff, spikeTimesCell, 'UniformOutput', false);
+            validISI = cellfun(@(x) numel(x) >= 1 && isnumeric(x), isiCell);
+            % Vectorized mean & std of ISIs
+            % Compute mean/std
+            
+            meanISI(validISI) = cellfun(@(x) mean(double(x)), isiCell(validISI), 'UniformOutput', true);
+            stdISI(validISI) = cellfun(@(x) std(double(x)), isiCell(validISI), 'UniformOutput', true);
+            isiCV(validISI)   = stdISI(validISI) ./ meanISI(validISI);
+            
+            % --- Compute Fano factor ---
+            validSpikes = cellfun(@(x) numel(x) >= 1, spikeTimesCell);
+            
+            % Estimate max duration for binning (in seconds)
+            maxTime = max(cellfun(@(x) max(x), spikeTimesCell(validSpikes)));
+            binEdges = 0:1:ceil(maxTime);  % 1-second bins
+            
+            for e = find(validSpikes)'
+                st = spikeTimesCell{e};
+                spikeCounts = histcounts(st, binEdges);
+                if mean(spikeCounts) > 0
+                    fano(e) = var(double(spikeCounts)) / mean(spikeCounts);
+                else
+                    fano(e) = NaN;
+                end
+            end
+
+            % Save only summary metrics to main table
             fileResults{z} = table(scan_runID, assayColumn, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
                 scan_meanFiringRate, scan_meanSpikeAmplitude, Active_area, ...
+                mean(meanISI),mean(stdISI),mean(isiCV),mean(fano),...
                 'VariableNames', {
                     'Run_ID', 'AssayType', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-                    'Mean_FiringRate', 'Mean_SpikeAmplitude', 'Active_area' ...
+                    'Mean_FiringRate', 'Mean_SpikeAmplitude', 'Active_area',...
+                    'Mean_ISI','Std_ISI','Mean_ISI_CV','Mean_Fano'...
             });
             catch ME
                 disp(ME.message)
@@ -210,9 +250,7 @@ for k = 1 : numFiles
             end
             % plot amplitude and firing rate maps
             if plotFig
-            
 
-            % II. Spike Rate Activity Map and Distribution
             try
                 % get the mean firing rate for each electrode
                 meanFiringRate = mxw.activityMap.computeSpikeRate(activityScanData);
