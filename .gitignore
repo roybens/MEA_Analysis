@@ -22,5 +22,6 @@ nohup.out
 **.svg
 .DS_Store
 **.pdf
-
+**.h5
+**.raw
 
