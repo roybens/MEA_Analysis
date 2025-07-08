@@ -75,7 +75,7 @@ try
         poolObj = currentPool;  % Use the existing pool if it already matches the desired number of workers
     end
     % Execute computation in parallel
-    for i = 1:numParameters
+    parfor i = 1:numParameters
 
             if isfield(params, parameters{i})
                 varParams = params.(parameters{i})';

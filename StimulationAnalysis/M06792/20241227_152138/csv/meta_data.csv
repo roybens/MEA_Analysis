@@ -1,0 +1,8 @@
+,wellNo,folderPath,wellplateID,runID,assayTag,startTime,stopTime,date,control,gain,lsb,fs,hpf,numberOfConfigurations,durationPerConfiguration,wellGroupName,wellGroupColor,Plating Date,div
+Instance,Well Number,Folder Path,Wellplate ID,Assay Run ID,Assay Tag,Start Time,Stop Time,Date,Control,Gain,LSB,Sampling Frequency,HPF,Number of Configurations,Duration per Configuration,Well Group Name,Well Group Color,,DIV
+1,1,/media/rbs-maxtwo/harddisk24tbVol1/StimAssays_12162024_MP/241226/M06792/Network/000067,M06792,000067,Run #000067,16:53:11,17:23:11,2024-12-26,0,512.0,6.294,10000.0,1.0,1,1800.063,HET_80K,#f7c19b,25.11.2024,32
+2,2,/media/rbs-maxtwo/harddisk24tbVol1/StimAssays_12162024_MP/241226/M06792/Network/000067,M06792,000067,Run #000067,16:53:11,17:23:11,2024-12-26,0,512.0,6.294,10000.0,1.0,1,1800.062,HET_80K,#f7c19b,25.11.2024,32
+3,3,/media/rbs-maxtwo/harddisk24tbVol1/StimAssays_12162024_MP/241226/M06792/Network/000067,M06792,000067,Run #000067,16:53:11,17:23:11,2024-12-26,0,512.0,6.294,10000.0,1.0,1,1800.061,WT_100K,#8cdee2,25.11.2024,32
+4,4,/media/rbs-maxtwo/harddisk24tbVol1/StimAssays_12162024_MP/241226/M06792/Network/000067,M06792,000067,Run #000067,16:53:11,17:23:11,2024-12-26,0,512.0,6.294,10000.0,1.0,1,1800.06,WT_100K,#8cdee2,25.11.2024,32
+5,5,/media/rbs-maxtwo/harddisk24tbVol1/StimAssays_12162024_MP/241226/M06792/Network/000067,M06792,000067,Run #000067,16:53:11,17:23:11,2024-12-26,0,512.0,6.294,10000.0,1.0,1,1800.059,WT_60K,#bdccff,25.11.2024,32
+6,6,/media/rbs-maxtwo/harddisk24tbVol1/StimAssays_12162024_MP/241226/M06792/Network/000067,M06792,000067,Run #000067,16:53:11,17:23:11,2024-12-26,0,512.0,6.294,10000.0,1.0,1,1800.059,WT_60K,#bdccff,25.11.2024,32
