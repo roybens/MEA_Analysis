@@ -99,6 +99,7 @@ catch ME
         delete(d);
         error('Operation canceled by user.');
     else
+        fprintf(1,"%s",ME.message);
         rethrow(ME);
     end
 end
@@ -117,4 +118,4 @@ for i = 1:length(allJobs)
     delete(allJobs(i));
 end
 
-pfrint(1,'Completion successful!');
+fprintf(1,'Completion successful!');
