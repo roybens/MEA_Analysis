@@ -105,14 +105,17 @@ for f = 1 : length(theFiles)
         wellsIDs = strsplit(wellsIDs{1}, ',');
         wellsIDs = cellfun(@str2double,wellsIDs);
         else
-            error('wellsIDs are not comma separated correclty');
+           wellsIDs =wellsIDs{1};
         end
+        
         end
      
         neuronTypes = T.NeuronSource(idx);
         
         if ismember(',', neuronTypes{1})
         neuronTypes = strsplit(neuronTypes{1}, ',');
+        else
+            neuronTypes =neuronTypes{1};
         end
         
         for z = 1:length(wellsIDs)
@@ -637,34 +640,66 @@ for i = 1:length(uniqueGenoTypes)
     grid on;
     hold on;
 
-    % Plot for IBI
     subplot(3,2,1);
-    xFillIBI = [data.(parameter); flipud(data.(parameter))];
-    yFillIBI = [meanIBI - lowerLimitIBI; flipud(meanIBI + upperLimitIBI)];
+    grid on; hold on;
+    x = data.(parameter);
+    validIdx = ~any(isnan([x, meanIBI, lowerLimitIBI, upperLimitIBI]), 2);
+    x_valid = x(validIdx);
+    y_lower = meanIBI(validIdx) - lowerLimitIBI(validIdx);
+    y_upper = meanIBI(validIdx) + upperLimitIBI(validIdx);
+    xFillIBI = [x_valid; flipud(x_valid)];
+    yFillIBI = [y_lower; flipud(y_upper)];
     fill(xFillIBI, yFillIBI, genoColorMap(genoStr), 'LineStyle', 'none', 'FaceAlpha', 0.25);
+     % Ensures full axis is always shown
 
-    % Plot for BP
     subplot(3,2,2);
-    xFillBP = [data.(parameter); flipud(data.(parameter))];
-    yFillBP = [meanBP - lowerLimitBP; flipud(meanBP + upperLimitBP)];
+    grid on; hold on;
+    validIdx = ~any(isnan([x, meanBP, lowerLimitBP, upperLimitBP]), 2);
+    x_valid = x(validIdx);
+    y_lower = meanBP(validIdx) - lowerLimitBP(validIdx);
+    y_upper = meanBP(validIdx) + upperLimitBP(validIdx);
+    xFillBP = [x_valid; flipud(x_valid)];
+    yFillBP = [y_lower; flipud(y_upper)];
     fill(xFillBP, yFillBP, genoColorMap(genoStr), 'LineStyle', 'none', 'FaceAlpha', 0.25);
+
 
     % Plot for NB
     subplot(3,2,3);
-    xFillNB = [data.(parameter); flipud(data.(parameter))];
-    yFillNB = [meanNB - lowerLimitNB; flipud(meanNB + upperLimitNB)];
+    grid on; hold on;
+    validIdx = ~any(isnan([x, meanNB, lowerLimitNB, upperLimitNB]), 2);
+    x_valid = x(validIdx);
+    y_lower = meanNB(validIdx) - lowerLimitNB(validIdx);
+    y_upper = meanNB(validIdx) + upperLimitNB(validIdx);
+    xFillNB = [x_valid; flipud(x_valid)];
+    yFillNB = [y_lower; flipud(y_upper)];
     fill(xFillNB, yFillNB, genoColorMap(genoStr), 'LineStyle', 'none', 'FaceAlpha', 0.25);
+   
 
     % Plot for SPB
     subplot(3,2,4);
-    xFillSPB = [data.(parameter); flipud(data.(parameter))];
-    yFillSPB = [meanSPB - lowerLimitSPB; flipud(meanSPB + upperLimitSPB)];
+    grid on; hold on;
+    validIdx = ~any(isnan([x, meanSPB, lowerLimitSPB, upperLimitSPB]), 2);
+    x_valid = x(validIdx);
+    y_lower = meanSPB(validIdx) - lowerLimitSPB(validIdx);
+    y_upper = meanSPB(validIdx) + upperLimitSPB(validIdx);
+    xFillSPB = [x_valid; flipud(x_valid)];
+    yFillSPB = [y_lower; flipud(y_upper)];
     fill(xFillSPB, yFillSPB, genoColorMap(genoStr), 'LineStyle', 'none', 'FaceAlpha', 0.25);
+    
 end
 
 legendHandles = values(legendHandlesMap, keys(genoColorMap));
 legendLabels = keys(genoColorMap);
 legend([legendHandles{:}], legendLabels);
+% Find the max x-limit among all subplots
+all_axes = findall(fig2, 'Type', 'axes');
+x_max_across_subplots = max(arrayfun(@(ax) max(xlim(ax)), all_axes));
+
+% Apply the same x-limit to all subplots
+for ax = all_axes'
+    xlim(ax, [0 x_max_across_subplots]);
+end
+
 exportFile = [opDir 'paramsCompare_singlePlot.pdf']; %folder and filename for raster figures
 exportgraphics(fig2, exportFile ,'Resolution',300)
 
