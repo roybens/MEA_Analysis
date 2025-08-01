@@ -3,7 +3,7 @@ from dash.dependencies import Input, Output, State, ALL
 from data_processing import parse_contents, parse_mat
 from plot_functions import plot_activity_graphs, plot_isi_graph, plot_bar_with_p_values
 import io, zipfile, base64
-
+import re
 default_colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
 
 def register_callbacks(app):
@@ -271,13 +271,21 @@ def register_callbacks(app):
             ordered_genotypes = unique_genotypes
 
         graphs = []
-        excluded_columns = ['DIV', 'NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time','IBI_List',	'Burst_Peak_List',	'Abs_Burst_Peak_List',	'Burst_Times_List',	'SpikesPerBurst_List']
+        # Define fixed columns to exclude
+        fixed_exclusions = ['DIV', 'Assay','NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time','LogISI_BurstPeaks','LogISI_BurstDuration']
+
+        # Add any columns that contain "List"
+        list_columns = [col for col in df.columns if re.search(r'list', col, re.IGNORECASE)]
+
+        # Combine both lists
+        excluded_columns = fixed_exclusions + list_columns
         selected_metrics = [col for col in df.columns if col not in excluded_columns]
 
-        all_svg_bytes_list = []
+       	all_svg_bytes_list = []
         all_png_bytes_list = []
 
         for metric in selected_metrics:
+            print(f"Column '{metric}' dtype: {df[metric].dtype}")
             if 'activity' in filename.lower():
                 images, svg_bytes_list, png_bytes_list = plot_activity_graphs(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
             elif 'networks' in filename.lower():
