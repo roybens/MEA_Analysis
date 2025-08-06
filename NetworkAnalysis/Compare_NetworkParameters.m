@@ -18,8 +18,7 @@ parentFolderPath = fileDir;
 
 %make output folder
 %opDir = char('/home/jonathan/Documents/Scripts/Matlab/scrpits_output/CDKL5/ParameterCompare_MinPeakDistance/');
-opDir = char(append(outDir, "ParameterCompare_", parameter, "/"));
-mkdir(opDir);
+
 plotFig =1;
 % set base parameters
 % set Gaussian kernel standard deviation [s] (smoothing window)
@@ -77,6 +76,11 @@ asssy_runIDs = unique(assay_T.("Run_")).';
 filePattern = fullfile(parentFolderPath, '**/Network/**/*raw.h5'); 
 theFiles = dir(filePattern);
 allData =[];
+
+
+opDir = char(append(outDir, "OAT_Sensitivity/","ParameterCompare_", parameter, "/"));
+mkdir(opDir);
+
 %removing old files if any
 files = dir(fullfile(opDir, '*.csv'));
 for i = 1:length(files)
@@ -430,14 +434,14 @@ for f = 1 : length(theFiles)
     end
 end
 
-%% Plot all lines on one plot
+%% Plot all curves on one plot
 fig2 =figure('color','w','Position',[0 0 800 800],'Visible','off');
 % Define a map to hold genoStr-color pairs
 genoColorMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 legendHandlesMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
 % Define a list of colors to use for plots
-colorList = {'k', 'r', 'b', 'c', 'm', 'y', 'g'}; % Add more colors as needed
+colorList = {[240, 228, 66] / 255; [0, 114, 178]/255; [213, 94, 0]/255;}; % Add more colors as needed
 colorIndex = 1;
 
 % Get a list of all files in the folder with the desired file name pattern.
@@ -484,8 +488,8 @@ for k = 1 : iterations
     newGenoStrs{k} = genoStr;
     newIBIs{k} = data.("IBI");
     color = genoColorMap(genoStr);
-    subplot(3,2,1);
-    plot(data.(parameter),data.("IBI"),color);
+    subplot(3,2,4);
+    plot(data.(parameter),data.("IBI"),'Color',color);
     title('IBI')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -498,7 +502,7 @@ for k = 1 : iterations
     hold on
     newBPs{k} = data.("Burst Peak");
     subplot(3,2,2);
-    plot(data.(parameter),data.("Burst Peak"),color);
+    plot(data.(parameter),data.("Burst Peak"),'Color',color);
     title('Burst Peak')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -511,8 +515,8 @@ for k = 1 : iterations
     grid on
     hold on
     newNBs{k} = data.("# Bursts");
-    subplot(3,2,3);
-    plot(data.(parameter),data.("# Bursts"),color);
+    subplot(3,2,1);
+    plot(data.(parameter),data.("# Bursts"),'Color',color);
     title('# of Bursts')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -525,8 +529,8 @@ for k = 1 : iterations
     grid on
     hold on
     newSPBs{k} = data.("Spikes per Burst");
-    subplot(3,2,4);
-    p=plot(data.(parameter),data.("Spikes per Burst"),color);
+    subplot(3,2,3);
+    p=plot(data.(parameter),data.("Spikes per Burst"),'Color',color);
     title('Spikes per Burst')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
@@ -640,7 +644,7 @@ for i = 1:length(uniqueGenoTypes)
     grid on;
     hold on;
 
-    subplot(3,2,1);
+    subplot(3,2,4);
     grid on; hold on;
     x = data.(parameter);
     validIdx = ~any(isnan([x, meanIBI, lowerLimitIBI, upperLimitIBI]), 2);
@@ -664,7 +668,7 @@ for i = 1:length(uniqueGenoTypes)
 
 
     % Plot for NB
-    subplot(3,2,3);
+    subplot(3,2,1);
     grid on; hold on;
     validIdx = ~any(isnan([x, meanNB, lowerLimitNB, upperLimitNB]), 2);
     x_valid = x(validIdx);
@@ -676,7 +680,7 @@ for i = 1:length(uniqueGenoTypes)
    
 
     % Plot for SPB
-    subplot(3,2,4);
+    subplot(3,2,3);
     grid on; hold on;
     validIdx = ~any(isnan([x, meanSPB, lowerLimitSPB, upperLimitSPB]), 2);
     x_valid = x(validIdx);
