@@ -99,7 +99,27 @@ catch ME
         delete(d);
         error('Operation canceled by user.');
     else
-        fprintf(1,"%s",ME.message);
+        % More informative error reporting
+        fprintf(2, '\n  Error occurred:\n');
+        fprintf(2, '  Identifier : %s\n', ME.identifier);
+        fprintf(2, '  Message    : %s\n', ME.message);
+        fprintf(2, '  Function   : %s (line %d)\n', ...
+                ME.stack(1).name, ME.stack(1).line);
+
+        % Optional: Loop through full stack trace
+        fprintf(2, '  Stack trace:\n');
+        for k = 1:length(ME.stack)
+            fprintf(2, '    --> %s at line %d\n', ME.stack(k).name, ME.stack(k).line);
+        end
+
+        % Optionally open the editor at the error line (for debugging)
+        if ~isempty(ME.stack)
+            dbstop if error
+            fprintf(2, 'Tip: Type "dbstack" or use breakpoints to debug further.\n');
+        end
+
+        % Pause to view message if running headless (optional)
+        pause(2);
         rethrow(ME);
     end
 end
