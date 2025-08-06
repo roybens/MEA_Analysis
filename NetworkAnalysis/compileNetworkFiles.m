@@ -119,6 +119,7 @@ function [] = compileNetworkFiles(data)
             try
                 durations    = {'Plot60s','Plot120s','Plot300s','Plot600s'};
                 formats      = {'png','eps'};
+                wellStatus = strings(numWells,1);
                 parfor z = 1:numWells
                   try
                     %if z>1,continue;end      %for testing purpose
@@ -129,9 +130,9 @@ function [] = compileNetworkFiles(data)
                     % iteration it is required
                     folderName   = sprintf('%s_Well%d', scan_chipID, wellID);
                     chipWellDir  = fullfile(opDir,'Network_outputs','Raster_BurstActivity',folderName);
-                       for d = 1:numel(durations)
+                       for d_index = 1:numel(durations)
                             for f = 1:numel(formats)
-                                outDir = fullfile(chipWellDir, durations{d}, formats{f});
+                                outDir = fullfile(chipWellDir, durations{d_index}, formats{f});
                                 if ~isfolder(outDir)
                                     mkdir(outDir);  % safe because this is outside parfor
                                 end
@@ -187,99 +188,99 @@ function [] = compileNetworkFiles(data)
                     end
                     
                     % Convert to a table for readability
-                    allBurstTable = array2table(allBurstEvents, ...
-                        'VariableNames', {'StartTime', 'EndTime', 'ChannelIdx'});
-
-                    % --- Step 2: Create a timeline of all burst start (+1) and end (-1) events ---
-                    startTimes = allBurstTable.StartTime;
-                    endTimes   = allBurstTable.EndTime;
-                    
-                    % Mark +1 for burst starts, -1 for burst ends
-                    timeline = [
-                        startTimes,  ones(size(startTimes));  % Start = +1
-                        endTimes,   -ones(size(endTimes))     % End = -1
-                    ];
-                    
-                    % Sort timeline by time
-                    timeline = sortrows(timeline, 1);  % Columns: [time, delta]
-
-                    % --- Step 3: Sweep over time to detect network-level bursts ---
-                    min_active_channels = 50;  % Threshold: number of overlapping bursts to call a network burst
-                    active = 0;               % Number of active bursts at current time
-                    in_burst = false;         % Whether we're currently inside a network burst
-                    networkBursts = [];       % To store [start_time, end_time] of network bursts
-                    
-                    for i = 1:size(timeline, 1)
-                        time  = timeline(i, 1);
-                        delta = timeline(i, 2);
-                        
-                        % Update active burst count
-                        active = active + delta;
-                        
-                        % Check burst start
-                        if ~in_burst && active >= min_active_channels
-                            in_burst = true;
-                            burst_start = time;
-                            
-                        % Check burst end
-                        elseif in_burst && active < min_active_channels
-                            in_burst = false;
-                            burst_end = time;
-                            networkBursts(end+1, :) = [burst_start, burst_end]; %#ok<AGROW>
-                        end
-                    end
-
-                    % --- STEP 4: Compute statistics and store distributions ---
-                    burstDurations = []; ibis = []; burstPeaks = [];
-                    logBursts ={};
-                    if ~isempty(networkBursts)
-                        burstDurations = networkBursts(:,2) - networkBursts(:,1);
-                    
-                        % Inter-burst intervals (start-to-start)
-                        if size(networkBursts,1) > 1
-                            ibis = diff(networkBursts(:,1));
-                        end
-                    
-                        % Burst peak firing rate (from networkAct)
-                        burstPeaks = nan(size(networkBursts,1),1);
-                        for k = 1:size(networkBursts,1)
-                            idx = networkAct.time >= networkBursts(k,1) & ...
-                                  networkAct.time <= networkBursts(k,2);
-                            if any(idx)
-                                burstPeaks(k) = max(networkAct.firingRate(idx));
-                            end
-                        end
-                        logBursts = struct('start_time',networkBursts(:,1),'duration_s',burstDurations);
-                    end
+                    % allBurstTable = array2table(allBurstEvents, ...
+                    %     'VariableNames', {'StartTime', 'EndTime', 'ChannelIdx'});
+                    % 
+                    % % --- Step 2: Create a timeline of all burst start (+1) and end (-1) events ---
+                    % startTimes = allBurstTable.StartTime;
+                    % endTimes   = allBurstTable.EndTime;
+                    % 
+                    % % Mark +1 for burst starts, -1 for burst ends
+                    % timeline = [
+                    %     startTimes,  ones(size(startTimes));  % Start = +1
+                    %     endTimes,   -ones(size(endTimes))     % End = -1
+                    % ];
+                    % 
+                    % % Sort timeline by time
+                    % timeline = sortrows(timeline, 1);  % Columns: [time, delta]
+                    % 
+                    % % --- Step 3: Sweep over time to detect network-level bursts ---
+                    % min_active_channels = 50;  % Threshold: number of overlapping bursts to call a network burst
+                    % active = 0;               % Number of active bursts at current time
+                    % in_burst = false;         % Whether we're currently inside a network burst
+                    % networkBursts = [];       % To store [start_time, end_time] of network bursts
+                    % 
+                    % for i = 1:size(timeline, 1)
+                    %     time  = timeline(i, 1);
+                    %     delta = timeline(i, 2);
+                    % 
+                    %     % Update active burst count
+                    %     active = active + delta;
+                    % 
+                    %     % Check burst start
+                    %     if ~in_burst && active >= min_active_channels
+                    %         in_burst = true;
+                    %         burst_start = time;
+                    % 
+                    %     % Check burst end
+                    %     elseif in_burst && active < min_active_channels
+                    %         in_burst = false;
+                    %         burst_end = time;
+                    %         networkBursts(end+1, :) = [burst_start, burst_end]; %#ok<AGROW>
+                    %     end
+                    % end
+                    % 
+                    % % --- STEP 4: Compute statistics and store distributions ---
+                    % burstDurations = []; ibis = []; burstPeaks = [];
+                    % logBursts ={};
+                    % if ~isempty(networkBursts)
+                    %     burstDurations = networkBursts(:,2) - networkBursts(:,1);
+                    % 
+                    %     % Inter-burst intervals (start-to-start)
+                    %     if size(networkBursts,1) > 1
+                    %         ibis = diff(networkBursts(:,1));
+                    %     end
+                    % 
+                    %     % Burst peak firing rate (from networkAct)
+                    %     burstPeaks = nan(size(networkBursts,1),1);
+                    %     for k = 1:size(networkBursts,1)
+                    %         idx = networkAct.time >= networkBursts(k,1) & ...
+                    %               networkAct.time <= networkBursts(k,2);
+                    %         if any(idx)
+                    %             burstPeaks(k) = max(networkAct.firingRate(idx));
+                    %         end
+                    %     end
+                    %     logBursts = struct('start_time',networkBursts(:,1),'duration_s',burstDurations);
+                    % end
 
                     % Summary metrics
-                    meanIBI = mean(ibis, 'omitnan');
-                    covIBI  = std(ibis, 'omitnan') / meanIBI * 100;
-                    
-                    meanBurstPeak = mean(burstPeaks, 'omitnan');
-                    covBurstPeak  = std(burstPeaks, 'omitnan') / meanBurstPeak * 100;
-                    
-                    meanBurstDuration = mean(burstDurations, 'omitnan');
-                    covBurstDuration  = std(burstDurations, 'omitnan') / meanBurstDuration * 100;
+                    % meanIBI = mean(ibis, 'omitnan');
+                    % covIBI  = std(ibis, 'omitnan') / meanIBI * 100;
+                    % 
+                    % meanBurstPeak = mean(burstPeaks, 'omitnan');
+                    % covBurstPeak  = std(burstPeaks, 'omitnan') / meanBurstPeak * 100;
+                    % 
+                    % meanBurstDuration = mean(burstDurations, 'omitnan');
+                    % covBurstDuration  = std(burstDurations, 'omitnan') / meanBurstDuration * 100;
 
        
-                    % Pack into a one‐row table
-                    logSummary = table( ...
-                      numel(networkBursts)/2,meanBurstDuration,covBurstDuration, ...
-                      meanBurstPeak,covBurstPeak, meanIBI,covIBI, ...
-                      {strjoin(arrayfun(@num2str, ibis, 'UniformOutput', false), ',')},...
-                      {strjoin(arrayfun(@num2str, burstPeaks, 'UniformOutput', false), ',')},...
-                      {strjoin(arrayfun(@num2str, burstDurations, 'UniformOutput', false), ',')},...
-                      'VariableNames',{ ...
-                         'LogISI_NumBursts',    'LogISI_MeanBurstDur','LogISI_CV_BurstDur', ...
-                         'LogISI_MeanSpikes',   'LogISI_CV_Spikes',  'LogISI_MeanIBI','LogISI_CV_IBI' , ...
-                         'LogISI_BurstIBIList','LogISI_BurstPeaks','LogISI_BurstDuration'} );
+                    % % Pack into a one‐row table              
+                    % logSummary = table( ...
+                    %   numel(networkBursts)/2,meanBurstDuration,covBurstDuration, ...
+                    %   meanBurstPeak,covBurstPeak, meanIBI,covIBI, ...
+                    %   {strjoin(arrayfun(@num2str, ibis, 'UniformOutput', false), ',')},...
+                    %   {strjoin(arrayfun(@num2str, burstPeaks, 'UniformOutput', false), ',')},...
+                    %   {strjoin(arrayfun(@num2str, burstDurations, 'UniformOutput', false), ',')},...
+                    %   'VariableNames',{ ...
+                    %      'LogISI_NumBursts',    'LogISI_MeanBurstDur','LogISI_CV_BurstDur', ...
+                    %      'LogISI_MeanSpikes',   'LogISI_CV_Spikes',  'LogISI_MeanIBI','LogISI_CV_IBI' , ...
+                    %      'LogISI_BurstIBIList','LogISI_BurstPeaks','LogISI_BurstDuration'} );
               
                     % Build metadata + results table
                     metaTbl = table( scan_runID, scan_div, thisAssay, wellID, string(neuronSourceType), ...
                                      hd5Date, string(scan_chipID),'VariableNames',{'Run_ID','DIV','Assay','Well','NeuronType','Time','Chip_ID'} );
                     
-                    fileResults{z} = [metaTbl, burstsSummaryRow,logSummary];
+                    fileResults{z} = [metaTbl, burstsSummaryRow];%,logSummary];
 
                     % Save extended metrics if desired
                     if extMetricsFlag
@@ -296,18 +297,38 @@ function [] = compileNetworkFiles(data)
                                           burstsSummaryRow.mean_IBI,burstsSummaryRow.mean_Burst_Peak);
                         plotFileBase = sprintf('Raster_%s_Well%d_%s_DIV%d_%s',scan_runID_text, wellID, scan_chipID, scan_div, neuronSourceType);
                         epsPlot = false;
+                        % plotRasterNetwork( networkData, networkAct, networkStats, ...
+                        %                    relativeSpikeTimes, binSize, opDir, chipWellDir, ...
+                        %                    xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
+                        %                    epsPlot, baselineFiringRate ,logBursts);
+
                         plotRasterNetwork( networkData, networkAct, networkStats, ...
                                            relativeSpikeTimes, binSize, opDir, chipWellDir, ...
                                            xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
-                                           epsPlot, baselineFiringRate ,logBursts);
+                                           epsPlot, baselineFiringRate ,[]);
                     end
+                wellStatus(z) ='SUCCESS';
                 catch ME
                 % Restart pool on parallel errors
                 if contains(ME.message,'parallel')
                     delete(gcp('nocreate'));
                     parpool(numCores);
                 else
-                    warning('Unexpected error on file %s: %s', fullPath, ME.message);
+
+                       wellStatus(z) = "FAILED";
+                       skippedWells{z} = sprintf('[Run %d | Well %d] ERROR: %s\n', scan_runID, wellID, ME.message);
+
+                       % Log specific error per well
+                       fprintf(2, '[Run %d | Well %d] FAILED: %s\n', scan_runID, wellID, ME.message);
+                    if ~isempty(ME.stack)
+                        fprintf(2, 'In function: %s\n', ME.stack(1).name);
+                        fprintf(2, 'At line: %d\n', ME.stack(1).line);
+                        fprintf(2, 'Full Call Stack:\n');
+                        for si = 1:length(ME.stack)
+                            fprintf(2, '   [%02d] %s (line %d)\n', si, ME.stack(si).name, ME.stack(si).line);
+                        end
+                    end
+
                     continue;
                 end
             end
@@ -327,16 +348,49 @@ function [] = compileNetworkFiles(data)
                 end
 
                 successFile = true;
-            catch ME
-                % Restart pool on parallel errors
-                if contains(ME.message,'parallel')
-                    delete(gcp('nocreate'));
-                    parpool(numCores);
-                else
-                    warning('Unexpected error on file %s: %s', fullPath, ME.message);
-                    continue;
-                end
-            end
+                catch ME
+                    % Structured error logging
+                    fprintf(2, '\n============================================\n');
+                    fprintf(2, 'Error in file: %s\n', fullPath);
+                    fprintf(2, 'Time: %s\n', datestr(now));
+                    fprintf(2, 'Error Message: %s\n', ME.message);
+                
+                    % Show where the error originated
+                    if ~isempty(ME.stack)
+                        fprintf(2, 'In function: %s\n', ME.stack(1).name);
+                        fprintf(2, 'At line: %d\n', ME.stack(1).line);
+                        fprintf(2, 'Full Call Stack:\n');
+                        for si = 1:length(ME.stack)
+                            fprintf(2, '   [%02d] %s (line %d)\n', si, ME.stack(si).name, ME.stack(si).line);
+                        end
+                    end
+                
+                    % Code excerpt around the error line
+                    try
+                        fileText = fileread(which(ME.stack(1).file));
+                        fileLines = strsplit(fileText, '\n');
+                        errLine = ME.stack(1).line;
+                        range = max(1, errLine-2):min(length(fileLines), errLine+2);
+                        fprintf(2, '\nCode excerpt:\n');
+                        for li = range
+                            mark = '';
+                            if li == errLine, mark = '>> '; else, mark = '   '; end
+                            fprintf(2, '%s%4d: %s\n', mark, li, fileLines{li});
+                        end
+                    catch
+                        fprintf(2, 'Could not load code excerpt.\n');
+                    end
+                
+                    fprintf(2, '============================================\n\n');
+                
+                    % Handle parallel pool recovery if needed
+                    if contains(ME.message, 'parallel')
+                        delete(gcp('nocreate'));
+                        parpool(numCores);
+                    else
+                        continue;
+                    end
+        end
       end
 
     %     if ~successFile

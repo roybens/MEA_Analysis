@@ -1,511 +1,338 @@
-% This script goes through the h5 files in a parent folder,
-% plot the Rasters, FiringRate Maps, and, Amplitude Maps
-% and compile a csv with the mean Firing Rate and Amplitude over days
-
-
 function [] = compileActivityFiles(data)
+% Compiles distributions and summary metrics into a single CSV file
+% Processes HD-MEA ActivityScan .h5 files, extracts spike-based features, and saves summary montage
 
-customAmpOutsideLoop =[];  % or customAmpOutsideLoop = [] write the value to fix the color maps if needed
 
+% Setup and extract variables
+mfilename('fullpath');
 tic;
-mfilename('fullpath')
-fileDir = [pwd,'/',mfilename];
-
-plotFig =data.plotFig;
-
-
-%ui components.
-fig =data.fig;
-d = uiprogressdlg(fig,'Title','Compiling files',...
-    'Message','Start','Cancelable','on');
-drawnow
+fig = data.fig;
 logFile = data.logFile;
-% Unpack the data structure
-
-div0 = data.div0Date;
-parentFolderPath = data.parentFolderPath;
+plotFig = data.plotFig;
 refDir = data.refDir;
 opDir = data.opDir;
+div0 = data.div0Date;
+parentFolderPath = data.parentFolderPath;
+d = uiprogressdlg(fig,'Title','Compiling files','Message','Start','Cancelable','on');
 
-    
-% make output folder
-outputFolders = {'AmplitudeMap', 'FiringRateMap','Active_Area','ElectrodeAmp'};
-
-
-for i = 1:length(outputFolders)
-    folderPath = fullfile(opDir, 'ActivityScan_outputs/', outputFolders{i});
-    if ~isfolder(folderPath)
-        mkdir(folderPath);
-    end
-end
-
-% extract runID info from reference excel sheet
 refTable = readtable(refDir);
-
-% % Convert the 'Assay' column to lowercase and trim any leading/trailing whitespace
-%assayColumn = strtrim(lower(refTable.Assay));
-% 
-% % Find rows that contain 'network today' or 'network'
-% containsNetworkToday = contains(assayColumn, 'network today');
-% containsNetwork = contains(assayColumn, 'network');
-% 
-% % Combine the conditions using logical OR
-% combinedCondition = containsNetworkToday | containsNetwork;
-% 
-% % Extract unique run_ids based on the combined condition
-% run_ids = unique(refTable.Run_(combinedCondition)); 
 run_ids = unique(refTable.Run_);
-
-% defines
-% convert div 0 to date datatype
 div0_date = datetime(div0, "InputFormat",'MM/dd/yyyy');
 
+% Output folder
+if ~isfolder(fullfile(opDir, 'ActivityScan_outputs'))
+    mkdir(fullfile(opDir, 'ActivityScan_outputs'));
+end
 
-
-
-
-%% iterate through ActivityScans
-% get a list of all files in the folder with the desired file name pattern.
+% Gather files
 filePattern = fullfile(parentFolderPath, '**/ActivityScan/**/*raw.h5'); 
 theFiles = dir(filePattern);
 numFiles = length(theFiles);
 results = cell(numFiles, 1);
 skippedFiles = cell(numFiles, 1); 
 
-% Specify the exact number of cores to use
-numCores = 6;  % Adjust this number based on your needs and resource availability
-
-% Initialize or modify the existing parallel pool
-currentPool = gcp('nocreate');  % Check for existing parallel pool
-
-if isempty(currentPool)
-    poolObj = parpool(numCores);  % Create a new pool if none exists
-elseif currentPool.NumWorkers ~= numCores
-    delete(currentPool);  % Close the existing pool if it does not match the desired size
-    poolObj = parpool(numCores);  % Create a new pool with the correct number of workers
-else
-    poolObj = currentPool;  % Use the existing pool if it already matches the desired number of workers
+% Use parallel pool
+numCores = 6;
+currentPool = gcp('nocreate');
+if isempty(currentPool) || currentPool.NumWorkers ~= numCores
+    if ~isempty(currentPool), delete(currentPool); end
+    poolObj = parpool(numCores);
 end
 
-if ~plotFig
-    fprintf(1, 'skipping plotting\n');
-end
-
-for k = 1 : numFiles
-    % Check for Cancel button press
-    if d.CancelRequested
-       d.close()
-       error("User interruption")
-    end
-    % Update progress, report current estimate
-    d.Value = k/length(theFiles);
-    % reset recording info
-    scan_runID = nan;
-    scan_chipID = nan;
-    scan_meanFiringRate = nan;
-    scan_meanSpikeAmplitude = nan;
-    hd5Date = nan; 
-    scan_div = nan;
-    
+for k = 1:numFiles 
+   % if k > 1, continue;end    %for debugging
+    if d.CancelRequested, d.close(); error("User interruption"); end
+    d.Value = k/numFiles;
     pathFileActivityScan = fullfile(theFiles(k).folder);
-    % extract dir information
-    fileDirParts = strsplit(pathFileActivityScan, filesep); % split dir into elements
-    scan_runID = str2double(fileDirParts{end-0}); % extract runID
-    scan_runID_text = fileDirParts{end-0};
-    scan_chipID = fileDirParts{end-2}; % extract chipID
-    % folderDate = datetime(fileDirParts{end-3},'InputFormat','yyMMdd','Format','MM-dd-yyyy'); % extract date and convert to date object
-    
-    if ismember(scan_runID,run_ids)
-        fprintf(1, 'Now reading %s\n', pathFileActivityScan);
-        fprintf(logFile, 'Now reading %s\n', pathFileActivityScan);
-        % create fileManager object for the Activity Scan
-            
-        idx = refTable.Run_ == scan_runID;
+    fileDirParts = strsplit(pathFileActivityScan, filesep);
+    scan_runID = str2double(fileDirParts{end});
+    scan_chipID = fileDirParts{end-2};
+    scan_runID_text = fileDirParts{end};
 
-        % --- Wells ---
-        if iscell(refTable.Wells_Recorded(idx))
-            wells_str = refTable.Wells_Recorded{idx};
-        else
-            wells_str = refTable.Wells_Recorded(idx);
-        end
-        wellsIDs = str2double(strsplit(strtrim(wells_str), ','));
-        
-        % --- Neuron Types ---
-        if iscell(refTable.NeuronSource(idx))
-            neuron_str = refTable.NeuronSource{idx};
-        else
-            neuron_str = refTable.NeuronSource(idx);
-        end
-        neuronTypes = strtrim(strsplit(neuron_str, ','));
-        
-        % --- Enforce correspondence ---
-        if length(neuronTypes) ~= length(wellsIDs)
-            error('Mismatch: Each well must have a corresponding neuron type.');
-        end
-        assayColumn = refTable.Assay(idx);
-        numWells = length(wellsIDs);
-        fileResults = cell(numWells, 1);
-        skippedWells = cell(numWells,1);
-       
-            for z = 1:numWells
-            customAmp = customAmpOutsideLoop;
-            wellID=wellsIDs(z);
-            fprintf(1, 'Processing Well %d\n', wellID);
-            neuronSourceType = neuronTypes(z);
-            try
+    if ~ismember(scan_runID, run_ids), continue; end
+    idx = refTable.Run_ == scan_runID;
+    wellsIDs = str2double(strsplit(strtrim(string(refTable.Wells_Recorded(idx))), ','));
+    neuronTypes = strtrim(strsplit(string(refTable.NeuronSource(idx)), ','));
+    assayColumn = refTable.Assay(idx);
 
-                activityScanData = mxw.fileManager(pathFileActivityScan,wellID);
-            catch
-                skippedWells{z} = [pathFileActivityScan,num2str(wellID)];
-                continue
-            end
-    
-            % get the startTime of the recordings
+    if length(wellsIDs) ~= length(neuronTypes)
+        error('Mismatch: Each well must have a corresponding neuron type.');
+    end
+
+    numWells = length(wellsIDs);
+    fileResults = cell(numWells, 1);
+    skippedWells = cell(numWells, 1);
+
+    parfor z = 1:numWells
+        %if z>1,continue;end      %for testing purpose
+        wellID = wellsIDs(z);
+        neuronType = neuronTypes(z);
+        try
+            activityScanData = mxw.fileManager(pathFileActivityScan, wellID);
+        catch
+            skippedWells{z} = pathFileActivityScan;
+            continue;
+        end
+        msg = sprintf('[Run %d | Well %d] Processing...\n', scan_runID, wellID);
+        %fprintf(logFile, '%s', msg);   % Write to log file
+        fprintf(1, '%s', msg);     
+        
+        try
+                     
             hd5_time = activityScanData.fileObj.stopTime;
             try
                 hd5Date = datetime(hd5_time,'InputFormat', 'yyyy-MM-dd HH:mm:ss');
             catch
                 hd5Date = datetime(hd5_time,'InputFormat', 'dd-MMM-yyyy HH:mm:ss');
             end
-
-            try
             div0_datetime = datetime(div0_date, 'InputFormat', 'yourInputFormatHere');
-            scan_div = floor(days(hd5Date - div0_datetime));
-    
-            % compute means
-
-            % get the mean firing rate for each electrode
+            scan_div = floor(days(hd5Date - div0_date));
             meanFiringRate = mxw.activityMap.computeSpikeRate(activityScanData);
-            % calculate the overall mean firing rate of the scan
-            thrFiringRate = 0.1; % set a minimum spike rate threshold (Hz)
-            scan_meanFiringRate = mean(meanFiringRate(meanFiringRate>thrFiringRate));
-            % get th 90th percentile spike amplitude value for each electrode
             amplitude90perc = abs(mxw.activityMap.computeAmplitude90percentile(activityScanData));
-            % calculate the overall mean spike amplitude of the scan
-            thrAmp = 20;  % set a minimum spike amplitude threshold (uV)
-            scan_meanSpikeAmplitude = mean(amplitude90perc(amplitude90perc>thrAmp));
-            idx = (meanFiringRate>thrFiringRate & amplitude90perc>thrAmp);
-            Active_area = sum(idx)/length(idx)*100;
 
-            %xpos_elec = activityScanData.processedMap.xpos(idx);
-            %ypos_elec= activityScanData.processedMap.ypos(idx);
-
-            %compute ISI metrics
-            nRecordings = length(activityScanData.extractedSpikes);
+            % ISI metrics
             nElectrodes = length(activityScanData.extractedSpikes(1).frameno);
+            nRecs = length(activityScanData.extractedSpikes);
             spikeTimesCell = cell(nElectrodes, 1);
-            for r = 1:nRecordings
-                for e = 1:nElectrodes
-                    spikeTimesCell{e} = [spikeTimesCell{e}; activityScanData.extractedSpikes(r).frameno{e}./activityScanData.fileObj(1).samplingFreq];
+            
+            for e = 1:nElectrodes
+                % Collect all frame numbers from all recordings for this electrode
+                allFrames = cell(nRecs, 1);
+                for r = 1:nRecs
+                    allFrames{r} = activityScanData.extractedSpikes(r).frameno{e};
                 end
+                % Concatenate once and convert to seconds
+                spikeTimesCell{e} = vertcat(allFrames{:}) / activityScanData.fileObj(1).samplingFreq;
             end
-            % Preallocate
-            meanISI = NaN(nElectrodes, 1);
-            stdISI  = NaN(nElectrodes, 1);
-            isiCV   = NaN(nElectrodes, 1);
-            fano    = NaN(nElectrodes, 1);
+
+            % Preallocate result arrays
+            meanISI = NaN(nElectrodes,1);
+            stdISI = NaN(nElectrodes,1);
+            isiCV = NaN(nElectrodes,1);
+            fano = NaN(nElectrodes,1); % Assuming fano factor is calculated elsewhere
             
-            % Compute ISI stats in vectorized fashion using cellfun
+            % Calculate Inter-Spike Intervals (ISIs)
             isiCell = cellfun(@diff, spikeTimesCell, 'UniformOutput', false);
-            validISI = cellfun(@(x) numel(x) >= 1 && isnumeric(x), isiCell);
-            % Vectorized mean & std of ISIs
-            % Compute mean/std
+            isiCell = cellfun(@double, isiCell, 'UniformOutput', false);
+            % --- Calculate Mean ISI ---
+            % A mean can be calculated on one or more ISIs.
+            validMean = cellfun(@(x) isnumeric(x) && numel(x) >= 1, isiCell);
+            meanISI(validMean) = cellfun(@mean, isiCell(validMean));
             
-            meanISI(validISI) = cellfun(@(x) mean(double(x)), isiCell(validISI), 'UniformOutput', true);
-            stdISI(validISI) = cellfun(@(x) std(double(x)), isiCell(validISI), 'UniformOutput', true);
-            isiCV(validISI)   = stdISI(validISI) ./ meanISI(validISI);
+            % --- Calculate Standard Deviation of ISI ---
+            % A standard deviation requires at least two ISIs to be meaningful.
+            % This new filter prevents the error and ensures statistical validity.
+            validStd = cellfun(@(x) numel(x) > 1, isiCell);
+            stdISI(validStd) = cellfun(@std, isiCell(validStd));
             
-            % --- Compute Fano factor ---
+            % --- Calculate Coefficient of Variation (CV) of ISI ---
+            % The CV should only be calculated where a valid standard deviation and mean exist.
+            % We use validStd to ensure we don't perform NaN/value or 0/0.
+            isiCV(validStd) = stdISI(validStd) ./ meanISI(validStd);
+
+
             validSpikes = cellfun(@(x) numel(x) >= 1, spikeTimesCell);
-            
-            % Estimate max duration for binning (in seconds)
             maxTime = max(cellfun(@(x) max(x), spikeTimesCell(validSpikes)));
-            binEdges = 0:1:ceil(maxTime);  % 1-second bins
-            
+            binEdges = 0:1:ceil(maxTime);
             for e = find(validSpikes)'
                 st = spikeTimesCell{e};
-                spikeCounts = histcounts(st, binEdges);
-                if mean(spikeCounts) > 0
-                    fano(e) = var(double(spikeCounts)) / mean(spikeCounts);
-                else
-                    fano(e) = NaN;
-                end
+                sc = histcounts(st, binEdges);
+                fano(e) = var(double(sc)) / max(eps, mean(sc));
             end
 
-            % Save only summary metrics to main table
-            fileResults{z} = table(scan_runID, assayColumn, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
+            % Summary Metrics
+            thrFiringRate = 0.1;
+            thrAmp = 20;
+            scan_meanFiringRate = mean(meanFiringRate(meanFiringRate > thrFiringRate));
+            scan_meanSpikeAmplitude = mean(amplitude90perc(amplitude90perc > thrAmp));
+            idx = (meanFiringRate > thrFiringRate & amplitude90perc > thrAmp);
+            Active_area = sum(idx) / length(idx) * 100;
+            xpos_elec = activityScanData.processedMap.xpos(idx);
+            ypos_elec= activityScanData.processedMap.ypos(idx);
+
+            summaryRow = table(scan_runID, assayColumn, scan_div, wellID, {neuronType}, hd5Date, {string(scan_chipID)}, ...
                 scan_meanFiringRate, scan_meanSpikeAmplitude, Active_area, ...
-                mean(meanISI),mean(stdISI),mean(isiCV),mean(fano),...
-                'VariableNames', {
-                    'Run_ID', 'AssayType', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-                    'Mean_FiringRate', 'Mean_SpikeAmplitude', 'Active_area',...
-                    'Mean_ISI','Std_ISI','Mean_ISI_CV','Mean_Fano'...
-            });
-            catch ME
-                disp(ME.message)
-                
-                skippedWells{z} = [pathFileActivityScan,num2str(wellID)];
-                
-                continue
-            end
-            % plot amplitude and firing rate maps
-            if plotFig
+                nanmean(meanISI), nanmean(stdISI), nanmean(isiCV), nanmean(fano), ...
+                'VariableNames', {'Run_ID','AssayType','DIV','Well','NeuronType','Time','Chip_ID', ...
+                                  'Mean_FiringRate','Mean_SpikeAmplitude','Active_area', ...
+                                  'Mean_ISI','Std_ISI','Mean_ISI_CV','Mean_Fano'});
 
-            try
-                % get the mean firing rate for each electrode
-                meanFiringRate = mxw.activityMap.computeSpikeRate(activityScanData);
-                
-                % define maximum firing rate used in plots as 99th percentile of firing
-                % rate values
-                maxFiringRate = mxw.util.percentile(meanFiringRate(meanFiringRate~=0),99);
-                    
-                % plot the list of mean firing rates as a map, given the electrode 
-                % x and y coordinates in 'fileManagerObj.processedMap'
-                customCmap = customDivergingColorMap(256); 
-                figure('Color','w','visible','off');
-                subplot(2,1,1);
-                mxw.plot.activityMap(activityScanData, meanFiringRate,'ColorMap',customCmap, 'Ylabel', '[Hz]',...
-                    'CaxisLim', [0.1 max(meanFiringRate)/5],'Interpolate',true,'Figure',false,'Title','Firing Rate Activity Map');
-                % run the line above several times, experimenting with different 
-                % [min max] range of the color gradient 'CaxisLim'
-                
-                % add scale bar 
-                line([300 800],[2000+400 2000+400],'Color','k','LineWidth',4);
-                axis off;
-                text(340,2100+500,'0.5 mm','color','k');
-                xlim([200 3750]);ylim([150 2500])
-                
-                % plot the distribution of firing rates across all of the electrodes
-                subplot(2,1,2);
-                thrFiringRate = 0.1; % set a minimum spike rate threshold (Hz)
-                histogram(meanFiringRate(meanFiringRate>thrFiringRate),0:.1:ceil(maxFiringRate), ...
-                    'FaceColor','#135ba3', "EdgeColor",'#414042')
-                xlim([thrFiringRate maxFiringRate])
-                ylabel('Counts');xlabel('Firing Rate [Hz]');
-                box off;
-                legend(['Mean Firing Rate = ',num2str(mean(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f'),...
-                    ' Hz,  sd = ',num2str(std(meanFiringRate(meanFiringRate>thrFiringRate)),'%.2f')])
-            
-                print(gcf,append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
+         
+            % This contains the large 26400x1 vectors inside cells
+            nestedDistTable = table(scan_runID,assayColumn, scan_div, wellID, {neuronType}, {string(scan_chipID)}, ... % Add identifiers
+                                    {meanFiringRate(:)}, {amplitude90perc(:)}, ...
+                                    {meanISI(:)}, {stdISI(:)}, {isiCV(:)}, {fano(:)}, ...
+                                    'VariableNames', {'Run_ID','AssayType','DIV','Well','NeuronType','Chip_ID', ...
+                                                      'FR_Hz','Amplitude_uV','ISI_s','ISI_STD','ISI_CV','Fano'});
+
+            %fullTable = [summaryRow array2table(nan(height(summaryRow), width(distTable) - width(summaryRow))) ; distTable];
            
-                %exportgraphics(fig,fullfile(append(opDir,'ActivityScan_outputs/FiringRateMap/FiringRateMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg')),'ContentType','vector','BackgroundColor','none');
-            catch ME
-                fprintf('Unable to plot Firing Rate Map for run s%/n',scan_runID_text)
-                fprintf('%s\n',ME.message)
-                %fprintf(logFile,'Unable to plot Firing Rate Map for run s%/n',scan_runID_text);
+            fileResults{z} =struct('summary', summaryRow, 'nested', nestedDistTable);
+
+
+            % --- Plotting Montage ---
+            if plotFig
+                %frLim = [0.1, mxw.util.percentile(meanFiringRate(meanFiringRate>0),99)];
+                %ampLim = [10, mxw.util.percentile(amplitude90perc(amplitude90perc>0),99)];
+                frLim = [0.1, 15];
+                ampLim = [10, 250];  %hard coding
+                aaLim = [0, 5];
+                plotSummaryMontage(activityScanData, meanFiringRate, amplitude90perc, xpos_elec, ypos_elec, ...
+                    meanISI, scan_runID_text, scan_chipID, wellID, scan_div, neuronType, ...
+                    fullfile(opDir, 'ActivityScan_outputs'), frLim, ampLim, aaLim);
             end
-            
-            % III. Spike Amplitude Activity Map and Distribution
-            try
-                % get th 90th percentile spike amplitude value for each electrode
-                amplitude90perc = abs(mxw.activityMap.computeAmplitude90percentile(activityScanData));
-                
-                % define maximum amplitude used in plots as 99th percentile of amplitude values
-                maxAmp = mxw.util.percentile(amplitude90perc(amplitude90perc~=0),99);
-                
-                % plot the mean firing rate vector as a map, given the electrode 
-                % x and y coordinates in 'fileManagerObj.processedMap'
-                figure('Color','w','visible','off');
-                subplot(2,1,1);
-                if isempty(customAmp)
-                    customAmp = maxAmp;
-                end
-                mxw.plot.activityMap(activityScanData, amplitude90perc,'ColorMap',customCmap,'Ylabel', '[\muV]',...
-                    'CaxisLim', [10 customAmp], 'Interpolate',true,'Figure',false,'Title','Spike Amplitude Activity Map');
-                % run the line above several times, experimenting with different 
-                % [min max] range of the color gradient 'CaxisLim'
-                
-                % add scale bar 
-                line([300 800],[2000+400 2000+400],'Color','k','LineWidth',4);
-                axis off;
-                text(340,2100+500,'0.5 mm','color','k');
-                xlim([200 3750])
-                ylim([150 2500])
-                
-                % plot the distribution of spike amplitudes across all of the electrodes
-                subplot(2,1,2);
-                thrAmp = 10;  % set a minimum spike amplitude threshold (uV)
-                histogram(amplitude90perc(amplitude90perc>thrAmp),ceil(0:1:maxAmp), ...
-                    'FaceColor','#135ba3', "EdgeColor",'#414042')
-                xlim([thrAmp maxAmp])
-                ylabel('Counts');xlabel('Spike Amplitude [\muV]');
-                box off;
-                legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
-                    ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
-            
-                print(gcf,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
-                %exportgraphics(fig,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),"ContentType",'vector','BackgroundColor','none');
-            catch ME
-                fprintf('Unable to plot Amplitude Map for run %s\n', scan_runID_text)
-                fprintf('%s\n',ME.message)
-                %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
-            end
-          try
-            figure('Color', 'w', 'Visible', 'off');  % create invisible figure
-        
-            % Correct Maxwell Chip Physical Area
-            xlim_chip = [0 3850];  % 3.85 mm = 3850 microns
-            ylim_chip = [0 2100];  % 2.10 mm = 2100 microns
-        
-            % === [NEW] Use finer bin size ===
-            BinSize = 10;  % Higher resolution than previous BinSize = 30
-        
-            % Define bin edges
-            xedges = xlim_chip(1):BinSize:xlim_chip(2);
-            yedges = ylim_chip(1):BinSize:ylim_chip(2);
-        
-            % Compute 2D histogram (density)
-            N = histcounts2(ypos_elec, xpos_elec, yedges, xedges);  % Note (y,x) order!
-        
-            % === [NEW] Apply Gaussian smoothing to reduce graininess ===
-           % Define a Gaussian kernel manually
-            sigma = 2;
-            kernelSize = 5;
-            [xg, yg] = meshgrid(-kernelSize:kernelSize, -kernelSize:kernelSize);
-            gKernel = exp(-(xg.^2 + yg.^2) / (2 * sigma^2));
-            gKernel = gKernel / sum(gKernel(:));  % Normalize
-            
-            % Apply smoothing using convolution
-            N_smooth = conv2(N, gKernel, 'same');
-        
-            % Plot the heatmap
-            imagesc(xedges(1:end-1), yedges(1:end-1), N_smooth);  % Align with bin centers
-            axis xy;
-            axis equal;
-            hold on;
-        
-            % Set colormap and colorbar
-            colormap("gray");
-            colorbar;
-        
-            % Set color limits dynamically or manually
-            CaxisLim = [];
-            if isempty(CaxisLim)
-                caxis([0 max(N_smooth(:))]);
-            else
-                caxis(CaxisLim);
-            end
-        
-            % Scalebar
-            line([300 800], [1800 1800], 'Color', 'k', 'LineWidth', 4);  % Adjusted position
-            text(340, 1850, '0.5 mm', 'color', 'k', 'FontSize', 8);
-        
-            % Set axis limits correctly
-            xlim(xlim_chip);
-            ylim(ylim_chip);
-        
-            axis off;
-            box off;
-        
-            % Add title with active area percentage
-            title(append('Active Area ', num2str(Active_area, '%.1f'), '%'), 'FontSize', 12);
-        
-            % Save figure
-            activeHeatmapPath = append(opDir, 'ActivityScan_outputs/Active_Area/ActiveAreaDensity_', ...
-                scan_runID_text, '_WellID_', num2str(wellID), '_', num2str(scan_chipID), ...
-                '_DIV', num2str(scan_div), '_', strrep(neuronSourceType{1}, ' ', ''), '.svg');
-            print(gcf, activeHeatmapPath, '-dsvg');
-        
+
         catch ME
-            fprintf('Unable to plot Active Area Density Heatmap for run %s\n', scan_runID_text)
-            fprintf('%s\n', ME.message)
-        end
-            % % III. Electrodes 
-            % try
-            %     % get th 90th percentile spike amplitude value for each electrode
-            %     amplitude90perc = abs(mxw.activityMap.computeAmplitude90percentile(activityScanData));
-            % 
-            %     % define maximum amplitude used in plots as 99th percentile of amplitude values
-            %     maxAmp = mxw.util.percentile(amplitude90perc(amplitude90perc~=0),99);
-            % 
-            %     % plot the mean firing rate vector as a map, given the electrode 
-            %     % x and y coordinates in 'fileManagerObj.processedMap'
-            %     figure('Color','w','visible','off');
-            %     subplot(2,1,1);
-            %     if isempty(customAmp)
-            %         customAmp = maxAmp;
-            %     end
-            %     mxw.plot.activityMap(activityScanData, amplitude90perc,'ColorMap',customCmap,'Ylabel', '[\muV]',...
-            %         'CaxisLim', [10 customAmp], 'Interpolate',true,'Figure',false,'Title','Spike Amplitude Activity Map');
-            %     % run the line above several times, experimenting with different 
-            %     % [min max] range of the color gradient 'CaxisLim'
-            %     selectNetworkElectrodes = mxw.util.electrodeSelection.networkRec(activityScanData,'ActivityThreshold',thrFiringRate,'AmplitudeThreshold',thrAmp);
-            %     hold
-            %     %scatter(activityScanData.processedMap.xpos(selectNetworkElectrodes.electrodes), activityScanData.processedMap.ypos(selectNetworkElectrodes.electrodes), 15, 'r','s', 'filled');
-            %     scatter(selectNetworkElectrodes.xpos, selectNetworkElectrodes.ypos, 15, 'r','s', 'filled');
-            % 
-            %     % add scale bar 
-            %     line([300 800],[2000+400 2000+400],'Color','k','LineWidth',4);
-            %     axis off;
-            %     text(340,2100+500,'0.5 mm','color','k');
-            %     xlim([200 3750])
-            %     ylim([150 2500])
-            % 
-            %     % plot the distribution of spike amplitudes across all of the electrodes
-            %     subplot(2,1,2);
-            %     thrAmp = 10;  % set a minimum spike amplitude threshold (uV)
-            %     histogram(amplitude90perc(amplitude90perc>thrAmp),ceil(0:1:maxAmp), ...
-            %         'FaceColor','#135ba3', "EdgeColor",'#414042')
-            %     xlim([thrAmp maxAmp])
-            %     ylabel('Counts');xlabel('Spike Amplitude [\muV]');
-            %     box off;
-            %     legend(['Mean Spike Amplitude = ',num2str(mean(amplitude90perc(amplitude90perc>thrAmp)),'%.2f'),...
-            %         ' \muV,  sd = ',num2str(std(amplitude90perc(amplitude90perc>thrAmp)),'%.2f')])
-            % 
-            %     print(gcf,append(opDir,'ActivityScan_outputs/ElectrodeAmp/ElectrodeAmp',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),'-dsvg');
-            %     %exportgraphics(fig,append(opDir,'ActivityScan_outputs/AmplitudeMap/AmplitudeMap',scan_runID_text,'_WellID_',num2str(wellID),'_',num2str(scan_chipID),'_DIV',num2str(scan_div),'_',strrep(neuronSourceType{1},' ',''),'.svg'),"ContentType",'vector','BackgroundColor','none');
-            % catch ME
-            %     fprintf('Unable to plot Amplitude Map for run %s\n', scan_runID_text)
-            %     fprintf('%s\n',ME.message)
-            %     %fprintf(logFile,'Unable to plot Amplitude Map for run %s/n', scan_runID_text);
-            % end
-
-            try
-
-                matFileName = sprintf('Distributions_Run%s_Chip%s_Well%d_DIV%d.mat', ...
-                    scan_runID_text, scan_chipID, wellID, scan_div);
-                matFilePath = fullfile(opDir, 'ActivityScan_outputs', 'Distributions', matFileName);
+                % Create a detailed error message
+                errorReport = sprintf('ERROR in Run %d, Well %d:\n', scan_runID, wellID);
+                errorReport = [errorReport, sprintf('Message: %s\n', ME.message)];
                 
-                % Ensure folder exists
-                if ~exist(fullfile(opDir, 'ActivityScan_outputs', 'Distributions'), 'dir')
-                    mkdir(fullfile(opDir, 'ActivityScan_outputs', 'Distributions'));
+                % Include the function and line number where the error occurred
+                if ~isempty(ME.stack)
+                    errorReport = [errorReport, sprintf('File: %s\nFunction: %s\nLine: %d\n', ...
+                        ME.stack(1).file, ME.stack(1).name, ME.stack(1).line)];
                 end
                 
-                % Save variables to MAT file
-               % parsave(matFilePath, 'meanFiringRate', 'amplitude90perc', 'scan_runID', ...
-               %      'scan_chipID', 'wellID', 'scan_div');
-            catch ME
-                fprintf('%s\n',ME.message)
-            end 
-          % active area
+                % Print the detailed report to the command window
+                fprintf(1, '%s\n', errorReport); skippedWells{z} = pathFileActivityScan; continue;
         end
+        msg = sprintf('[Run %d | Well %d] Finished successfully...\n', scan_runID, wellID);
+        %fprintf(logFile, '%s', msg);   % Write to log file
+        fprintf(1, '%s', msg); 
+    end
+
+    results{k} = vertcat(fileResults{:});
+    skippedFiles{k} = vertcat(skippedWells{:});
+end
+
+% Consolidate all the structs from the nested cell arrays
+allDataStructs = vertcat(results{:});
+
+% --- Separate the two types of data ---
+% Use vertcat to stack all the summary tables into one master table
+allSummaries = vertcat(allDataStructs.summary);
+
+% Do the same for all the nested distribution tables
+allNestedDistributions = vertcat(allDataStructs.nested);
+
+% --- Save the final files in their respective formats ---
+% Save the summary data as a human-readable CSV file
+writetable(allSummaries, fullfile(opDir, 'ActivityScan_outputs', 'Compiled_Activity_Summary.csv'));
+
+% Save nested distributions to an HDF5 file that Python can read with h5py
+h5file = fullfile(opDir, 'ActivityScan_outputs', 'Compiled_Distributions.h5');
+if exist(h5file, 'file'), delete(h5file); end  % remove if exists
+
+nRows = height(allNestedDistributions);
+for colIdx = 1:width(allNestedDistributions)
+    colName = allNestedDistributions.Properties.VariableNames{colIdx};
+    colData = allNestedDistributions.(colName);
+
+    % Handle cell array of vectors (e.g. ISI_s, Fano) separately
+    if iscell(colData)
+        % Get flattened sizes and max length
+        maxLen = max(cellfun(@(x) numel(x), colData));
+        dataMatrix = NaN(nRows, maxLen);
+
+        for i = 1:nRows
+            thisVec = colData{i};
+            if ~isempty(thisVec)
+                dataMatrix(i, 1:numel(thisVec)) = thisVec(:)';
+            end
         end
+
+        % Save as dataset: shape [nRows, maxLen]
+        h5create(h5file, ['/' colName], size(dataMatrix), 'Datatype', 'double');
+        h5write(h5file, ['/' colName], dataMatrix);
+
     else
-     continue
+        % Numeric column (e.g., Run_ID, DIV)
+        h5create(h5file, ['/' colName], size(colData), 'Datatype', class(colData));
+        h5write(h5file, ['/' colName], colData);
     end
-
-
-
-results{k} = vertcat(fileResults{~cellfun(@isempty, fileResults)});
-skippedFiles{k} = vertcat(skippedWells{~cellfun(@isempty, skippedWells)});
 end
-    delete(gcp('nocreate'));
-   % profile viewer;
-    
-    skippedFiles = vertcat(skippedFiles{~cellfun(@isempty, skippedFiles )});
-    % Concatenate all tables from each primary file into the final table
-    finalWriteTable = vertcat(results{~cellfun(@isempty, results)});
-    
-    writetable(finalWriteTable, fullfile(opDir,'ActivityScan_outputs/Compiled_ActivityScan.csv'));
-    
 
-    if ~isempty(skippedFiles)
-        
-        fprintf(1,'Unable to read file with runID: %s, file(s) skipped.\n',skippedFiles);
-        %fprintf(1,'Unable to read file with runID: %s, file(s) skipped.\n',skippedFiles);
-    end
 
-fprintf('Activity Scan analysis successfully compiled.\n')
-fprintf(' Total elapsed time for execution: %f seconds\n', toc);
-fprintf(logFile,'Activity Scan analysis successfully compiled.\n');
+% This part for skipped files remains the same
+skippedFiles = vertcat(skippedFiles{~cellfun(@isempty, skippedFiles )});
+if ~isempty(skippedFiles)
+    fprintf('Skipped %d files due to read errors.\n', numel(skippedFiles));
 end
+
+fprintf('Activity Scan analysis successfully compiled.\n');
+fprintf('Total time: %.2f seconds\n', toc);
+end
+
+
+
+function plotSummaryMontage(activityScanData, meanFiringRate, amplitude90perc, xpos, ypos, ...
+    meanISI, runID, chipID, wellID, div, neuronType, ...
+    outputDir, fixedFR_Caxis, fixedAmp_Caxis, fixedAA_Caxis)
+
+% Create a summary montage for Firing Rate, Amplitude, Active Area, and ISI metrics
+
+fig = figure('Visible','off','Color','w','Position',[100 100 1800 1200]);
+t = tiledlayout(3,3,'TileSpacing','tight','Padding','compact');
+
+% --- 1. Firing Rate Map ---
+nexttile(t,1);
+customCmap = customDivergingColorMap(256);
+mxw.plot.activityMap(activityScanData, meanFiringRate,'ColorMap',customCmap, 'Ylabel', '[Hz]',...
+    'CaxisLim', fixedFR_Caxis,'Interpolate',true,'Figure',false,'Title','Firing Rate Map');
+title('Firing Rate Map');
+
+% --- 2. Firing Rate Distribution ---
+nexttile(t,4);
+histogram(meanFiringRate(meanFiringRate>0.1), 0:.1:fixedFR_Caxis(2), 'FaceColor','#135ba3');
+xlabel('Firing Rate [Hz]'); ylabel('Count'); title('Firing Rate Distribution');
+
+% --- 3. Amplitude Map ---
+nexttile(t,2);
+mxw.plot.activityMap(activityScanData, amplitude90perc,'ColorMap',customCmap, 'Ylabel', '[uV]',...
+    'CaxisLim', fixedAmp_Caxis,'Interpolate',true,'Figure',false,'Title','Spike Amplitude Map');
+title('Amplitude Map');
+
+% --- 4. Amplitude Distribution ---
+nexttile(t,5);
+histogram(amplitude90perc(amplitude90perc>10), 0:1:fixedAmp_Caxis(2), 'FaceColor','#135ba3');
+xlabel('Amplitude [uV]'); ylabel('Count'); title('Amplitude Distribution');
+% 
+% % --- 5. Active Area Map (density) ---
+% nexttile(t,3);
+% xlim_chip = [0 3850]; ylim_chip = [0 2100]; BinSize = 10;
+% xedges = xlim_chip(1):BinSize:xlim_chip(2);
+% yedges = ylim_chip(1):BinSize:ylim_chip(2);
+% N = histcounts2(ypos, xpos, yedges, xedges);
+% N_smooth = imgaussfilt(N,2);
+% imagesc(xedges(1:end-1), yedges(1:end-1), N_smooth);
+% axis xy; axis equal; axis off;
+% colormap('gray'); colorbar; caxis(fixedAA_Caxis);
+% title('Active Area Density');
+
+
+% --- 7. ISI Distribution ---
+% Capture the handle for the specific axes you want to modify
+ax_isi = nexttile(t,3); 
+
+validISI = meanISI(~isnan(meanISI));
+
+% Check if there is data to plot to avoid errors with empty histograms
+if ~isempty(validISI)
+    histogram(ax_isi, validISI, 0:0.01:2, 'FaceColor','#135ba3');
+    
+    % Use the captured handle 'ax_isi' instead of 'gca'
+    set(ax_isi, 'Yscale', 'log'); 
+else
+    % If there's no data, you might want to turn off the axes ticks or label it
+    set(ax_isi, 'Yscale', 'linear'); % Set to linear if log is not needed
+end
+
+% Also apply the handle to other commands for robustness
+xlabel(ax_isi, 'ISI [s]'); ylabel(ax_isi, 'Count'); title(ax_isi, 'ISI Distribution');
+
+
+% Save figure
+figname = sprintf('%s/Montage_Run%s_Chip%s_Well%d_DIV%d_%s.svg', outputDir, runID, chipID, wellID, div, strrep(neuronType,' ','_'));
+print(fig, figname, '-dsvg');close(fig);
+end
+

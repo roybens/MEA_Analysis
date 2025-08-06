@@ -141,7 +141,7 @@ function processActivityButtonCallback(~, ~)
 
     disp('Process Data button clicked.');
     disp('Activity File');
-    compileActivityFilesV2(data);
+    compileActivityFiles(data);
 
     % Close the log file
     fclose(logFile);
