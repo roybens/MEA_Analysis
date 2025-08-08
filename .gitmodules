@@ -1,3 +1,6 @@
 [submodule "AxonReconPipeline/axon_velocity"]
 	path = AxonReconPipeline/axon_velocity
 	url = https://github.com/adamwea/axon_velocity.git
+[submodule "external/spikeinterface"]
+	path = external/spikeinterface
+	url = https://github.com/SpikeInterface/spikeinterface.git
