@@ -455,7 +455,18 @@ function [] = compileNetworkFiles(data)
 
     % extract runID info from reference excel sheet
     refTable = readtable(refDir);
-    run_ids = unique(refTable.Run_(strcmp(strtrim(lower(refTable.Assay)), 'network today')));  
+   % Convert the 'Assay' column to lowercase and trim any leading/trailing whitespace
+    assayColumn = strtrim(lower(refTable.Assay));
+    
+    % Find rows that contain 'network today' or 'network'
+    containsNetworkToday = contains(assayColumn, 'network today');
+    containsNetwork = contains(assayColumn, 'network');
+    
+    % Combine the conditions using logical OR
+    combinedCondition = containsNetworkToday | containsNetwork;
+    
+    % Extract unique run_ids based on the combined condition
+    run_ids = unique(refTable.Run_(combinedCondition)); 
 
 
     
@@ -475,7 +486,7 @@ function [] = compileNetworkFiles(data)
     %%parallelizing the files processsing
 
     % %%Specify the exact number of cores to use
-    numCores = 12;  % Adjust this number based on your needs and resource availability
+    numCores = 6;  % Adjust this number based on your needs and resource availability
 
     % Initialize or modify the existing parallel pool
     currentPool = gcp('nocreate');  % Check for existing parallel pool
@@ -991,14 +1002,7 @@ function [] = compileNetworkFiles(data)
 
         end 
     end
-   % Find all existing jobs
-    allJobs = findJob(parcluster);
-    
-    % Delete each job
-    for i = 1:length(allJobs)
-        delete(allJobs(i));
-    end
-
+    delete(gcp('nocreate'));
 
    % profile viewer;
     

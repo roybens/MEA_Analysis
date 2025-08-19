@@ -103,7 +103,7 @@ success = false;
 
 % Validate that each field is a comma-separated array with three elements
 
-fields = {'gaussianSigma', 'binSize', 'minPeakDistance', 'thresholdBurst'};
+fields = {'gaussianSigma', 'binSize', 'minPeakDistance', 'thresholdBurst','minPeakProminence'};
 % if any(~isfield(data, fields) | cellfun(@(f) length(data.(f)), fields) ~= 3)
 %     errordlg('All fields in data must be arrays with (default, start, end) separated by commas.');
 %     return;
@@ -117,19 +117,19 @@ binSize = data.binSize;
 minPeakDistance = data.minPeakDistance;
 minPeakProminence = data.minProminience;
 thresholdBurst = data.thresholdBurst;
-use_fixed_threshold = false;
+thresholdMethod = data.thresholdMethod;
 thresholdStartStop = data.thresholdStartStop; 
 logFile= data.logFile;
 
 
 
 % condense the parameter set into an array to input into the the function below
-base_parameters = [gaussianSigma,binSize,minPeakDistance,thresholdBurst,use_fixed_threshold,thresholdStartStop];
+base_parameters = {gaussianSigma,binSize,minPeakDistance,thresholdBurst,thresholdMethod,thresholdStartStop,minPeakProminence};
 outDir = append(opDir, '/Network_outputs/');
 
 % Define the parameters and their corresponding values
-parameters = {'Gaussian', 'BinSize', 'Threshold', 'StartStopThreshold', 'MinPeakDistance'};
-parameterValues = {gaussianSigma, binSize, thresholdBurst, thresholdStartStop, minPeakDistance};
+parameters = {'Gaussian', 'BinSize', 'Threshold', 'StartStopThreshold', 'MinPeakDistance','MinPeakProminence'};
+parameterValues = {gaussianSigma, binSize, thresholdBurst, thresholdStartStop, minPeakDistance,minPeakProminence};
 
 fig = data.fig;
 % Create the progress dialog
@@ -154,7 +154,7 @@ try
     params = jsondecode(str);
 
     % Specify the exact number of cores to use
-    numCores = 2 * numParameters;  % Adjust this number based on your needs and resource availability
+    numCores =  numParameters;  % Adjust this number based on your needs and resource availability
     
     % Initialize or modify the existing parallel pool
     currentPool = gcp('nocreate');  % Check for existing parallel pool
@@ -200,7 +200,9 @@ end
 delete(d);
 success = true;
 
-% Find all existing jobs
+
+delete(gcp('nocreate'));
+%Find all existing jobs
 allJobs = findJob(parcluster);
 
 % Delete each job
@@ -208,5 +210,9 @@ for i = 1:length(allJobs)
     delete(allJobs(i));
 end
 
+<<<<<<< HEAD
 print(1,'Completion successful!');
 >>>>>>> a53c63a (Chnges separating plotting from netwrok analysis)
+=======
+pfrint(1,'Completion successful!');
+>>>>>>> 00f577b (Latest changes: Extended metrics, sorted raster, detect peaks on raw etc.)

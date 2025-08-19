@@ -4,5 +4,6 @@
     "Threshold": [0, 0.02, 2],
     "StartStopThreshold": [0, 0.02, 1],
     "MinPeakDistance": [0, 0.1, 1],
-    "MinPeakProminence":[1,0.1,2]
+    "MinPeakProminence":[0.4,0.1,2]
+    
 }
