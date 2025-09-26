@@ -15,7 +15,14 @@ slurm*.out
 **.png
 **.npz
 **.zip
+venv/
 **.log
 **.out
 nohup.out
 **.svg
+.DS_Store
+**.pdf
+**.h5
+**.raw
+
+IPNAnalysis/kilosort_output/sorter_output/

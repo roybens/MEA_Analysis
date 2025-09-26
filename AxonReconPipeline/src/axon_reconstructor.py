@@ -75,7 +75,7 @@ class AxonReconstructor:
 
         self.logger.debug("AxonReconstructor initialized with parameters: %s", self.__dict__)
 
-    def setup_logger(self):
+    def setup_logger(self, prefix=None):
         logger_level = self.logger_level
         log_file = self.log_file
         error_log_file = self.error_log_file
@@ -87,11 +87,15 @@ class AxonReconstructor:
 
         # Clear the log files by opening them in write mode
         reconstructor_path = os.path.dirname(log_file)
-        if not os.path.exists(reconstructor_path): os.makedirs(reconstructor_path)
-        if os.path.exists(log_file): open(log_file, 'w').close()
-        if os.path.exists(error_log_file): open(error_log_file, 'w').close()
+        if prefix is not None:
+            if not os.path.exists(reconstructor_path): os.makedirs(reconstructor_path)
+            if os.path.exists(log_file): open(log_file, 'w').close()
+            if os.path.exists(error_log_file): open(error_log_file, 'w').close()
 
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
+        if prefix is None: formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
+        else: formatter = logging.Formatter(f'%(asctime)s - {prefix} - %(name)s - %(levelname)s - %(funcName)s - %(message)s')
+        
+        #logger.warning(os.environ['HDF5_FILE_PATH'])
         logger.setLevel(logger_level.upper())
 
         # Handlers for different log levels
@@ -131,12 +135,13 @@ class AxonReconstructor:
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
 
-        logger.info("Logger initialized with level: %s", logger_level)
-        logger.debug('This is a debug message')
-        logger.info('This is an info message')
-        logger.warning('This is a warning message')
-        logger.error('This is an error message')
-        logger.critical('This is a critical message')
+        if prefix is None:
+            logger.info("Logger initialized with level: %s", logger_level)
+            logger.debug('This is a debug message')
+            logger.info('This is an info message')
+            logger.warning('This is a warning message')
+            logger.error('This is an error message')
+            logger.critical('This is a critical message')
 
         return logger
 
@@ -314,6 +319,7 @@ class AxonReconstructor:
         try: assert self.recordings, "No recordings found. Skipping concatenation."
         except Exception as e: self.logger.error(e); return
         for rec_key, recording in self.recordings.items():
+            
             date = recording['date']
             chip_id = recording['chip_id']
             scanType = recording['scanType']
@@ -324,6 +330,9 @@ class AxonReconstructor:
             if self.stream_select is not None: stream_ids = [stream_ids[self.stream_select]] if isinstance(stream_ids[self.stream_select], str) else stream_ids[self.stream_select]
             streams = {}
             for stream_id in stream_ids:
+                self.setup_logger(prefix=f'{rec_key}_{stream_id}')
+                #test logger message
+                self.logger.info(f"Concatenating recording segments for {date}_{chip_id}_{run_id} stream {stream_id}")
                 recording_segments = recording['streams'][stream_id]['recording_segments']
 
                 # Check if multirecording already exists in reconstructor object
@@ -387,6 +396,9 @@ class AxonReconstructor:
             spikesorting_root = os.path.join(self.sorting_params['sortings_dir'], f'{date}/{chip_id}/{scanType}/{run_id}')
             streams = {}
             for stream_id, stream in multirec['streams'].items():
+                self.setup_logger(prefix=f'{rec_key}_{stream_id}')
+                #test logger message
+                self.logger.info(f"Spike sorting stream {stream_id}")
                 if self.stream_select is not None and stream_id != 'well{:03}'.format(self.stream_select): continue
 
                 # Check if sorting already exists in reconstructor object
@@ -440,10 +452,13 @@ class AxonReconstructor:
         try: assert self.sortings, "No sortings found. Skipping waveform extraction."
         except Exception as e: self.logger.error(e); return
         for key, sorting in self.sortings.items():
+            
             multirecs = self.multirecordings[key]
             streams = {}
             for stream_id, multirec in multirecs['streams'].items():
-                
+                self.setup_logger(prefix=f'{key}_{stream_id}')
+                #test logger message
+                self.logger.info(f"Extracting waveforms from stream {stream_id}")
                 # Check if waveforms already exist in reconstructor object
                 try:
                     assert self.reconstructor_load_options['load_reconstructor'], 'Load existing waveforms option is set to False. Generating new waveforms.'
@@ -528,6 +543,9 @@ class AxonReconstructor:
         for key, datum in data.items():
             streams = {}
             for stream_id, wfs in datum['streams'].items():
+                self.setup_logger(prefix=f'{key}_{stream_id}')
+                #test logger message
+                self.logger.info(f"Extracting templates from stream {stream_id}")
                 if self.stream_select is not None and stream_id != 'well{:03}'.format(self.stream_select): continue
 
                 # Check if templates already exist in reconstructor object
