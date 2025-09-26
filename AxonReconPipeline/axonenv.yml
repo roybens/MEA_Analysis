@@ -3,17 +3,71 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.11.4
-  - numpy
-  - pandas
-  - matplotlib
-  - jupyter
-  - ipykernel
-  - ipython
-  - scipy
-  - scikit-learn
-  - seaborn
-  - pip
+  - _libgcc_mutex=0.1=main
+  - _openmp_mutex=5.1=1_gnu
+  - asttokens=2.2.1=pyhd8ed1ab_0
+  - backcall=0.2.0=pyh9f0ad1d_0
+  - backports=1.0=pyhd8ed1ab_3
+  - backports.functools_lru_cache=1.6.5=pyhd8ed1ab_0
+  - blas=1.0=mkl
+  - bzip2=1.0.8=h7b6447c_0
+  - ca-certificates=2023.7.22=hbcca054_0
+  - comm=0.1.4=pyhd8ed1ab_0
+  - debugpy=1.6.7=py311h6a678d5_0
+  - decorator=5.1.1=pyhd8ed1ab_0
+  - executing=1.2.0=pyhd8ed1ab_0
+  - importlib-metadata=6.8.0=pyha770c72_0
+  - importlib_metadata=6.8.0=hd8ed1ab_0
+  - intel-openmp=2023.1.0=hdb19cb5_46305
+  - ipykernel=6.25.1=pyh71e2992_0
+  - ipython=8.14.0=pyh41d4057_0
+  - jedi=0.19.0=pyhd8ed1ab_0
+  - jupyter_client=8.3.0=pyhd8ed1ab_0
+  - jupyter_core=5.3.1=py311h38be061_0
+  - ld_impl_linux-64=2.38=h1181459_1
+  - libffi=3.4.4=h6a678d5_0
+  - libgcc-ng=11.2.0=h1234567_1
+  - libgomp=11.2.0=h1234567_1
+  - libsodium=1.0.18=h36c2ea0_1
+  - libstdcxx-ng=11.2.0=h1234567_1
+  - libuuid=1.41.5=h5eee18b_0
+  - matplotlib-inline=0.1.6=pyhd8ed1ab_0
+  - mkl=2023.1.0=h213fc3f_46343
+  - mkl-service=2.4.0=py311h5eee18b_1
+  - mkl_fft=1.3.6=py311ha02d727_1
+  - mkl_random=1.2.2=py311ha02d727_1
+  - ncurses=6.4=h6a678d5_0
+  - nest-asyncio=1.5.6=pyhd8ed1ab_0
+  - openssl=3.0.10=h7f8727e_0
+  - packaging=23.1=pyhd8ed1ab_0
+  - parso=0.8.3=pyhd8ed1ab_0
+  - pexpect=4.8.0=pyh1a96a4e_2
+  - pickleshare=0.7.5=py_1003
+  - platformdirs=3.10.0=pyhd8ed1ab_0
+  - prompt_toolkit=3.0.39=hd8ed1ab_0
+  - ptyprocess=0.7.0=pyhd3deb0d_0
+  - pure_eval=0.2.2=pyhd8ed1ab_0
+  - pygments=2.16.1=pyhd8ed1ab_0
+  - python=3.11.4=h955ad1f_0
+  - python-dateutil=2.8.2=pyhd8ed1ab_0
+  - python_abi=3.11=2_cp311
+  - pyzmq=25.1.0=py311h6a678d5_0
+  - readline=8.2=h5eee18b_0
+  - six=1.16.0=pyh6c4a22f_0
+  - sqlite=3.41.2=h5eee18b_0
+  - stack_data=0.6.2=pyhd8ed1ab_0
+  - tbb=2021.8.0=hdb19cb5_0
+  - tk=8.6.12=h1ccaba5_0
+  - tornado=6.3.2=py311h5eee18b_0
+  - traitlets=5.9.0=pyhd8ed1ab_0
+  - typing-extensions=4.7.1=hd8ed1ab_0
+  - typing_extensions=4.7.1=pyha770c72_0
+  - wcwidth=0.2.6=pyhd8ed1ab_0
+  - wheel=0.38.4=py311h06a4308_0
+  - xz=5.4.2=h5eee18b_0
+  - zeromq=4.3.4=h9c3ff4c_1
+  - zipp=3.16.2=pyhd8ed1ab_0
+  - zlib=1.2.13=h5eee18b_0
   - pip:
       - aiohttp==3.8.5
       - aiosignal==1.3.1
@@ -61,6 +115,7 @@ dependencies:
       - idna==3.6
       - inquirerpy
       - inspyred==1.0.2
+      - install==1.3.5
       - ipympl==0.9.3
       - ipython-genutils==0.2.0
       - ipywidgets==8.1.0

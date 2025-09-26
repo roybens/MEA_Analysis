@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 import sys
 
 from MEAProcessingLibrary import mea_processing_library as MPL
-from AxonReconPipeline.axon_velocity.axon_velocity import GraphAxonTracking
-import AxonReconPipeline.axon_velocity.axon_velocity as av
-import AxonReconPipeline.axon_velocity.axon_velocity.plotting as av_plotting
+from axon_velocity.axon_velocity import GraphAxonTracking
+import axon_velocity.axon_velocity as av
+import axon_velocity.axon_velocity.plotting as av_plotting
 
 
 def get_extremum(template, locations):
