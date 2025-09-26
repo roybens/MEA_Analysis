@@ -134,10 +134,10 @@ function [] = compileNetworkFiles(data)
         %     attempt = attempt + 1;
 
             try
-                durations    = {'Plot60s','Plot120s','Plot300s'};
-                formats      = {'svg','png'};
+                durations    = {'Plot60s','Plot120s','Plot300s','Plot600s'};
+                formats      = {'png','eps'};
                 wellStatus = strings(numWells,1);
-                parfor z = 1:numWells
+                for z = 1:numWells
                   try
                     %if z>1,continue;end      %for testing purpose
                     wellID = wellsIDs(z);
@@ -170,9 +170,9 @@ function [] = compileNetworkFiles(data)
                     scan_div = floor(days(hd5Date - div0_date));
 
                     % Compute firing rate & basic network stats
-                    relativeSpikeTimes = computeRelativeSpikeTimes(networkData);
+                    relativeSpikeTimes = mxwbio.computeRelativeSpikeTimes(networkData);
                     networkAct = mxw.networkActivity.computeNetworkAct( networkData,'BinSize',binSize,'GaussianSigma',gaussianSigma);
-                    networkStats = computeNetworkStatsModified( networkAct.firingRate, networkAct.time, 'ThresholdMethod', thresholdMethod, ...
+                    networkStats = mxwbio.computeNetworkStatsModified( networkAct.firingRate, networkAct.time, 'ThresholdMethod', thresholdMethod, ...
                         'Threshold', thresholdBurst, 'MinPeakProminence', minPeakProminence,  'MinPeakDistance', minPeakDistance);
 
                     AbsBP = networkAct.absfiringRate( ismember(networkAct.time, networkStats.maxAmplitudesTimes) );
@@ -204,7 +204,94 @@ function [] = compileNetworkFiles(data)
                         end
                     end
                     
-                   
+                    % Convert to a table for readability
+                    % allBurstTable = array2table(allBurstEvents, ...
+                    %     'VariableNames', {'StartTime', 'EndTime', 'ChannelIdx'});
+                    % 
+                    % % --- Step 2: Create a timeline of all burst start (+1) and end (-1) events ---
+                    % startTimes = allBurstTable.StartTime;
+                    % endTimes   = allBurstTable.EndTime;
+                    % 
+                    % % Mark +1 for burst starts, -1 for burst ends
+                    % timeline = [
+                    %     startTimes,  ones(size(startTimes));  % Start = +1
+                    %     endTimes,   -ones(size(endTimes))     % End = -1
+                    % ];
+                    % 
+                    % % Sort timeline by time
+                    % timeline = sortrows(timeline, 1);  % Columns: [time, delta]
+                    % 
+                    % % --- Step 3: Sweep over time to detect network-level bursts ---
+                    % min_active_channels = 50;  % Threshold: number of overlapping bursts to call a network burst
+                    % active = 0;               % Number of active bursts at current time
+                    % in_burst = false;         % Whether we're currently inside a network burst
+                    % networkBursts = [];       % To store [start_time, end_time] of network bursts
+                    % 
+                    % for i = 1:size(timeline, 1)
+                    %     time  = timeline(i, 1);
+                    %     delta = timeline(i, 2);
+                    % 
+                    %     % Update active burst count
+                    %     active = active + delta;
+                    % 
+                    %     % Check burst start
+                    %     if ~in_burst && active >= min_active_channels
+                    %         in_burst = true;
+                    %         burst_start = time;
+                    % 
+                    %     % Check burst end
+                    %     elseif in_burst && active < min_active_channels
+                    %         in_burst = false;
+                    %         burst_end = time;
+                    %         networkBursts(end+1, :) = [burst_start, burst_end]; %#ok<AGROW>
+                    %     end
+                    % end
+                    % 
+                    % % --- STEP 4: Compute statistics and store distributions ---
+                    % burstDurations = []; ibis = []; burstPeaks = [];
+                    % logBursts ={};
+                    % if ~isempty(networkBursts)
+                    %     burstDurations = networkBursts(:,2) - networkBursts(:,1);
+                    % 
+                    %     % Inter-burst intervals (start-to-start)
+                    %     if size(networkBursts,1) > 1
+                    %         ibis = diff(networkBursts(:,1));
+                    %     end
+                    % 
+                    %     % Burst peak firing rate (from networkAct)
+                    %     burstPeaks = nan(size(networkBursts,1),1);
+                    %     for k = 1:size(networkBursts,1)
+                    %         idx = networkAct.time >= networkBursts(k,1) & ...
+                    %               networkAct.time <= networkBursts(k,2);
+                    %         if any(idx)
+                    %             burstPeaks(k) = max(networkAct.firingRate(idx));
+                    %         end
+                    %     end
+                    %     logBursts = struct('start_time',networkBursts(:,1),'duration_s',burstDurations);
+                    % end
+
+                    % Summary metrics
+                    % meanIBI = mean(ibis, 'omitnan');
+                    % covIBI  = std(ibis, 'omitnan') / meanIBI * 100;
+                    % 
+                    % meanBurstPeak = mean(burstPeaks, 'omitnan');
+                    % covBurstPeak  = std(burstPeaks, 'omitnan') / meanBurstPeak * 100;
+                    % 
+                    % meanBurstDuration = mean(burstDurations, 'omitnan');
+                    % covBurstDuration  = std(burstDurations, 'omitnan') / meanBurstDuration * 100;
+
+       
+                    % % Pack into a one‐row table              
+                    % logSummary = table( ...
+                    %   numel(networkBursts)/2,meanBurstDuration,covBurstDuration, ...
+                    %   meanBurstPeak,covBurstPeak, meanIBI,covIBI, ...
+                    %   {strjoin(arrayfun(@num2str, ibis, 'UniformOutput', false), ',')},...
+                    %   {strjoin(arrayfun(@num2str, burstPeaks, 'UniformOutput', false), ',')},...
+                    %   {strjoin(arrayfun(@num2str, burstDurations, 'UniformOutput', false), ',')},...
+                    %   'VariableNames',{ ...
+                    %      'LogISI_NumBursts',    'LogISI_MeanBurstDur','LogISI_CV_BurstDur', ...
+                    %      'LogISI_MeanSpikes',   'LogISI_CV_Spikes',  'LogISI_MeanIBI','LogISI_CV_IBI' , ...
+                    %      'LogISI_BurstIBIList','LogISI_BurstPeaks','LogISI_BurstDuration'} );
               
                     % Build metadata + results table
                     metaTbl = table( scan_runID, scan_div, thisAssay, wellID, string(neuronSourceType), ...
@@ -219,22 +306,31 @@ function [] = compileNetworkFiles(data)
                         ts = ts(ts>0);
                         extData{z} = [metaTbl,computeExtendedBurstMetrics( burstMetricsVariables, relativeSpikeTimes, ts)];
                     end
-                    
+
                     % --- Plot rasters & network traces ---
                     if plotFig
                         textStr = sprintf('#Bursts:%d | MeanDur:%.1fs | SpB:%.1f | IBI:%.1fs | Peak:%.1f', ...
                                           burstsSummaryRow.Number_Bursts, burstsSummaryRow.mean_BurstDuration,  burstsSummaryRow.mean_Spike_per_Burst, ...
                                           burstsSummaryRow.mean_IBI,burstsSummaryRow.mean_Burst_Peak);
                         plotFileBase = sprintf('Raster_%s_Well%d_%s_DIV%d_%s',scan_runID_text, wellID, scan_chipID, scan_div, neuronSourceType);
-                        locData = struct()
-                        locData.channel = networkData.fileObj.map.channel;
-                        locData.xpos = networkData.fileObj.map.x;
-                        locData.ypos = networkData.fileObj.map.y;
-                        plotRasterNetwork( networkAct, networkStats, ...
-                                           relativeSpikeTimes,locData, binSize, opDir, chipWellDir, ...
-                                           xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
-                                            baselineFiringRate);
-     
+
+                        % plotRasterNetwork( networkData, networkAct, networkStats, ...
+                        %                    relativeSpikeTimes, binSize, opDir, chipWellDir, ...
+                        %                    xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
+                        %                    epsPlot, baselineFiringRate ,logBursts);
+
+                        % plotRasterNetwork( networkData, networkAct, networkStats, ...
+                        %                    relativeSpikeTimes, binSize, opDir, chipWellDir, ...
+                        %                    xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
+                        %                    epsPlot, baselineFiringRate ,[]);
+
+                        plotNetworkRasterAnalysis(networkData, networkAct, networkStats, ...
+                                 'OutputDir', chipWellDir, ...
+                                 'PlotName', plotFileBase, ...
+                                 'TimeWindows', {[0,30], [0,60], [0,120],[0,300]}, ...
+                                 'ColorScheme', 'grayscale', ...
+                                 'BurstOverlay', false, ...
+                                 'BurstData', logBursts);
                     end
 
                 wellStatus(z) ='SUCCESS';
