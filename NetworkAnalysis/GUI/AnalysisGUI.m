@@ -1,6 +1,5 @@
 function mainFunction
-   % Create a uifigure window
-% Create a uifigure window
+    % Create a uifigure window
     fig = uifigure('Name', 'Process Activity /Network', 'Position', [100, 100, 700, 500]);
 
     % Create labels and edit fields for project data
@@ -25,18 +24,18 @@ function mainFunction
 
     % Toggle button for raster plots
     rasterToggleLabel = uilabel(fig, 'Text', 'Raster Plot:', 'Position', [columnX, 300 + 3 * spacingY, 100, 20]);
-    rasterToggle = uibutton(fig, 'state', 'Position', [columnX + 100, 300 + 3 * spacingY, 100, 20], 'Text', 'ON', 'ValueChangedFcn', @toggleRasterCallback);
+    rasterToggle = uibutton(fig, 'state', 'Position', [columnX + 100, 300 + 3 * spacingY, 100, 20], 'Text', 'ON', 'Value',true,'ValueChangedFcn', @toggleRasterCallback);
 
     % Extended Metrics Toggle Button
     extendedMetricsLabel = uilabel(fig, 'Text', 'Extended Metrics:', 'Position', [columnX, 300 + 4 * spacingY, 120, 20]);
-    extendedMetricsToggle = uibutton(fig, 'state', 'Position', [columnX + 120, 300 + 4 * spacingY, 100, 20], 'Text', 'OFF', 'ValueChangedFcn', @extendedMetricsCallback);
+    extendedMetricsToggle = uibutton(fig, 'state', 'Position', [columnX + 120, 300 + 4 * spacingY, 100, 20], 'Text', 'ON', 'Value',true,'ValueChangedFcn', @extendedMetricsCallback);
 
     % X and Y limits with numeric edit fields
     xlimLabel = uilabel(fig, 'Text', 'X-axis Limit:', 'Position', [columnX, 300 + 2 * spacingY, 100, 20]);
     xlimEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300 + 2 * spacingY, 100, 20], 'Value', 60);
 
     ylimLabel = uilabel(fig, 'Text', 'Y-axis Limit:', 'Position', [columnX, 300 + spacingY, 100, 20]);
-    ylimEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300 + spacingY, 100, 20], 'Value', 18);
+    ylimEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 300 + spacingY, 100, 20], 'Value', 25);
 
     % Gaussian Sigma and other parameters
     gaussianSigmaLabel = uilabel(fig, 'Text', 'Gaussian Sigma:', 'Position', [columnX, 300, 100, 20]);
@@ -45,17 +44,26 @@ function mainFunction
     binSizeLabel = uilabel(fig, 'Text', 'Bin Size:', 'Position', [columnX, 260, 100, 20]);
     binSizeEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 100, 260, 100, 20], 'Value', 0.1);
 
-    minPeakDistanceLabel = uilabel(fig, 'Text', 'Min Peak Distance:', 'Position', [columnX, 220, 120, 20]);
-    minPeakDistanceEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 220, 100, 20], 'Value', 1.0);
+    minProminenceLabel = uilabel(fig, 'Text', 'Peak Prominence:', 'Position', [columnX, 220, 120, 20]);
+    minProminenceEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 220, 100, 20], 'Value', 1.0);
+    
+    
+    minPeakDistanceLabel = uilabel(fig, 'Text', 'MinPeak Distance:', 'Position', [columnX, 180, 120, 20]);
+    minPeakDistanceEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 180, 100, 20], 'Value', 1.0);
 
-    thresholdBurstLabel = uilabel(fig, 'Text', 'Threshold Burst:', 'Position', [columnX, 180, 120, 20]);
-    thresholdBurstEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 180, 100, 20], 'Value', 1.0);
+    % Dropdown for Threshold Method
+    thresholdMethodLabel = uilabel(fig, 'Text', 'Threshold Method:', 'Position', [columnX, 140, 120, 20]);
+    thresholdMethodDropDown = uidropdown(fig, 'Position', [columnX + 120, 140, 100, 20], ...
+        'Items', {'Fixed', 'RMS', 'Adaptive'}, 'Value', 'Adaptive');
 
-    thresholdStartStopLabel = uilabel(fig, 'Text', 'Threshold Start/Stop:', 'Position', [columnX, 140, 120, 20]);
-    thresholdStartStopEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 140, 100, 20], 'Value', 0.3);
+    thresholdBurstLabel = uilabel(fig, 'Text', 'Threshold Burst:', 'Position', [columnX, 100, 120, 20]);
+    thresholdBurstEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 100, 100, 20], 'Value', 1.2);
+
+    thresholdStartStopLabel = uilabel(fig, 'Text', 'Threshold Start/Stop:', 'Position', [columnX, 60, 120, 20]);
+    thresholdStartStopEdit = uieditfield(fig, 'numeric', 'Position', [columnX + 120, 60, 100, 20], 'Value', 0.3);
 
     % Create buttons at the bottom
-    buttonY = 50;
+    buttonY = 30;
     processActivity = uibutton(fig, 'Text', 'Process Activity', 'Position', [45, buttonY, 90, 25], 'ButtonPushedFcn', @processActivityButtonCallback);
     processNetwork = uibutton(fig, 'Text', 'Process Network', 'Position', [155, buttonY, 90, 25], 'ButtonPushedFcn', @processNetworkButtonCallback);
     exploreParams = uibutton(fig, 'Text', 'Explore Params', 'Position', [265, buttonY, 90, 25], 'ButtonPushedFcn', @exploreParamsButtonCallback);
@@ -77,10 +85,11 @@ function processActivityButtonCallback(~, ~)
     gaussianSigma = gaussianSigmaEdit.Value;
     binSize = binSizeEdit.Value;
     minPeakDistance = minPeakDistanceEdit.Value;
+    minPeakProminence = minProminenceEdit.Value;
     thresholdBurst = thresholdBurstEdit.Value;
     thresholdStartStop = thresholdStartStopEdit.Value;
     opDir = opDirEdit.Value;
-
+    thresholdMethod = thresholdMethodDropDown.Value;
 
     % Create a struct and store the values
     data = struct();
@@ -91,13 +100,16 @@ function processActivityButtonCallback(~, ~)
     data.gaussianSigma = gaussianSigma;
     data.binSize = binSize;
     data.minPeakDistance = minPeakDistance;
+    data.minPeakProminence = minPeakProminence;
     data.thresholdBurst = thresholdBurst;
     data.thresholdStartStop = thresholdStartStop;
+    data.thresholdMethod = thresholdMethod;
     data.opDir = opDir;
     data.plotFig = rasterToggle.Value;
     data.fig = fig;
+    
     % Log the data into a log file
-    logFileName = './network_log_file.txt';
+    logFileName = './activity_log_file.txt';
     logFile = fopen(logFileName, 'a'); % 'a' for append mode
         
     if logFile == -1
@@ -116,6 +128,7 @@ function processActivityButtonCallback(~, ~)
     fprintf(logFile, 'Gaussian Sigma: %f\n', data.gaussianSigma);
     fprintf(logFile, 'Bin Size: %f\n', data.binSize);
     fprintf(logFile, 'Min Peak Distance: %f\n', data.minPeakDistance);
+    fprintf(logFile, 'Min Peak Prominence: %f\n',  data.minPeakProminence );
     fprintf(logFile, 'Threshold Burst: %f\n', data.thresholdBurst);
     fprintf(logFile, 'Threshold Start-Stop: %f\n', data.thresholdStartStop);
     fprintf(logFile, 'Output Directory: %s\n', data.opDir);
@@ -144,9 +157,11 @@ function processActivityButtonCallback(~, ~)
       % Get the values from the sliders
     gaussianSigma = gaussianSigmaEdit.Value;
     binSize = binSizeEdit.Value;
+    minPeakProminence = minProminenceEdit.Value;
     minPeakDistance = minPeakDistanceEdit.Value;
     thresholdBurst = thresholdBurstEdit.Value;
     thresholdStartStop = thresholdStartStopEdit.Value;
+    thresholdMethod = thresholdMethodDropDown.Value;
     opDir = opDirEdit.Value;
     xlimNetwork = xlimEdit.Value;
     ylimNetwork = ylimEdit.Value;
@@ -177,18 +192,20 @@ function processActivityButtonCallback(~, ~)
     data.refDir = refDir;
     data.gaussianSigma = gaussianSigma;
     data.binSize = binSize;
+    data.minPeakProminence = minPeakProminence;
     data.minPeakDistance = minPeakDistance;
     data.thresholdBurst = thresholdBurst;
     data.thresholdStartStop = thresholdStartStop;
+    data.thresholdMethod = thresholdMethod;
     data.opDir = opDir;
     data.xlim = xlimNetwork;
     data.ylim = ylimNetwork;
     data.plotFig = plotFig;
     data.extMetricsFlag = extMetricsFlag;
-
+    
 
     % Log the data into a log file
-    logFileName = './activity_log_file.txt';
+    logFileName = './network_log_file.txt';
     logFile = fopen(logFileName, 'a'); % 'a' for append mode
 
     if logFile == -1
@@ -206,7 +223,8 @@ function processActivityButtonCallback(~, ~)
     fprintf(logFile, 'Reference Directory: %s\n', data.refDir);
     fprintf(logFile, 'Gaussian Sigma: %f\n', data.gaussianSigma);
     fprintf(logFile, 'Bin Size: %f\n', data.binSize);
-    fprintf(logFile, 'Min Peak Distance: %f\n', data.minPeakDistance);
+    fprintf(logFile,'MinPeakDistance : %f\n',data.minPeakDistance);
+    fprintf(logFile, 'Min Peak Prominence: %f\n',  data.minPeakProminence );
     fprintf(logFile, 'Threshold Burst: %f\n', data.thresholdBurst);
     fprintf(logFile, 'Threshold Start-Stop: %f\n', data.thresholdStartStop);
     fprintf(logFile, 'Output Directory: %s\n', data.opDir);
@@ -235,15 +253,18 @@ function processActivityButtonCallback(~, ~)
         % Get the values from the sliders
         gaussianSigma = gaussianSigmaEdit.Value;
         binSize = binSizeEdit.Value;
+        minProminience = minProminenceEdit.Value;
         minPeakDistance = minPeakDistanceEdit.Value;
         thresholdBurst = thresholdBurstEdit.Value;
         thresholdStartStop = thresholdStartStopEdit.Value;
-
+        thresholdMethod = thresholdMethodDropDown.Value;
         % Validate the fields
         if isempty(dataDirPath) || isempty(refDir) || isempty(opDir)
             disp('Error: Please fill in all the required fields.');
             return;
         end
+
+
          % Specify the log file name and open it in append mode
         logFileName = './explore_parm_log_file.txt';
         logFile = fopen(logFileName, 'a'); % 'a' for append mode
@@ -257,9 +278,11 @@ function processActivityButtonCallback(~, ~)
         data.refDir = refDir;
         data.gaussianSigma = gaussianSigma;
         data.binSize = binSize;
+        data.minProminience = minProminience;
         data.minPeakDistance = minPeakDistance;
         data.thresholdBurst = thresholdBurst;
         data.thresholdStartStop = thresholdStartStop;
+        data.thresholdMethod = thresholdMethod;
         data.opDir = opDir;
         data.fig = fig;
         data.logFile = logFile;
@@ -268,6 +291,7 @@ function processActivityButtonCallback(~, ~)
         fprintf(logFile, 'data.gaussianSigma = %f\n', data.gaussianSigma);
         fprintf(logFile, 'data.binSize = %f\n', data.binSize);
         fprintf(logFile, 'data.minPeakDistance = %f\n', data.minPeakDistance);
+        fprintf(logFile, 'Min Peak Prominence: %f\n',  data.minProminience );
         fprintf(logFile, 'data.thresholdBurst = %f\n', data.thresholdBurst);
         fprintf(logFile, 'data.thresholdStartStop = %f\n', data.thresholdStartStop);
         fprintf(logFile, 'data.opDir = %s\n', data.opDir);
@@ -291,7 +315,7 @@ function processActivityButtonCallback(~, ~)
       % Reset the numeric fields to default values
         gaussianSigmaEdit.Value = 0.18;
         binSizeEdit.Value = 0.3;
-        minPeakDistanceEdit.Value = 0.025;
+        minProminenceEdit.Value = 1;
         thresholdBurstEdit.Value = 1.2;
         thresholdStartStopEdit.Value = 0.3;
         opDirEdit.Value = '';

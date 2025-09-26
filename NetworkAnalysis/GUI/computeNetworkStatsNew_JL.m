@@ -4,8 +4,8 @@ p = inputParser;
 
 p.addRequired('networkActivityVectorFR');
 p.addRequired('networkActivityVectortime');
+p.addParameter('ThresholdMethod', 'adaptive');
 p.addParameter('Threshold', []);
-p.addParameter('FixedThreshold', []);
 p.addParameter('MinPeakDistance', []);
 
 
@@ -16,8 +16,12 @@ rmsFiringRate = mxw.util.rms(args.networkActivityVectorFR);
 
 if ~isempty(args.MinPeakDistance)
     if ~isempty(args.Threshold)
+        % [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(args.networkActivityVectorFR,...
+        %     args.networkActivityVectortime, 'MinPeakHeight', args.Threshold * rmsFiringRate, 'MinPeakDistance', args.MinPeakDistance);
+        
         [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(args.networkActivityVectorFR,...
-            args.networkActivityVectortime, 'MinPeakHeight', args.Threshold * rmsFiringRate, 'MinPeakDistance', args.MinPeakDistance);
+             args.networkActivityVectortime, 'MinPeakProminence',1.5 , 'MinPeakDistance', args.MinPeakDistance,'MinPeakHeight', args.Threshold * rmsFiringRate);
+        
     elseif ~isempty(args.FixedThreshold)
         [maxAmplitudesValues, maxAmplitudesTimes] = findpeaks(args.networkActivityVectorFR,...
             args.networkActivityVectortime, 'MinPeakHeight', args.FixedThreshold, 'MinPeakDistance', args.MinPeakDistance);
@@ -35,6 +39,7 @@ else
         error('Please set a threshold')
     end
 end
+
 
 values.maxAmplitudesValues = maxAmplitudesValues;
 
