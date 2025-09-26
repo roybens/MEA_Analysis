@@ -1,409 +1,478 @@
 function [] = compileNetworkFiles(data)
+    % compileNetworkFiles  Process HD-MEA “Network” .h5 files in parallel,
+    % detect bursts, plot rasters, and save compiled CSV and extended metrics.
+    %
+    % Usage:
+    %   compileNetworkFiles(data)
+    %
+    % Inputs (fields of data struct):
+    %   .fig                : UI figure handle (for progress dialog)
+    %   .div0Date           : DIV-0 date string, e.g. '01/15/2025'
+    %   .parentFolderPath   : root path containing **/Network/**/*raw.h5
+    %   .refDir             : Excel/CSV “ref” file with Run_, Assay, Wells_Recorded, NeuronSource
+    %   .opDir              : output base folder
+    %   .gaussianSigma      : Gaussian kernel σ for firing rate
+    %   .binSize            : bin size for firing rate
+    %   .minPeakDistance    : min peak distance for burst detection
+    %   .minProminence      : min peak prominence for burst detection
+    %   .thresholdBurst     : threshold for burst detection
+    %   .thresholdStartStop : fraction for burst start/stop edges
+    %   .thresholdMethod    : threshold method name
+    %   .xlim               : x-axis limit for plots
+    %   .ylim               : y-axis limit for plots
+    %   .plotFig            : true/false to generate raster plots
+    %   .extMetricsFlag     : true/false to save extended metrics
+    %   .logFile            : path to log file (optional)
+    %
+    % Example:
+    %   data.parentFolderPath = '/data/HDMEA';
+    %   data.refDir           = '/data/ref.xlsx';
+    %   data.opDir            = '/data/output';
+  
 
-   
-    %ui components.
-    fig = data.fig;
-    d = uiprogressdlg(fig,'Title','Compiling files',...
-        'Message','Start','Cancelable','on');
-    drawnow
 
-    tic;
-    plotFig=data.plotFig;
-    extMetricsFlag = data.extMetricsFlag;
-    % Unpack the data structure
-    %projectName = data.projectName;
-    div0_date =  datetime(data.div0Date, "InputFormat",'MM/dd/yyyy');
-    parentFolderPath = data.parentFolderPath;
-    refDir = data.refDir;
-    opDir = data.opDir;
-    gaussianSigma = data.gaussianSigma;
-    binSize = data.binSize;
-    minPeakDistance = data.minPeakDistance;
-    thresholdBurst = data.thresholdBurst;
-   
-    thresholdStartStop = data.thresholdStartStop;
-    % Set Threshold function for later use
-    use_fix_threshold = false;
-    if use_fix_threshold
-    threshold_fn = 'FixedThreshold' ;
-    else
-    threshold_fn = 'Threshold';
+
+    %   compileNetworkFiles(data);
+
+    required = {'fig','div0Date','parentFolderPath','refDir','opDir', ...    % --- Validate required fields ---
+                'gaussianSigma','binSize','minPeakDistance','minPeakProminence', ...
+                'thresholdBurst','thresholdStartStop','thresholdMethod', ...
+                'xlim','ylim','plotFig','extMetricsFlag'};
+    for f = required
+        assert(isfield(data,f{1}), 'Missing data.%s', f{1});
     end
-    xlimNetwork = data.xlim;
-    ylimNetwork = data.ylim;
 
+    
+    fig                = data.fig;% --- Unpack data struct ---
+    div0_date          = datetime(data.div0Date, "InputFormat",'MM/dd/yyyy');
+    parentFolderPath   = data.parentFolderPath;
+    refDir             = data.refDir;
+    opDir              = data.opDir;
+    gaussianSigma      = data.gaussianSigma;
+    binSize            = data.binSize;
+    minPeakDistance    = data.minPeakDistance;
+    minPeakProminence      = data.minPeakProminence;          
+    thresholdBurst     = data.thresholdBurst;
+    thresholdStartStop = data.thresholdStartStop;      
+    thresholdMethod    = data.thresholdMethod;
+    xlimNetwork        = data.xlim;
+    ylimNetwork        = data.ylim;
+    plotFig            = data.plotFig;
+    extMetricsFlag     = data.extMetricsFlag;
+    logFile            = data.logFile;
 
-    % Ensure output directories exist
-    outputFolders = {'Plot60s', 'Plot120s', 'Plot300s', 'Plot600s', 'Figureformat'};
-    for i = 1:length(outputFolders)
-        folderPath = fullfile(opDir, 'Network_outputs/Raster_BurstActivity', outputFolders{i});
-        if ~isfolder(folderPath)
-            mkdir(folderPath);
-        end
-    end
-
-
-    logFile = data.logFile;
-
-    % extract runID info from reference excel sheet
+    % --- Read reference table and identify runs of interest ---
     refTable = readtable(refDir);
-    run_ids = unique(refTable.Run_(strcmp(strtrim(lower(refTable.Assay)), 'network today')));  
+    assayList = strtrim(lower(refTable.Assay));
+    selNetwork = contains(assayList,'network') | contains(assayList,'network today');
+    run_ids    = unique(refTable.Run_(selNetwork));
 
-    % Initialize an empty table with the correct types for each column,
-    
-    finalWriteTable = table([], [], [], cell(0,1), [], cell(0,1), [], [], [], [], [], [], [], cell(0,1), ...
-        'VariableNames', {
-            'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-            'IBI', 'Burst_Peak', 'Burst_Peak_Normalized', 'Burst_Peak_Abs', ...
-            'Number_Bursts', 'Spike_per_Burst', 'BurstDuration', 'ISIString'...
-    });
-    
-
-    % Get a list of all files in the folder with the desired file name pattern.
-    filePattern = fullfile(parentFolderPath, '**/Network/**/*raw.h5'); 
-    theFiles = dir(filePattern);
-    numFiles = length(theFiles);
-    networkResults = cell(numFiles, 1);
- 
-    
-    skippedFiles = cell(numFiles, 1); 
-       
-    if extMetricsFlag
-        extendendMetricsTable = table([], [], [], cell(0,1), [], cell(0,1),[],  ...
-        'VariableNames', {
-                        'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID','ISIString'...
-        });
-        extNetworkResults = cell(numFiles,1);
-    end
-
-    %parallelizing the files processsing
-
-    % Specify the exact number of cores to use
-    numCores = 10;  % Adjust this number based on your needs and resource availability
-
-    % Initialize or modify the existing parallel pool
-    currentPool = gcp('nocreate');  % Check for existing parallel pool
-
-    if isempty(currentPool)
-        poolObj = parpool(numCores);  % Create a new pool if none exists
-    elseif currentPool.NumWorkers ~= numCores
-        delete(currentPool);  % Close the existing pool if it does not match the desired size
-        poolObj = parpool(numCores);  % Create a new pool with the correct number of workers
-    else
-        poolObj = currentPool;  % Use the existing pool if it already matches the desired number of workers
-    end
-    
-
-    fprintf(1, 'Plotraster %d , Extended Metrics %d\n ', plotFig,extMetricsFlag);
- %profile on;
-    for k = 1 : numFiles
-        if d.CancelRequested
-            break
+    % --- Discover .h5 files ---
+    patterns = {fullfile(parentFolderPath, '**','Network','**','*raw.h5'),
+                    fullfile(parentFolderPath,"data.raw.h5"),
+                    fullfile(parentFolderPath),
+                    };
+    theFiles =[];
+    for p = 1:length(patterns)
+        candidateFiles = dir(patterns{p});
+        if ~isempty(candidateFiles)
+            theFiles = candidateFiles;
+            break;
         end
-        % Update progress, report current estimate
-        d.Value = k/length(theFiles);
-        % extract dir informationfileNames
-        baseFileName = theFiles(k).name;
-        pathFileNetwork = fullfile(theFiles(k).folder, baseFileName);
-        
-        %this is where the fiel is processed
-        fileDirParts = strsplit(pathFileNetwork, filesep); % split dir into elements
-        scan_runID = str2double(fileDirParts{end-1}); % extract runID
-        scan_runID_text = fileDirParts{end-1};
-        scan_chipID = fileDirParts{end-3}; % extract chipID
-    
-        if ismember(scan_runID,run_ids)
-            fprintf(1, 'Now reading %s\n', pathFileNetwork);
-            fprintf(logFile, 'Now reading %s\n', pathFileNetwork);
+    end
+    if isempty(theFiles)
+        error('No .h5 files found recheck your data path')
+    end
+    numFiles =numel(theFiles);
 
-            % create fileManager object for the Network recording
-            idx = refTable.Run_ == scan_runID;   % todo each loop takes a copy of this which is an overhead.
+    % --- Prepare parallel pool ---
+    numCores = 6;
+    poolObj = gcp('nocreate');
+    if isempty(poolObj) || poolObj.NumWorkers~=numCores
+        if ~isempty(poolObj), delete(poolObj); end
+        parpool(numCores);
+    end
 
-            wellsIDs = refTable.Wells_Recorded(idx);
-            if iscell(wellsIDs)
-            if ismember(',', wellsIDs{1})
-                wellsIDs = strsplit(wellsIDs{1}, ',');
-                wellsIDs = cellfun(@str2double,wellsIDs);
-            else
-                error('wellsIDs are not comma separated correctly');
-            end
-            end
-           
-            neuronTypes = refTable.NeuronSource(idx);
-            if ismember(',', neuronTypes{1})
-                neuronTypes = strsplit(neuronTypes{1}, ',');
-            end
-            
-            numWells = length(wellsIDs);
-            fileResults = cell(numWells, 1);
-            skippedWells = cell(numWells,1);
-            if extMetricsFlag
-                extFileResults = cell(numWells,1);
-            end
-            % for loop for processing each well
-            parfor z = 1:numWells
+    networkResults = cell(numFiles,1);
+    skippedFiles   = cell(numFiles,1);
+    allExtMetrics  = cell(numFiles,1);
+    d = uiprogressdlg(fig, 'Title', 'Compiling files', ...
+        'Message', 'Start', 'Cancelable', 'on');
 
-                wellID=wellsIDs(z);
-                fprintf(1, 'Processing Well %d\n', wellID);
-                %tic;
-                neuronSourceType = neuronTypes(z);
-                try
-                    networkData = mxw.fileManager(pathFileNetwork,wellID);
-                catch
-                    skippedWells{z} = [pathFileNetwork,num2str(wellID)];
-                    continue
-                end
-               
-                % get the startTime of the recordings
-                hd5_time = networkData.fileObj.stopTime;
-                try
-                    hd5Date = datetime(hd5_time,'InputFormat', 'yyyy-MM-dd HH:mm:ss');
-                catch
-                    hd5Date = datetime(hd5_time,'InputFormat', 'dd-MMM-yyyy HH:mm:ss');
-                end
-                div0_datetime = datetime(div0_date, 'InputFormat', 'yourInputFormatHere');
-                scan_div = floor(days(hd5Date - div0_datetime));
-                
-        
-                % compute Network Activity and detect bursts
-                relativeSpikeTimes = mxw.util.computeRelativeSpikeTimes(networkData);
-                networkAct = mxw.networkActivity.computeNetworkAct(networkData, 'BinSize', binSize,'GaussianSigma', gaussianSigma);
-                
-                %for 600s second manually reducing to 300
-                %networkAct.time = networkAct.time(1:3000);
-                %networkAct.firingRate= networkAct.firingRate(1:3000);
-                networkStats = computeNetworkStatsNew_JL(networkAct.firingRate,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
-                networkStatsNorm = computeNetworkStatsNew_JL(networkAct.firingRateNorm,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
-                networkStatsAbs = computeNetworkStatsNew_JL(networkAct.absfiringRate,networkAct.time, threshold_fn, thresholdBurst, 'MinPeakDistance', minPeakDistance);
-                
-                %% Tim's code for averaging and aggregating mean spiking data (IBI, Burst peaks, Spikes within Bursts, # of Bursts etc.)
-                %average IBI
-                meanIBI = mean(networkStats.maxAmplitudeTimeDiff);
-                %average Burst peak (burst firing rate y-value)
-                meanBurstPeak = mean(networkStats.maxAmplitudesValues);
-                meanBPNorm = mean(networkStatsNorm.maxAmplitudesValues);
-                meanAbsBP = mean(networkStatsAbs.maxAmplitudesValues);
-                %Number of bursts
-                nBursts = length(networkStats.maxAmplitudesTimes);
-               
-                %average spikesPerBurst        
-                if length(networkStats.maxAmplitudesTimes)>3
-                    peakAmps = networkStats.maxAmplitudesValues';
-                    peakTimes = networkStats.maxAmplitudesTimes;
-                    
-                    % get the times of the burst start and stop edges
-                    edges = double.empty(length(peakAmps),0);
-                    for i = 1:length(peakAmps)
-                       % take a sizeable (±6 s) chunk of the network activity curve 
-                       % around each burst peak point
-                       idx = networkAct.time>(peakTimes(i)-6) & networkAct.time<(peakTimes(i)+6);
-                       t1 = networkAct.time(idx);
-                       a1 = networkAct.firingRate(idx)';
-                      
-                       % get the arunIDstemp = run_id_and_type(:,1);mplitude at the desired peak width
-                       peakWidthAmp = (peakAmps(i)-round(peakAmps(i)*thresholdStartStop));
-                       
-                       % get the indices of the peak edges
-                       idx1 = find(a1<peakWidthAmp & t1<peakTimes(i));
-                       idx2 = find(a1<peakWidthAmp & t1>peakTimes(i));
-                       
-                       if ~isempty(idx1)&&~isempty(idx2)       
-                           tBefore = t1(idx1(end));
-                           tAfter = t1(idx2(1));
-                           edges(i,[1 2]) = [tBefore tAfter];
+    % --- Loop over files ---
+    for k = 1:numFiles
+        %if k > 1, continue;end    %for debugging
+        if d.CancelRequested, error('User interruption'); end
+        d.Value = k/numFiles;
+        baseName = theFiles(k).name;
+        fullPath = fullfile(theFiles(k).folder,baseName);
+
+        % Extract runID and chipID from path
+        parts = strsplit(theFiles(k).folder, filesep);
+        scan_runID      = str2double(parts{end});
+        scan_runID_text = parts{end};
+        scan_chipID     = parts{end-2};
+
+        % Skip runs not in ref table
+        if ~ismember(scan_runID, run_ids), msg =sprintf('[Run %d not in Ref File...\n', scan_runID);fprintf(1, '%s', msg);continue;end
+        idx         = refTable.Run_ == scan_runID;
+        wellsIDs    = str2double( strsplit(string(refTable.Wells_Recorded(idx)),',') );
+        neuronTypes = strtrim( strsplit(string(refTable.NeuronSource(idx)),',') );
+        thisAssay   = refTable.Assay(idx);   
+
+        if numel(wellsIDs)~=numel(neuronTypes)
+            error('Mismatch between Wells_Recorded and NeuronSource counts for run %d.', scan_runID);
+        end
+
+        numWells    = numel(wellsIDs);
+        fileResults = cell(numWells,1);
+        skippedWells= cell(numWells,1);
+        if extMetricsFlag, extData = cell(numWells,1); end
+
+        % successFile = false; attempt = 0; maxRetries = 3;
+        % while ~successFile && attempt<maxRetries
+        %     attempt = attempt + 1;
+
+            try
+                durations    = {'Plot60s','Plot120s','Plot300s'};
+                formats      = {'svg','png'};
+                wellStatus = strings(numWells,1);
+                parfor z = 1:numWells
+                  try
+                    %if z>1,continue;end      %for testing purpose
+                    wellID = wellsIDs(z);
+                    neuronSourceType = neuronTypes{z};
+
+                    % Prepare output folders for rasters/plots %not every
+                    % iteration it is required
+                    folderName   = sprintf('%s_Well%d', scan_chipID, wellID);
+                    chipWellDir  = fullfile(opDir,'Network_outputs','Raster_BurstActivity',folderName);
+                       for d_index = 1:numel(durations)
+                            for f = 1:numel(formats)
+                                outDir = fullfile(chipWellDir, durations{d_index}, formats{f});
+                                if ~isfolder(outDir)
+                                    mkdir(outDir);  % safe because this is outside parfor
+                                end
+                            end
                        end
+                    msg = sprintf('[Run %d | Well %d] Processing...\n', scan_runID, wellID);
+                        %fprintf(logFile, '%s', msg);   % Write to log file
+                    fprintf(1, '%s', msg);  
+                    % Load networkData
+                    networkData = mxw.fileManager(fullPath, wellID);
+
+                    % Compute DIV relative to div0_date
+                    try
+                        hd5Date = datetime(networkData.fileObj.stopTime,'InputFormat','yyyy-MM-dd HH:mm:ss');
+                    catch
+                        hd5Date = datetime(networkData.fileObj.stopTime,'InputFormat','dd-MMM-yyyy HH:mm:ss');
+                    end
+                    scan_div = floor(days(hd5Date - div0_date));
+
+                    % Compute firing rate & basic network stats
+                    relativeSpikeTimes = computeRelativeSpikeTimes(networkData);
+                    networkAct = mxw.networkActivity.computeNetworkAct( networkData,'BinSize',binSize,'GaussianSigma',gaussianSigma);
+                    networkStats = computeNetworkStatsModified( networkAct.firingRate, networkAct.time, 'ThresholdMethod', thresholdMethod, ...
+                        'Threshold', thresholdBurst, 'MinPeakProminence', minPeakProminence,  'MinPeakDistance', minPeakDistance);
+
+                    AbsBP = networkAct.absfiringRate( ismember(networkAct.time, networkStats.maxAmplitudesTimes) );
+
+                    % --- Burst detection & extended metrics ---
+                    [burstsSummaryRow, burstMetricsVariables] = gaussianFiringRateBurstDetector(networkData,networkAct, networkStats, AbsBP, thresholdStartStop);
+
+                    baselineFiringRate = burstsSummaryRow.BaselineFiringRate;
+                    % --- 2) Original log‐ISI burst detection ---
+                    % For each channel:
+                   
+                    unique_channels = unique(relativeSpikeTimes.channel);
+                    chanBursts = cell(numel(unique_channels), 1);
+                    
+                    for i = 1:numel(unique_channels)
+                        ch = unique_channels(i);
+                        st = relativeSpikeTimes.time(relativeSpikeTimes.channel == ch);
+                        chanBursts{i} = detectBursts_logISI(st, 10, 0.100, []); %Chiappalone et al., 2005 10 spikes 
+                    end
+
+                    % --- Step 1: Collect all bursts from each electrode ---
+                    allBurstEvents = [];  % Will store: [start_time, end_time, channel_index]
+                    
+                    for i = 1:length(chanBursts)
+                        bursts = chanBursts{i};
+                        for b = 1:numel(bursts)
+                            % Each row = [start_time, end_time, channel_index]
+                            allBurstEvents(end+1, :) = [bursts(b).start_time, bursts(b).end_time, i]; %#ok<AGROW>
+                        end
                     end
                     
-                   % identify spikes that fall within the bursts
-                    ts = ((double(networkData.fileObj.spikes.frameno)...
-                        - double(networkData.fileObj.firstFrameNum))/networkData.fileObj.samplingFreq)';
-                    ch = networkData.fileObj.spikes.channel;
+                   
+              
+                    % Build metadata + results table
+                    metaTbl = table( scan_runID, scan_div, thisAssay, wellID, string(neuronSourceType), ...
+                                     hd5Date, string(scan_chipID),'VariableNames',{'Run_ID','DIV','Assay','Well','NeuronType','Time','Chip_ID'} );
                     
-                    spikesPerBurst = double.empty(length(edges),0);
-                    tsWithinBurst = [];
-                    chWithinBurst = [];
-                    for i = 1:length(edges)
-                       idx = (ts>edges(i,1) & ts<edges(i,2));
-                       spikesPerBurst(i) = sum(idx); 
-                       tsWithinBurst = [tsWithinBurst ts(idx)];
-                       chWithinBurst = [chWithinBurst ch(idx)'];
+                    fileResults{z} = [metaTbl, burstsSummaryRow];%,logSummary];
+
+                    % Save extended metrics if desired
+                    if extMetricsFlag
+                        ts = ((double(networkData.fileObj.spikes.frameno)...
+                            - double(networkData.fileObj.firstFrameNum))/networkData.fileObj.samplingFreq)';
+                        ts = ts(ts>0);
+                        extData{z} = [metaTbl,computeExtendedBurstMetrics( burstMetricsVariables, relativeSpikeTimes, ts)];
                     end
-                    meanSpikesPerBurst = mean(spikesPerBurst);
-                    meanBurstDuration = mean(abs(edges(:,1) - edges(:,2)));
+                    
+                    % --- Plot rasters & network traces ---
+                    if plotFig
+                        textStr = sprintf('#Bursts:%d | MeanDur:%.1fs | SpB:%.1f | IBI:%.1fs | Peak:%.1f', ...
+                                          burstsSummaryRow.Number_Bursts, burstsSummaryRow.mean_BurstDuration,  burstsSummaryRow.mean_Spike_per_Burst, ...
+                                          burstsSummaryRow.mean_IBI,burstsSummaryRow.mean_Burst_Peak);
+                        plotFileBase = sprintf('Raster_%s_Well%d_%s_DIV%d_%s',scan_runID_text, wellID, scan_chipID, scan_div, neuronSourceType);
+                        locData = struct()
+                        locData.channel = networkData.fileObj.map.channel;
+                        locData.xpos = networkData.fileObj.map.x;
+                        locData.ypos = networkData.fileObj.map.y;
+                        plotRasterNetwork( networkAct, networkStats, ...
+                                           relativeSpikeTimes,locData, binSize, opDir, chipWellDir, ...
+                                           xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
+                                            baselineFiringRate);
+     
+                    end
+
+                wellStatus(z) ='SUCCESS';
+                catch ME
+                % Restart pool on parallel errors
+                if contains(ME.message,'parallel')
+                    delete(gcp('nocreate'));
+                    parpool(numCores);
+                else
+
+                       wellStatus(z) = "FAILED";
+                       skippedWells{z} = sprintf('[Run %d | Well %d] ERROR: %s\n', scan_runID, wellID, ME.message);
+
+                       % Log specific error per well
+                       fprintf(2, '[Run %d | Well %d] FAILED: %s\n', scan_runID, wellID, ME.message);
+                    if ~isempty(ME.stack)
+                        fprintf(2, 'In function: %s\n', ME.stack(1).name);
+                        fprintf(2, 'At line: %d\n', ME.stack(1).line);
+                        fprintf(2, 'Full Call Stack:\n');
+                        for si = 1:length(ME.stack)
+                            fprintf(2, '   [%02d] %s (line %d)\n', si, ME.stack(si).name, ME.stack(si).line);
+                        end
+                    end
+
+                    continue;
                 end
-                %totalTime = toc;  % Measure the total elapsed time after the loop
-    
-                 % Display total elapsed time
-                %fprintf('in Well %d , Total elapsed time for Basic calc: %f seconds\n', wellID,totalTime);  
-                %tic;
+            end
+                end  % parfor
 
-                %%  calculating the Interspikeiinterval observed in each channel
-                if  extMetricsFlag
-                ISIs = accumarray(relativeSpikeTimes.channel, relativeSpikeTimes.time, [], @(x) {diff(x)});
-                channelISIStrings = cellfun(@(x) strjoin(arrayfun(@num2str, x, 'UniformOutput', false), ','), ISIs, 'UniformOutput', false);
-                combinedISIString = strjoin(channelISIStrings, ';');   
-                extFileResults{z} = table(scan_runID, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
-                        {combinedISIString},...
-                       'VariableNames', {
-                'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-                 'ISIString'...
-                });
+                % Collect results
+                % only keep the non‐empty table cells
+                isTbl = cellfun(@(c) istable(c) && ~isempty(c), fileResults);
+                if any(isTbl)
+                    networkResults{k} = vertcat( fileResults{isTbl} );
+                else
+                    networkResults{k} = table();   % empty table if nothing found
                 end
-                %%
-              % Create a new row for the table, now including combinedISIString
-                fileResults{z} = table(scan_runID, scan_div, wellID, {neuronSourceType{1}}, hd5Date, {scan_chipID}, ...
-                       meanIBI, meanBurstPeak, meanBPNorm, meanAbsBP, ...
-                       nBursts, meanSpikesPerBurst, meanBurstDuration,...
-                       'VariableNames', {
-                'Run_ID', 'DIV', 'Well', 'NeuronType', 'Time', 'Chip_ID', ...
-                'IBI', 'Burst_Peak', 'Burst_Peak_Normalized', 'Burst_Peak_Abs', ...
-                'Number_Bursts', 'Spike_per_Burst', 'BurstDuration'...
-                });
+                skippedFiles{k}   = vertcat(skippedWells{~cellfun(@isempty,skippedWells)});
+                if extMetricsFlag
+                    allExtMetrics{k} = vertcat(extData{:});
+                end
 
-         
-               %totalTime = toc;  % Measure the total elapsed time after the loop
-    
-                 % Display total elapsed time
-                %fprintf('in Well %d Total elapsed time for ISI calc: %f seconds\n', wellID,totalTime); 
-
-
-
-
-                %%
-                if plotFig
-                 % Define time limits and corresponding directories for saving the plots
-                    %tic;
-                    % Create figure in the background
-                    f = figure('Color','w', 'Position', [0 0 400 800], 'Visible', 'off');
-                       
-                    % Plot raster and network activity
-                    subplot(2,1,1);
-                    mxw.plot.rasterPlot(networkData, 'Figure', false);
-                    box off;
-                    xlim([0 60]);
-                    ylim([1 max(relativeSpikeTimes.channel)]);
+                successFile = true;
+                catch ME
+                    % Structured error logging
+                    fprintf(2, '\n============================================\n');
+                    fprintf(2, 'Error in file: %s\n', fullPath);
+                    fprintf(2, 'Time: %s\n', datestr(now));
+                    fprintf(2, 'Error Message: %s\n', ME.message);
                 
-                    subplot(2,1,2);
-                    mxw.plot.networkActivity(networkAct, 'Threshold', thresholdBurst, 'Figure', false);
-                    box off;
-                    hold on;    
-                    plot(networkStats.maxAmplitudesTimes, networkStats.maxAmplitudesValues, 'or');
-                    plotFileName =  sprintf('Raster_BurstActivity_%s_WellID_%d_%s_DIV%d_%s', scan_runID_text, wellID, scan_chipID, scan_div, strrep(neuronSourceType{1}, ' ', ''));
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Figureformat',plotFileName);
-                    savefig(f, [fileNameBase '.fig']);
-                    
-                    ylim([0 ylimNetwork]);
-                    xlim([0 xlimNetwork])
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot60s',plotFileName);
-                           
-                           
-                    % Save in different formats
-                    print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
-                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
-                    
-
-                    %totalTime = toc;  % Measure the total elapsed time after the loop
-    
-                 % Display total elapsed time
-                    %fprintf('in Well %d Total elapsed time for plot and save for 60s: %f seconds\n', wellID,totalTime); 
-                    subplot(2,1,1);
-                    xlim([0 120])
-                    ylim([1 max(relativeSpikeTimes.channel)])
-                    subplot(2,1,2);
-                    xlim([0 120])
-                    ylim([0 ylimNetwork])
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot120s',plotFileName); 
-                  
-                    % Save in different formats
-                    print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
-                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
-
-    
-                 
-                    subplot(2,1,1);
-                    xlim([0 300])
-                    ylim([0 max(relativeSpikeTimes.channel)])
-                    subplot(2,1,2);
-                    xlim([0 300])
-                    ylim([0 ylimNetwork])
-                     % Assuming you want to display metrics above the raster plot
-                    textString = sprintf('# Bursts: %d | Mean Burst Duration: %.2fs | mean SpB: %.2f | mean IBI: %.2fs | Mean BP: %.2fs', nBursts,meanBurstDuration, meanSpikesPerBurst, meanIBI, meanBurstPeak);
-                    
-                    % Create one annotation box containing all the text entries
-                    % Adjust the position vector [x y width height] as needed
-                    annotation('textbox', [0.1, 0.425, 0.9, 0.1], 'String', textString, 'EdgeColor', 'none', 'HorizontalAlignment', 'center');
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot300s',plotFileName);
-
-                    % Save in different formats
-                    print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
-                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
-                    
-    
-    
-                    subplot(2,1,1);
-                    xlim([0 600])
-                    ylim([0 max(relativeSpikeTimes.channel)])
-                    subplot(2,1,2);
-                    xlim([0 600])
-                    ylim([0 ylimNetwork])
-                    fileNameBase = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', 'Plot600s',plotFileName);
-                    
-                        % Save the figure in PNG format
-                    print(f, [fileNameBase '.png'], '-dpng', '-r300');
-                    
-                    % Save the figure in EPS format
-                    print(f, [fileNameBase '.eps'], '-depsc', '-r300');
-                    
-
-                    close(f);
-                    %totalTime = toc;  % Measure the total elapsed time after the loop
-    
-                 % Display total elapsed time
-                     %fprintf('in Well %d Total elapsed time for plot and save all graphs: %f seconds\n', wellID,totalTime); 
-            end
-
-            end
-
+                    % Show where the error originated
+                    if ~isempty(ME.stack)
+                        fprintf(2, 'In function: %s\n', ME.stack(1).name);
+                        fprintf(2, 'At line: %d\n', ME.stack(1).line);
+                        fprintf(2, 'Full Call Stack:\n');
+                        for si = 1:length(ME.stack)
+                            fprintf(2, '   [%02d] %s (line %d)\n', si, ME.stack(si).name, ME.stack(si).line);
+                        end
+                    end
+                
+                    % Code excerpt around the error line
+                    try
+                        fileText = fileread(which(ME.stack(1).file));
+                        fileLines = strsplit(fileText, '\n');
+                        errLine = ME.stack(1).line;
+                        range = max(1, errLine-2):min(length(fileLines), errLine+2);
+                        fprintf(2, '\nCode excerpt:\n');
+                        for li = range
+                            mark = '';
+                            if li == errLine, mark = '>> '; else, mark = '   '; end
+                            fprintf(2, '%s%4d: %s\n', mark, li, fileLines{li});
+                        end
+                    catch
+                        fprintf(2, 'Could not load code excerpt.\n');
+                    end
+                
+                    fprintf(2, '============================================\n\n');
+                
+                    % Handle parallel pool recovery if needed
+                    if contains(ME.message, 'parallel')
+                        delete(gcp('nocreate'));
+                        parpool(numCores);
+                    else
+                        continue;
+                    end
         end
-       networkResults{k} = vertcat(fileResults{~cellfun(@isempty, fileResults)});
-       skippedFiles{k} = vertcat(skippedWells{~cellfun(@isempty, skippedWells)});
-       if extMetricsFlag
-           extNetworkResults{k} = vertcat(extFileResults{~cellfun(@isempty, extFileResults)});
-       end
-    end
+      end
+
+    %     if ~successFile
+    %         warning('Failed processing %s after %d attempts', fullPath, maxRetries);
+    %     end
+    % end  % for files
+
     delete(gcp('nocreate'));
-   % profile viewer;
-    
-    skippedFiles = vertcat(skippedFiles{~cellfun(@isempty, skippedFiles )});
-    % Concatenate all tables from each primary file into the final table
-    finalWriteTable = vertcat(networkResults{~cellfun(@isempty, networkResults)});
-    
-    writetable(finalWriteTable, fullfile(opDir,'Network_outputs/Compiled_Networks.csv'));
-    
+    delete(d);
+
+    % --- Write compiled CSV ---
+    tblOK    = cellfun(@(c) istable(c) && ~isempty(c), networkResults);
+    allResults = vertcat( networkResults{tblOK} );
+
+    csvPath = fullfile(opDir,'Network_outputs','Compiled_Networks.csv');
+    if isfile(csvPath), delete(csvPath); end
+    writetable(allResults, csvPath);
+
+    % --- Save extended metrics ---
     if extMetricsFlag
-
-        extendendMetricsTable =vertcat(extNetworkResults{~cellfun(@isempty, extNetworkResults)});
-        writetable(extendendMetricsTable, fullfile(opDir,'Network_outputs/Extended_Metrics.csv'));
+        save(fullfile(opDir,'Network_outputs','extendedMetrics.mat'),'allExtMetrics');
     end
 
-    if ~isempty(skippedFiles)
-        
-        fprintf(1,'Unable to read file with runID: %s, file(s) skipped.\n',skippedFiles);
-        %fprintf(1,'Unable to read file with runID: %s, file(s) skipped.\n',skippedFiles);
-    end
-    %printf(logFile,'Network analysis successfully compiled.\n');
-    fprintf(' Total elapsed time for execution: %f seconds\n', toc);
-    fprintf(1,'Network analysis successfully compiled.\n');
-
-    end
+    fprintf('Compilation complete. %d files processed in %.1fs\n', ...
+            numel(networkResults), toc);
 
 
+end
+
+
+
+    % function out = plotFRMatrices(data)
+    %             frbinSizes = [0.01,0.1,1,10];
+    %             if plotFRmatrix
+    %             for frbinSize = frbinSizes
+    % 
+    %                     % Ensure output directories exist for this bin size
+    %                     % Define directory paths
+    %                     firingRateMatrixFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('FiringRateMatrix_BinSize_%2f', frbinSize));
+    %                     heatmapFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('Heatmaps_BinSize_%2f', frbinSize));
+    %                     svdFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('SVD_BinSize_%2f', frbinSize));
+    %                     logheatmapFolder = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', sprintf('Log_Heatmaps_BinSize_%2f', frbinSize));
+    %                     % Create directories if they don't exist
+    %                     if ~isfolder(firingRateMatrixFolder)
+    %                         mkdir(firingRateMatrixFolder);
+    %                     end
+    %                     if ~isfolder(logheatmapFolder)
+    %                         mkdir(logheatmapFolder);
+    %                     end
+    %                     if ~isfolder(heatmapFolder)
+    %                         mkdir(heatmapFolder);
+    %                     end
+    %                     if ~isfolder(svdFolder)
+    %                         mkdir(svdFolder);
+    %                     end
+    %                     % Compute firing rate matrix
+    %                     binEdges = 0:frbinSize:networkData.fileObj.dataLenTime;
+    %                     firingRateMatrix = zeros(max(ch), length(binEdges) - 1);
+    %                     for chIdx = 1:max(ch)
+    %                         spikeTimes = ts(ch == chIdx);
+    %                         firingRateMatrix(chIdx, :) = histcounts(spikeTimes, binEdges);
+    %                     end
+    %                                             %%SVD computation
+    %                     [U, S, V] = svd(firingRateMatrix, 'econ');
+    % 
+    %                     % Extract the singular values from the diagonal matrix S
+    %                     singularValues = diag(S);
+    % 
+    %                     % Number of singular vectors (columns) to visualize
+    %                     %numSingularValues = length(singularValues);
+    %                     numSingularValues = 20;
+    % 
+    %                     % Create a single figure for combined visualization
+    %                     figure('Visible', 'off');
+    % 
+    %                     % Subplot 1: Singular values as a line plot
+    %                     subplot(3, 1, 1);
+    %                     plot(singularValues, '-o', 'LineWidth', 1.5);
+    %                     xlabel('Component number');
+    %                     ylabel('Singular value (variance explained)');
+    %                     title(sprintf('Singular values from SVD (Bin Size: %f)', frbinSize));
+    %                     grid on;
+    % 
+    %                     % Subplot 2: Heatmap of all left singular vectors (U)
+    %                     subplot(3, 1, 2);
+    %                     imagesc(U(:, 1:numSingularValues));  % Use all columns of U
+    %                     colorbar;
+    %                     xlabel('Singular vector index');
+    %                     ylabel('Channel');
+    %                     title('All left singular vectors (U)');
+    % 
+    %                     % Subplot 3: Heatmap of all right singular vectors (V)
+    %                     subplot(3, 1, 3);
+    %                     imagesc(V(:, 1:numSingularValues));  % Use all columns of V
+    %                     colorbar;
+    %                     xlabel('Singular vector index');
+    %                     ylabel('Time bin');
+    %                     title('All right singular vectors (V)');
+    % 
+    %                     % Save the combined figure
+    %                     combinedPlotPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity',...
+    %                         sprintf('SVD_BinSize_%2f', frbinSize),...
+    %                         sprintf('CombinedSVD_RunID%d_%s_WellID%d_DIV%d.png', scan_runID,scan_chipID ,wellID, scan_div));
+    %                     saveas(gcf, combinedPlotPath);
+    %                     close(gcf);
+    %                     % % Save firing rate matrix
+    %                     % firingRateMatrixPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', ...
+    %                     %     sprintf('FiringRateMatrix_BinSize_%.2f', frbinSize), ...
+    %                     %     sprintf('FiringRateMatrix_RunID%d_WellID%d.mat', scan_runID, wellID));
+    %                     % save(firingRateMatrixPath, 'firingRateMatrix');
+    % 
+    %                     % Generate and save heatmaps for 60s, 120s, and 300s
+    %                     timeIntervals = [60, 120, 300];
+    %                     for tIdx = 1:length(timeIntervals)
+    %                         tLimit = timeIntervals(tIdx);
+    %                         tBinIdx = find(binEdges <= tLimit, 1, 'last')-1;
+    %                         figure('Visible', 'off');
+    %                         imagesc(firingRateMatrix(:, 1:tBinIdx));
+    %                         title(sprintf('Firing Rate Heatmap (First %ds, Bin Size %2f)', tLimit, frbinSize));
+    %                         xlabel('Time Bins');
+    %                         ylabel('Channel');
+    %                         colorbar;
+    %                         colormap('hot');
+    %                         heatmapPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', ...
+    %                             sprintf('Heatmaps_BinSize_%2f', frbinSize), ...
+    %                             sprintf('Heatmap_RunID%d_%s_WellID%d_DIV%d_%ds.png', scan_runID,scan_chipID ,wellID, scan_div,tLimit));
+    %                         saveas(gcf, heatmapPath);
+    %                         close(gcf);
+    % 
+    %                         % Log-scaled heatmap
+    %                         figure('Visible', 'off');
+    %                         % Add 1 to avoid log(0) issues
+    %                         imagesc(log10(firingRateMatrix(:, 1:tBinIdx) + 1));
+    %                         title(sprintf('Log-Scaled Firing Rate Heatmap (First %ds, Bin Size %2f)', tLimit, frbinSize));
+    %                         xlabel('Time Bins');
+    %                         ylabel('Channel');
+    %                         colorbar;
+    %                         colormap('hot');
+    %                         logHeatmapPath = fullfile(opDir, 'Network_outputs', 'Raster_BurstActivity', ...
+    %                             sprintf('Log_Heatmaps_BinSize_%2f', frbinSize), ...
+    %                             sprintf('Log_Heatmap_RunID%d_%s_WellID%d_DIV%d_%ds.png', scan_runID,scan_chipID, wellID, scan_div, tLimit));
+    %                         saveas(gcf, logHeatmapPath);
+    %                         close(gcf);
+    %                     end
+    % 
+    %               end
+    %             end
+    % end
+    % 
+    % 
+    % 
+   
 
 
 

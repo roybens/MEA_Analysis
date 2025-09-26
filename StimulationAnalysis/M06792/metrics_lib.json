@@ -1,0 +1,1002 @@
+{
+    "instance": {
+        "name": "Instance",
+        "unit": "",
+        "description": ""
+    },
+    "wellNo": {
+        "name": "Well Number",
+        "unit": "",
+        "description": ""
+    },
+    "folderPath": {
+        "name": "Folder Path",
+        "unit": "",
+        "description": ""
+    },
+    "wellplateID": {
+        "name": "Wellplate ID",
+        "unit": "",
+        "description": ""
+    },
+    "runID": {
+        "name": "Assay Run ID",
+        "unit": "",
+        "description": ""
+    },
+    "assayTag": {
+        "name": "Assay Tag",
+        "unit": "",
+        "description": ""
+    },
+    "startTime": {
+        "name": "Start Time",
+        "unit": "",
+        "description": ""
+    },
+    "stopTime": {
+        "name": "Stop Time",
+        "unit": "",
+        "description": ""
+    },
+    "date": {
+        "name": "Date",
+        "unit": "",
+        "description": ""
+    },
+    "control": {
+        "name": "Control",
+        "unit": "",
+        "description": ""
+    },
+    "gain": {
+        "name": "Gain",
+        "unit": "",
+        "description": ""
+    },
+    "lsb": {
+        "name": "LSB",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "fs": {
+        "name": "Sampling Frequency",
+        "unit": "Hz",
+        "description": ""
+    },
+    "hpf": {
+        "name": "HPF",
+        "unit": "Hz",
+        "description": ""
+    },
+    "numberOfConfigurations": {
+        "name": "Number of Configurations",
+        "unit": "",
+        "description": ""
+    },
+    "durationPerConfiguration": {
+        "name": "Duration per Configuration",
+        "unit": "s",
+        "description": ""
+    },
+    "wellGroupName": {
+        "name": "Well Group Name",
+        "unit": "",
+        "description": ""
+    },
+    "wellGroupColor": {
+        "name": "Well Group Color",
+        "unit": "",
+        "description": ""
+    },
+    "analysisType": {
+        "name": "Analysis Type",
+        "unit": "",
+        "description": ""
+    },
+    "Plating Date": {
+        "name": "Plating Date",
+        "unit": "",
+        "description": ""
+    },
+    "div": {
+        "name": "DIV",
+        "unit": "days",
+        "description": ""
+    },
+    "frThreshold": {
+        "name": "Firing Rate Threshold",
+        "unit": "Hz",
+        "description": ""
+    },
+    "ampThreshold": {
+        "name": "Amplitude Threshold",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "isiThreshold": {
+        "name": "ISI Threshold",
+        "unit": "ms",
+        "description": ""
+    },
+    "smoothingWindowSize": {
+        "name": "Smoothing Window Size",
+        "unit": "s",
+        "description": ""
+    },
+    "burstThreshold": {
+        "name": "Burst Detection Threshold",
+        "unit": "rms",
+        "description": ""
+    },
+    "minPeakDistance": {
+        "name": "Minimum Peak Distance",
+        "unit": "s",
+        "description": ""
+    },
+    "startStopThreshold": {
+        "name": "Start-Stop Threshold",
+        "unit": "",
+        "description": ""
+    },
+    "noSpikesThreshold": {
+        "name": "Number of Spikes Threshold",
+        "unit": "",
+        "description": ""
+    },
+    "footprintCompletenessThreshold": {
+        "name": "Footprint Completeness Threshold",
+        "unit": "%",
+        "description": ""
+    },
+    "searchRadius": {
+        "name": "Search Radius",
+        "unit": "pixel",
+        "description": ""
+    },
+    "latencyThreshold": {
+        "name": "Latency Threshold",
+        "unit": "ms",
+        "description": ""
+    },
+    "anaWindowStart": {
+        "name": "Analysis Window Start",
+        "unit": "s",
+        "description": ""
+    },
+    "anaWindowDuration": {
+        "name": "Analysis Window Duration",
+        "unit": "s",
+        "description": ""
+    },
+    "binSize": {
+        "name": "Bin Size",
+        "unit": "ms",
+        "description": ""
+    },
+    "preStimulusTime": {
+        "name": "Pre-stimulus Time",
+        "unit": "s",
+        "description": ""
+    },
+    "postStimulusTime": {
+        "name": "Post-stimulus Time",
+        "unit": "s",
+        "description": ""
+    },
+    "cbarMax": {
+        "name": "Color Bar Maximum",
+        "unit": "Hz",
+        "description": ""
+    },
+    "activeArea": {
+        "name": "Active Area",
+        "unit": "%",
+        "description": ""
+    },
+    "firingRate_mean": {
+        "name": "Mean Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "firingRate_std": {
+        "name": "Firing Rate std",
+        "unit": "Hz",
+        "description": ""
+    },
+    "firingRate_CV": {
+        "name": "Firing Rate CV",
+        "unit": "",
+        "description": ""
+    },
+    "firingRate_median": {
+        "name": "Median Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "firingRate_P10": {
+        "name": "Firing Rate 10th percentile",
+        "unit": "Hz",
+        "description": ""
+    },
+    "firingRate_P90": {
+        "name": "Firing Rate 90th percentile",
+        "unit": "Hz",
+        "description": ""
+    },
+    "amplitude_mean": {
+        "name": "Mean Spike Amplitude",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitude_std": {
+        "name": "Spike Amplitude std",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitude_CV": {
+        "name": "Spike Amplitude CV",
+        "unit": "",
+        "description": ""
+    },
+    "amplitude_median": {
+        "name": "Median Spike Amplitude",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitude_P10": {
+        "name": "Spike Amplitude 10th percentile",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitude_P90": {
+        "name": "Spike Amplitude 90th percentile",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "ISI_mean": {
+        "name": "Mean ISI",
+        "unit": "ms",
+        "description": ""
+    },
+    "ISI_std": {
+        "name": "ISI std",
+        "unit": "ms",
+        "description": ""
+    },
+    "ISI_CV": {
+        "name": "ISI CV",
+        "unit": "",
+        "description": ""
+    },
+    "ISI_median": {
+        "name": "Median ISI",
+        "unit": "ms",
+        "description": ""
+    },
+    "ISI_P10": {
+        "name": "ISI 10th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "ISI_P90": {
+        "name": "ISI 90th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "electrodeNo": {
+        "name": "Electrode Number",
+        "unit": "",
+        "description": ""
+    },
+    "x": {
+        "name": "x Position",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "y": {
+        "name": "y Position",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "spikeCount": {
+        "name": "Electrode Spike Count",
+        "unit": "",
+        "description": ""
+    },
+    "elecFiringRate": {
+        "name": "Electrode Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "elecAmplitude": {
+        "name": "Electrode Spike Amplitude",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "elecISI_mean": {
+        "name": "Mean Electrode ISI",
+        "unit": "ms",
+        "description": ""
+    },
+    "elecISI_CV": {
+        "name": "Electrode ISI CV",
+        "unit": "",
+        "description": ""
+    },
+    "isActive": {
+        "name": "Active Electrode",
+        "unit": "",
+        "description": ""
+    },
+    "time": {
+        "name": "Spike Time",
+        "unit": "ms",
+        "description": ""
+    },
+    "amplitude": {
+        "name": "Spike Amplitude",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "ISI": {
+        "name": "ISI",
+        "unit": "ms",
+        "description": ""
+    },
+    "firingRate": {
+        "name": "Spike Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "burstFrequency": {
+        "name": "Burst Frequency",
+        "unit": "Hz",
+        "description": ""
+    },
+    "percSpikesinBursts": {
+        "name": "Spikes within Bursts",
+        "unit": "%",
+        "description": ""
+    },
+    "SPB_mean": {
+        "name": "Mean Spikes per Burst",
+        "unit": "",
+        "description": ""
+    },
+    "SPB_std": {
+        "name": "Spikes per Burst std",
+        "unit": "",
+        "description": ""
+    },
+    "SPB_CV": {
+        "name": "Spikes per Burst CV",
+        "unit": "",
+        "description": ""
+    },
+    "SPB_median": {
+        "name": "Median Spikes per Burst",
+        "unit": "",
+        "description": ""
+    },
+    "SPB_P10": {
+        "name": "Spikes per Burst 10th percentile",
+        "unit": "",
+        "description": ""
+    },
+    "SPB_P90": {
+        "name": "Spikes per Burst 90th percentile",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch_mean": {
+        "name": "Mean Spikes per Burst per Electrode",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch_std": {
+        "name": "Spikes per Burst per Electrode std",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch_CV": {
+        "name": "Spikes per Burst per Electrode CV",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch_median": {
+        "name": "Median Spikes per Burst per Electrode",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch_P10": {
+        "name": "Spikes per Burst per Electrode 10th percentile",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch_P90": {
+        "name": "Spikes per Burst per Electrode 90th percentile",
+        "unit": "",
+        "description": ""
+    },
+    "burstDur_mean": {
+        "name": "Mean Burst Duration",
+        "unit": "s",
+        "description": ""
+    },
+    "burstDur_std": {
+        "name": "Burst Duration std",
+        "unit": "s",
+        "description": ""
+    },
+    "burstDur_CV": {
+        "name": "Burst Duration CV",
+        "unit": "",
+        "description": ""
+    },
+    "burstDur_median": {
+        "name": "Median Burst Duration",
+        "unit": "s",
+        "description": ""
+    },
+    "burstDur_P10": {
+        "name": "Burst Duration 10th percentile",
+        "unit": "s",
+        "description": ""
+    },
+    "burstDur_P90": {
+        "name": "Burst Duration 90th percentile",
+        "unit": "s",
+        "description": ""
+    },
+    "burstPeak_mean": {
+        "name": "Mean Burst Peak Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "burstPeak_std": {
+        "name": "Burst Peak Firing Rate std",
+        "unit": "Hz",
+        "description": ""
+    },
+    "burstPeak_CV": {
+        "name": "Burst Peak Firing Rate CV",
+        "unit": "",
+        "description": ""
+    },
+    "burstPeak_median": {
+        "name": "Median Burst Peak Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "burstPeak_P10": {
+        "name": "Burst Peak Firing Rate 10th percentile",
+        "unit": "Hz",
+        "description": ""
+    },
+    "burstPeak_P90": {
+        "name": "Burst Peak Firing Rate 90th percentile",
+        "unit": "Hz",
+        "description": ""
+    },
+    "IBI_mean": {
+        "name": "Mean IBI",
+        "unit": "s",
+        "description": ""
+    },
+    "IBI_std": {
+        "name": "IBI std",
+        "unit": "s",
+        "description": ""
+    },
+    "IBI_CV": {
+        "name": "IBI CV",
+        "unit": "",
+        "description": ""
+    },
+    "IBI_median": {
+        "name": "Median IBI",
+        "unit": "s",
+        "description": ""
+    },
+    "IBI_P10": {
+        "name": "IBI 10th percentile",
+        "unit": "s",
+        "description": ""
+    },
+    "IBI_P90": {
+        "name": "IBI 90th percentile",
+        "unit": "s",
+        "description": ""
+    },
+    "burstISI_mean": {
+        "name": "Mean ISI within Burst",
+        "unit": "ms",
+        "description": ""
+    },
+    "burstISI_std": {
+        "name": "ISI within Burst std",
+        "unit": "ms",
+        "description": ""
+    },
+    "burstISI_CV": {
+        "name": "ISI within Burst CV",
+        "unit": "",
+        "description": ""
+    },
+    "burstISI_median": {
+        "name": "Median ISI within Burst",
+        "unit": "ms",
+        "description": ""
+    },
+    "burstISI_P10": {
+        "name": "ISI within Burst 10th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "burstISI_P90": {
+        "name": "ISI within Burst 90th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "nonburstISI_mean": {
+        "name": "Mean ISI outside Burst",
+        "unit": "ms",
+        "description": ""
+    },
+    "nonburstISI_std": {
+        "name": "ISI outside Burst std",
+        "unit": "ms",
+        "description": ""
+    },
+    "nonburstISI_CV": {
+        "name": "ISI outside Burst CV",
+        "unit": "",
+        "description": ""
+    },
+    "nonburstISI_median": {
+        "name": "Median ISI outside Burst",
+        "unit": "ms",
+        "description": ""
+    },
+    "nonburstISI_P10": {
+        "name": "ISI outside Burst 10th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "nonburstISI_P90": {
+        "name": "ISI outside Burst 90th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "SPB": {
+        "name": "Spikes per Burst",
+        "unit": "",
+        "description": ""
+    },
+    "SPBch": {
+        "name": "Spikes per Burst per Electrode",
+        "unit": "",
+        "description": ""
+    },
+    "burstDur": {
+        "name": "Burst Duration",
+        "unit": "s",
+        "description": ""
+    },
+    "burstPeak": {
+        "name": "Burst Peak Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "IBI": {
+        "name": "IBI",
+        "unit": "s",
+        "description": ""
+    },
+    "bISI_mean": {
+        "name": "Mean Burst ISI",
+        "unit": "ms",
+        "description": ""
+    },
+    "bISI_CV": {
+        "name": "Burst ISI CV",
+        "unit": "",
+        "description": ""
+    },
+    "noDetectedNeurons": {
+        "name": "Number of Detected Neurons",
+        "unit": "",
+        "description": ""
+    },
+    "neuronConductionVel_mean": {
+        "name": "Mean Neuron Conduction Velocity",
+        "unit": "m/s",
+        "description": ""
+    },
+    "neuronConductionVel_std": {
+        "name": "Neuron Conduction Velocity std",
+        "unit": "m/s",
+        "description": ""
+    },
+    "neuronConductionVel_cv": {
+        "name": "Neuron Conduction Velocity CV",
+        "unit": "",
+        "description": ""
+    },
+    "neuronConductionVel_median": {
+        "name": "Median Neuron Conduction Velocity",
+        "unit": "m/s",
+        "description": ""
+    },
+    "neuronConductionVel_P10": {
+        "name": "Neuron Conduction Velocity 10th percentile",
+        "unit": "m/s",
+        "description": ""
+    },
+    "neuronConductionVel_P90": {
+        "name": "Neuron Conduction Velocity 90th percentile",
+        "unit": "m/s",
+        "description": ""
+    },
+    "totalAxonLen_mean": {
+        "name": "Mean Total Axon Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "totalAxonLen_std": {
+        "name": "Total Axon Length std",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "totalAxonLen_cv": {
+        "name": "Total Axon Length CV",
+        "unit": "",
+        "description": ""
+    },
+    "totalAxonLen_median": {
+        "name": "Median Total Axon Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "totalAxonLen_P10": {
+        "name": "Total Axon Length 10th percentile",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "totalAxonLen_P90": {
+        "name": "Total Axon Length 90th percentile",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestBranchLen_mean": {
+        "name": "Mean Longest Branch Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestBranchLen_std": {
+        "name": "Longest Branch Length std",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestBranchLen_cv": {
+        "name": "Longest Branch Length CV",
+        "unit": "",
+        "description": ""
+    },
+    "longestBranchLen_median": {
+        "name": "Median Longest Branch Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestBranchLen_P10": {
+        "name": "Longest Branch Length 10th percentile",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestBranchLen_P90": {
+        "name": "Longest Branch Length 90th percentile",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestDistFromInitSite_mean": {
+        "name": "Mean Longest Distance From Initiation Site",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestDistFromInitSite_std": {
+        "name": "Longest Distance From Initiation Site std",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestDistFromInitSite_cv": {
+        "name": "Longest Distance From Initiation Site CV",
+        "unit": "",
+        "description": ""
+    },
+    "longestDistFromInitSite_median": {
+        "name": "Median Longest Distance From Initiation Site",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestDistFromInitSite_P10": {
+        "name": "Longest Distance From Initiation Site 10th percentile",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestDistFromInitSite_P90": {
+        "name": "Longest Distance From Initiation Site 90th percentile",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestLat_mean": {
+        "name": "Mean Longest Latency",
+        "unit": "ms",
+        "description": ""
+    },
+    "longestLat_std": {
+        "name": "Longest Latency std",
+        "unit": "ms",
+        "description": ""
+    },
+    "longestLat_cv": {
+        "name": "Longest Latency CV",
+        "unit": "",
+        "description": ""
+    },
+    "longestLat_median": {
+        "name": "Median Longest Latency",
+        "unit": "ms",
+        "description": ""
+    },
+    "longestLat_P10": {
+        "name": "Longest Latency 10th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "longestLat_P90": {
+        "name": "Longest Latency 90th percentile",
+        "unit": "ms",
+        "description": ""
+    },
+    "amplitudeInitSite_mean": {
+        "name": "Mean Amplitude at Initiation Site",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitudeInitSite_std": {
+        "name": "Amplitude at Initiation Site std",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitudeInitSite_cv": {
+        "name": "Amplitude at Initiation Site CV",
+        "unit": "",
+        "description": ""
+    },
+    "amplitudeInitSite_median": {
+        "name": "Median Amplitude at Initiation Site",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitudeInitSite_P10": {
+        "name": "Amplitude at Initiation Site 10th percentile",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "amplitudeInitSite_P90": {
+        "name": "Amplitude at Initiation Site 90th percentile",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "neuronConductionVel": {
+        "name": "Neuron Conduction Velocity",
+        "unit": "m/s",
+        "description": ""
+    },
+    "totalAxonLen": {
+        "name": "Total Axon Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestBranchLen": {
+        "name": " Longest Branch Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestDistFromInitSite": {
+        "name": "Longest Distance From Initiation Site",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "longestLat": {
+        "name": "Longest Latency",
+        "unit": "ms",
+        "description": ""
+    },
+    "amplitudeInitSite": {
+        "name": "Amplitude at Initiation Site",
+        "unit": "\u00b5V",
+        "description": ""
+    },
+    "totNoSpikes": {
+        "name": "Total Number of Spikes",
+        "unit": "",
+        "description": ""
+    },
+    "neuronFiringRate": {
+        "name": "Neuron Firing Rate",
+        "unit": "Hz",
+        "description": ""
+    },
+    "isiViolationRate": {
+        "name": "ISI Violation Rate",
+        "unit": "",
+        "description": ""
+    },
+    "fisherProjectionDistance": {
+        "name": "Fisher Projection Distance",
+        "unit": "",
+        "description": ""
+    },
+    "silhouetteScore": {
+        "name": "Silhouette Score",
+        "unit": "",
+        "description": ""
+    },
+    "spikesNoPerConfig_mean": {
+        "name": "Mean Number Spikes per Config",
+        "unit": "",
+        "description": ""
+    },
+    "completeness": {
+        "name": "Footprint Completeness",
+        "unit": "%",
+        "description": ""
+    },
+    "branchLen": {
+        "name": "Branch Length",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "branchConductionVel": {
+        "name": "Branch Conduction Velocity",
+        "unit": "m/s",
+        "description": ""
+    },
+    "conductionVelFit": {
+        "name": "Conduction Velocity Fit",
+        "unit": "",
+        "description": ""
+    },
+    "distFromInitSite": {
+        "name": "Distance From Initiation Site",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "latFromInitSite": {
+        "name": "Latency From Initiation Site",
+        "unit": "ms",
+        "description": ""
+    },
+    "cumDistance": {
+        "name": "Cumulated Distance",
+        "unit": "\u00b5m",
+        "description": ""
+    },
+    "voltageAmplitude": {
+        "name": "Stimulation Voltage Amplitude",
+        "unit": "mV",
+        "description": ""
+    },
+    "activeArea_mean": {
+        "name": "Mean Active Area",
+        "unit": "%",
+        "description": ""
+    },
+    "activeArea_std": {
+        "name": "Active Area std",
+        "unit": "%",
+        "description": ""
+    },
+    "activeArea_CV": {
+        "name": "Active Area CV",
+        "unit": "",
+        "description": ""
+    },
+    "activeArea_median": {
+        "name": "Median Active Area",
+        "unit": "%",
+        "description": ""
+    },
+    "activeArea_P10": {
+        "name": "Active Area 10th percentile",
+        "unit": "%",
+        "description": ""
+    },
+    "activeArea_P90": {
+        "name": "Active Area 90th percentile",
+        "unit": "%",
+        "description": ""
+    },
+    "totalSpikes_mean": {
+        "name": "Mean Total Spikes",
+        "unit": "",
+        "description": ""
+    },
+    "totalSpikes_std": {
+        "name": "Total Spikes std",
+        "unit": "",
+        "description": ""
+    },
+    "totalSpikes_CV": {
+        "name": "Total Spikes CV",
+        "unit": "",
+        "description": ""
+    },
+    "totalSpikes_median": {
+        "name": "Median Total Spikes",
+        "unit": "",
+        "description": ""
+    },
+    "totalSpikes_P10": {
+        "name": "Total Spikes 10th percentile",
+        "unit": "",
+        "description": ""
+    },
+    "totalSpikes_P90": {
+        "name": "Total Spikes 90th percentile",
+        "unit": "",
+        "description": ""
+    },
+    "evokedActivityPeak_mean": {
+        "name": "Mean Evoked Activity Peak",
+        "unit": "spikes/bin",
+        "description": ""
+    },
+    "evokedActivityPeak_std": {
+        "name": "Evoked Activity Peak std",
+        "unit": "spikes/bin",
+        "description": ""
+    },
+    "evokedActivityPeak_CV": {
+        "name": "Evoked Activity Peak CV",
+        "unit": "",
+        "description": ""
+    },
+    "evokedActivityPeak_median": {
+        "name": "Median Evoked Activity Peak",
+        "unit": "spikes/bin",
+        "description": ""
+    },
+    "evokedActivityPeak_P10": {
+        "name": "Evoked Activity Peak 10th percentile",
+        "unit": "spikes/bin",
+        "description": ""
+    },
+    "evokedActivityPeak_P90": {
+        "name": "Evoked Activity Peak 90th percentile",
+        "unit": "spikes/bin",
+        "description": ""
+    },
+    "preStimulationActiveArea": {
+        "name": "Pre-Stimulation Active Area",
+        "unit": "%",
+        "description": ""
+    },
+    "postStimulationActiveArea": {
+        "name": "Post-Stimulation Active Area",
+        "unit": "%",
+        "description": ""
+    },
+    "totalSpikes": {
+        "name": "Total Spikes",
+        "unit": "",
+        "description": ""
+    },
+    "evokedActivityPeak": {
+        "name": "Evoked Activity Peak",
+        "unit": "spikes/bin",
+        "description": ""
+    }
+}

@@ -1,14 +1,14 @@
 clear all
 close all
 
-
-matFile = '/home/mmp/disktb/mmpatil/MEA_Analysis/IPNAnalysis/Organoid.mat';
-
-load(matFile);
-
-load
-
-% Burst Parameters.
+% 
+% matFile = '/home/mmp/disktb/mmpatil/MEA_Analysis/IPNAnalysis/Organoid.mat';
+% 
+% load(matFile);
+% 
+% load
+% 
+% % Burst Parameters.
 
 
 % set Gaussian kernel standard deviation [s] (smoothing window)
@@ -24,7 +24,7 @@ use_fixed_threshold = false;
 % Set the threshold to find the start and stop time of the bursts. (start-stop threshold)
 thresholdStartStop = 1; %0.3
 
-dataFile = '/mnt/harddrive-2/Organoids_Mandeep_Fink_Lab/Cdkl5_Organoids_Mano0855-D/221118/16719/Network/000032/data.raw.h5';
+dataFile = '/mnt/disk20tb/PrimaryNeuronData/Maxtwo/CDKL5-E6D_T1_C1_05152024/CDKL5-E6D_T1_C1_05152024/240604/M07039/Network/000070/data.raw.h5';
 
 % Set Threshold function for later use
 threshold_fn = 'Threshold';
