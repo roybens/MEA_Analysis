@@ -1,6 +1,7 @@
 '''process each unit template, generate axon reconstructions and analytics'''
 
-from AxonReconPipeline.src.lib_axon_velocity_functions import *
+from venv import logger
+from lib_axon_velocity_functions import *
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -11,17 +12,65 @@ from axon_velocity import get_default_graph_velocity_params
 from copy import deepcopy
 import shutil
 from scipy.signal import find_peaks
+from scipy.spatial import KDTree
+
+
+def sinc_interp(x, s, u):
+    """
+    Interpolates x at the indices u, using the indices s. This function assumes x is sampled
+    at regular intervals given by s, and interpolates it to find the values at the positions u.
+
+    Parameters:
+    - x: The original signal.
+    - s: The original sample indices.
+    - u: The desired interpolated indices.
+
+    Returns:
+    - The interpolated signal.
+    """
+    sinc_matrix = np.tile(u, (len(s), 1)) - np.tile(s[:, np.newaxis], (1, len(u)))
+    return np.dot(x, np.sinc(sinc_matrix))
+
+def upsample_whitaker_shannon(template, target_fs=200000, original_fs=10000):
+    """
+    Upsamples the data using Whitaker-Shannon interpolation.
+    
+    Parameters:
+    - template: 2D array where each row corresponds to a channel and each column is a time point.
+    - target_fs: The target sampling rate in Hz (default is 200 kHz).
+    - original_fs: The original sampling rate in Hz (default is 10 kHz).
+    
+    Returns:
+    - upsampled_template: The upsampled template.
+    """
+    num_channels, num_samples = template.shape
+    
+    # Original sample indices
+    original_indices = np.arange(num_samples)
+    
+    # Desired upsampled indices
+    upsample_factor = target_fs / original_fs
+    new_num_samples = int(num_samples * upsample_factor)
+    upsampled_indices = np.linspace(0, num_samples - 1, new_num_samples)
+    
+    # Perform the interpolation
+    upsampled_template = np.zeros((num_channels, new_num_samples))
+    
+    for channel in range(num_channels):
+        upsampled_template[channel, :] = sinc_interp(template[channel, :], original_indices, upsampled_indices)
+    
+    return upsampled_template
 
 def estimate_background_noise(template, peak_threshold=0.01):
     """
-    Cuts out windows around each spike in the template and estimates the background noise.
+    Cuts out windows around each spike in the template and estimates the background noise for each channel.
     
     Parameters:
     - template: 2D array where each row corresponds to a channel and each column is a time point.
     - peak_threshold: Threshold multiplier for peak detection based on the maximum amplitude across all channels.
     
     Returns:
-    - noise_std: Estimated standard deviation of the background noise for each channel.
+    - noise_std_per_channel: A list of estimated standard deviations of the background noise for each channel.
     """
     
     num_channels, num_timepoints = template.shape
@@ -32,8 +81,8 @@ def estimate_background_noise(template, peak_threshold=0.01):
     # Set the threshold for peak detection
     threshold = peak_threshold * global_max_amplitude
     
-    # Initialize an array to store the noise data
-    noise_data = []
+    # Initialize a list to store the noise standard deviations for each channel
+    noise_std_per_channel = []
     
     for channel in range(num_channels):
         # Get the template for the current channel
@@ -64,30 +113,180 @@ def estimate_background_noise(template, peak_threshold=0.01):
             mask[start:end] = False
         
         # Collect noise data excluding windows around peaks
-        noise_data.append(signal[mask])
+        noise_data = signal[mask]
+
+        # Calculate the standard deviation of the noise for this channel
+        noise_std_per_channel.append(np.std(noise_data))
     
-    return noise_data
+    return noise_std_per_channel
+
+
+def divide_into_frames(template, frame_interval=50e-6, original_fs=10000):
+    target_fs = 200000  # 200 kHz for finer temporal resolution
+    upsampled_template = upsample_whitaker_shannon(template, target_fs=target_fs, original_fs=original_fs)
+    
+    num_channels, num_samples_upsampled = upsampled_template.shape
+    
+    # Calculate the number of samples corresponding to the frame interval
+    samples_per_frame = int(frame_interval * target_fs)
+    
+    # Generate the frame indices
+    frame_indices = np.arange(0, num_samples_upsampled, samples_per_frame)
+    
+    # Extract frames
+    frames = [upsampled_template[:, i:i+1] for i in frame_indices]
+    
+    # Find the homing frame and shift
+    homing_frame_idx = find_homing_frame(frames)
+    shifted_frames = shift_frames_to_include_homing(frames, homing_frame_idx)
+    
+    return shifted_frames
+
+def find_homing_frame(frames):
+    """
+    Find the homing frame, which contains the absolute peak value in time.
+    Args:
+        frames (list of numpy.ndarray): List of frames from `divide_into_frames`.
+    
+    Returns:
+        int: The index of the homing frame.
+    """
+    max_peak = -np.inf
+    homing_frame_idx = 0
+    for idx, frame in enumerate(frames):
+        peak_in_frame = np.max(np.abs(frame))
+        if peak_in_frame > max_peak:
+            max_peak = peak_in_frame
+            homing_frame_idx = idx
+    return homing_frame_idx
+
+def shift_frames_to_include_homing(frames, homing_frame_idx):
+    """
+    Shift timing of frames so that the homing frame is included.
+    Args:
+        frames (list of numpy.ndarray): List of frames from `divide_into_frames`.
+        homing_frame_idx (int): The index of the homing frame.
+    
+    Returns:
+        list: The shifted frames.
+    """
+    return frames[homing_frame_idx:] + frames[:homing_frame_idx]
+
+from scipy.spatial import KDTree
+
+def channel_selector(time_frames, noise_thresholds, radius_thresholds, locations, previously_selected_channels=None):
+    selected_channels = []
+
+    for pass_idx in range(3):  # Three passes
+        noise_threshold = noise_thresholds[pass_idx]
+        radius_threshold = radius_thresholds[pass_idx]
+        
+        for t, frame in enumerate(time_frames):
+            peak_channels = np.where(frame > noise_threshold)[0]
+            
+            groups = group_contiguous_channels(peak_channels, locations, radius_threshold)
+            
+            if pass_idx == 0:
+                selected_in_frame = [max(group, key=lambda ch: frame[ch]) for group in groups]
+            else:
+                if previously_selected_channels is None or len(previously_selected_channels) == 0:
+                    selected_in_frame = peak_channels  # If there are no previous channels, just select from peak_channels
+                else:
+                    kd_tree = KDTree(locations[previously_selected_channels])  # Use locations of previously selected channels
+                    selected_in_frame = []
+                    for ch in peak_channels:
+                        dist, idx = kd_tree.query([locations[ch]], distance_upper_bound=radius_threshold)
+                        if dist[0] < np.inf:  # If within radius, select the channel
+                            selected_in_frame.append(ch)
+
+            selected_channels.extend(selected_in_frame)
+            previously_selected_channels = np.array(selected_in_frame, dtype=int)
+
+    return selected_channels
+
+
+
+
+from scipy.spatial import KDTree
+
+def group_contiguous_channels(peak_channels, locations, radius_threshold):
+    # Convert radius threshold from microns to index distance if needed
+    radius_threshold = radius_threshold / 17.5  # assuming 17.5 microns between channels
+    
+    # Create a KDTree using the locations of the peak channels
+    kdtree = KDTree(locations[peak_channels])
+    
+    groups = []
+    visited = set()
+    
+    for i, ch in enumerate(peak_channels):
+        if i in visited:
+            continue
+        # Query the KDTree to find all neighbors within the radius threshold
+        indices = kdtree.query_ball_point(locations[ch], radius_threshold)
+        group = set(indices)
+        
+        # Mark these indices as visited
+        visited.update(group)
+        
+        # Convert the set of indices back to the actual channel numbers
+        grouped_channels = peak_channels[list(group)]
+        groups.append(grouped_channels)
+    
+    return groups
+
+
 
 def skeletonize(template, locations, params, plot_dir, fresh_plots, unit_id):
+    # Estimate the noise standard deviation
+    noise_std = estimate_background_noise(template)
+
     # Ensure the plot directory exists
     frame_dir = os.path.join(plot_dir, f"frames_unit_{unit_id}")
     os.makedirs(frame_dir, exist_ok=True)
-    
+
     # Template Propagation - show signal propagation through channels selected
     skeleton_params = params.copy()
-
     skeleton_params.update({
         'detect_threshold': 0.05,
         'remove_isolated': False,
         'peak_std_threshold': None, 
         'init_delay': 0.1,
     })
+    
+    # Generate GraphAxonTracking object
     gtr = GraphAxonTracking(template, locations, 10000, **skeleton_params)
+    gtr.noise_std = noise_std
+
     gtr.select_channels()
     try: 
         plot_template_propagation(gtr, plot_dir, unit_id, title='test_prop', fresh_plots=fresh_plots)
     except Exception as e: 
         plt.close()
+
+    # Use Channel_Selector to perform the multi-pass selection
+    time_frames = divide_into_frames(template)
+    homing_frame_idx = find_homing_frame(time_frames)
+    time_frames = shift_frames_to_include_homing(time_frames, homing_frame_idx)
+    
+    # Set thresholds for passes
+    noise_thresholds = [9 * gtr.noise_std, 2 * gtr.noise_std, 1 * gtr.noise_std]
+    radius_thresholds = [4000, 50, 100]
+
+    selected_channels = channel_selector(time_frames, noise_thresholds, radius_thresholds)
+
+    if selected_channels is None:
+        print("Error: channel_selector returned None")
+        return []
+    
+    # Now use these selected channels for further processing
+    gtr.selected_channels = selected_channels
+
+    try: 
+        plot_template_propagation(gtr, plot_dir, unit_id, title='test_prop', fresh_plots=fresh_plots)
+    except Exception as e: 
+        plt.close()
+
     # Template Plot
     try:
         kwargs = {
@@ -135,39 +334,123 @@ def skeletonize(template, locations, params, plot_dir, fresh_plots, unit_id):
 
 def approx_milos_tracking(template_dvdt, locations, params, plot_dir, fresh_plots, **kwargs):
     #skeletonize
-    unit_id = 0
-    skeleton = skeletonize(template_dvdt, locations, params, plot_dir, fresh_plots, unit_id)
+    #unit_id = 0
+    #skeleton = skeletonize(template_dvdt, locations, params, plot_dir, fresh_plots, unit_id)
     
-    simulated_background_signals = estimate_background_noise(template_dvdt, peak_threshold=params['detect_threshold'])
-    noise = np.array([np.std(signal) for signal in simulated_background_signals])
-    noise = np.nanmean(noise)
+    #simulated_background_signals = estimate_background_noise(template_dvdt, peak_threshold=params['detect_threshold'])
+    #noise = np.array(simulated_background_signals)
+    #noise = np.nanmean(noise)
+    gtr = GraphAxonTracking(template_dvdt, locations, 10000, **params)
 
-    #First pass
-    std_level = 9
-    params9 = params.copy()
-    params9.update({
-        'detection_type': 'absolute',
-        'detect_threshold': noise*std_level,
-        'kurt_threshold': params['kurt_threshold']*std_level,
-        'remove_isolated': False,
-        'peak_std_threshold': None,
-        'init_delay': 0.05,
-        'max_distance_to_init': 4000.0,
-        'max_distance_for_edge': 4000.0,
-        'edge_dist_amp_ratio': 1,
-    })
-    milosh_dir = Path(os.path.join(plot_dir, 'milos_frames'))
-    if os.path.exists(milosh_dir) is False: os.makedirs(milosh_dir)
-    suffix = 'frame1'
-    gtr9 = GraphAxonTracking(template_dvdt, locations, 10000, **params9)
-    gtr9.select_channels()
-    plot_selected_channels_helper(f"Selected after detection threshold: {gtr9._detect_threshold} uV", np.array(list(gtr9._selected_channels_detect)), gtr9.locations, f"detection_threshold{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
-    plot_selected_channels_helper(f"Selected after kurtosis threshold: {gtr9._kurt_threshold}", np.array(list(gtr9._selected_channels_kurt)), gtr9.locations, f"kurt_threshold{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
-    plot_selected_channels_helper(f"Selected after init delay threshold: {gtr9._init_delay} ms", np.array(list(gtr9._selected_channels_init)), gtr9.locations, f"init_delay_threshold{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
-    plot_selected_channels_helper("Selected after all thresholds", gtr9.selected_channels, gtr9.locations, f"all_thresholds{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
-    print()
+    successful_recons = {str(plot_dir): {"successful_units": {}}}
+    analysis_options = {'generate_animation': False}
+    
+    # Calculate noise standard deviation
+    noise_std = np.std(template_dvdt)  
+    
+    time_frames = divide_into_frames(template_dvdt)
+    noise_thresholds = [9 * noise_std, 2 * noise_std, 1 * noise_std]
+    radius_thresholds = [4000, 50, 100]
+    
+    # Pass the locations to the channel_selector function
+    custom_selected_channels = channel_selector(time_frames, noise_thresholds, radius_thresholds, locations)
+    
+    #skeletonized_pathways = skeletonize(template_dvdt, locations, params, plot_dir, fresh_plots, unit_id=0, selected_channels=custom_selected_channels)
+    
+    gtr.selected_channels = custom_selected_channels
+    gtr.track_axons()
+    
+    paths_files_generated = []
+    unit_id = 485 
+    suffix = ""  
 
-def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=None):
+    try:
+        # Generate Axon Reconstruction Heuristics
+        generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, suffix=f"_{suffix}", fresh_plots=True, figsize=(20, 10))
+        paths_files_generated.append(plot_dir / f"axon_reconstruction_heuristics{suffix}.png")
+    except Exception as e:
+        if logger: 
+            logger.info(f"unit {unit_id}_{suffix} failed to generate axon_reconstruction_heuristics, error: {e}")
+        plt.close()
+
+    # Generate Axon Reconstruction Raw
+    try:
+        generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, plot_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False)
+        generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, plot_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True)
+        paths_files_generated.append(plot_dir / f"axon_reconstruction_raw{suffix}.png")
+        paths_files_generated.append(plot_dir / f"axon_reconstruction_raw{suffix}_full.png")
+    except Exception as e:
+        if logger: 
+            logger.info(f"unit {unit_id}_{suffix} failed to generate axon_reconstruction_raw, error: {e}")
+        plt.close()
+
+    # Generate Axon Reconstruction Clean
+    try:
+        generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, plot_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False)
+        generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, plot_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True)
+        paths_files_generated.append(plot_dir / f"axon_reconstruction_clean{suffix}.png")
+        paths_files_generated.append(plot_dir / f"axon_reconstruction_clean{suffix}_full.png")
+    except Exception as e:
+        if logger: 
+            logger.info(f"unit {unit_id}_{suffix} failed to generate axon_reconstruction_clean, error: {e}")
+        plt.close()
+
+    # Generate Axon Reconstruction Velocities
+    try:
+        generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, suffix=f"_{suffix}")
+        paths_files_generated.append(plot_dir / f"axon_reconstruction_velocities{suffix}.png")
+    except Exception as e:
+        if logger: 
+            logger.info(f"unit {unit_id}_{suffix} failed to generate axon_reconstruction_velocities, error: {e}")
+        plt.close()
+
+    # Optional: Animation generation if switch is turned on
+    switch = False  
+    if switch:
+        try:
+            assert analysis_options['generate_animation'] == True, "generate_animation set to False. Skipping template map animation generation."
+            kwargs = {
+                'template': template_dvdt,
+                'locations': locations,
+                'gtr': gtr,
+                'elec_size': 8,
+                'cmap': 'viridis',
+                'log': False,
+                'save_path': f"{plot_dir}/template_map_{unit_id}_{suffix}.gif",
+            }
+            play_template_map_wrapper(**kwargs)
+            paths_files_generated.append(kwargs['save_path'])
+        except Exception as e:
+            if logger: 
+                logger.info(f"unit {unit_id}_{suffix} failed to play template map, error: {e}")
+            plt.close()
+
+    # #First pass
+    # std_level = 9
+    # params9 = params.copy()
+    # params9.update({
+    #     'detection_type': 'absolute',
+    #     'detect_threshold': noise*std_level,
+    #     'kurt_threshold': params['kurt_threshold']*std_level,
+    #     'remove_isolated': False,
+    #     'peak_std_threshold': None,
+    #     'init_delay': 0.05,
+    #     'max_distance_to_init': 4000.0,
+    #     'max_distance_for_edge': 4000.0,
+    #     'edge_dist_amp_ratio': 1,
+    # })
+    # milosh_dir = Path(os.path.join(plot_dir, 'milos_frames'))
+    # if os.path.exists(milosh_dir) is False: os.makedirs(milosh_dir)
+    # suffix = 'frame1'
+    # gtr9 = GraphAxonTracking(template_dvdt, locations, 10000, **params9)
+    # gtr9.select_channels()
+    # plot_selected_channels_helper(f"Selected after detection threshold: {gtr9._detect_threshold} uV", np.array(list(gtr9._selected_channels_detect)), gtr9.locations, f"detection_threshold{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
+    # plot_selected_channels_helper(f"Selected after kurtosis threshold: {gtr9._kurt_threshold}", np.array(list(gtr9._selected_channels_kurt)), gtr9.locations, f"kurt_threshold{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
+    # plot_selected_channels_helper(f"Selected after init delay threshold: {gtr9._init_delay} ms", np.array(list(gtr9._selected_channels_init)), gtr9.locations, f"init_delay_threshold{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
+    # plot_selected_channels_helper("Selected after all thresholds", gtr9.selected_channels, gtr9.locations, f"all_thresholds{suffix}.png", milosh_dir, fresh_plots=fresh_plots)
+    # print()
+
+def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=None, density_dict=None):
     if logger is not None: 
         logger.info(f'Processing unit {unit_id}')
     else: 
@@ -202,6 +485,11 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
     area = width * height
     channel_density_value = len(unit_templates['merged_channel_loc']) / area  # channels / um^2
 
+    # Store the channel density value in the dictionary
+    if density_dict is not None:
+        density_dict[unit_id] = channel_density_value
+        print(f"Stored channel density for unit {unit_id}: {channel_density_value}")
+    
     failed_recons[unit_id] = []
 
     for key, (transformed_template, transformed_template_filled, trans_loc, trans_loc_filled) in transformed_templates.items():
@@ -313,7 +601,7 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
 
             # Axon Reconstruction Heuristics
             try:
-                generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, suffix=f"_{suffix}", fresh_plots=True, figsize=(20, 10))
+                generate_axon_reconstruction_heuristics(gtr, plot_dir, unit_id, suffix=f"_{suffix}", fresh_plots=True, figsize=(20, 10)) #Sravya
                 paths_files_generated.append(plot_dir / f"axon_reconstruction_heuristics{suffix}.png")
             except Exception as e:
                 if logger: 
@@ -322,8 +610,8 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
 
             # Axon Reconstruction Raw
             try:
-                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False)
-                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True)
+                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False) #Sravya
+                generate_axon_reconstruction_raw(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True) #Sravya
                 paths_files_generated.append(plot_dir / f"axon_reconstruction_raw{suffix}.png")
                 paths_files_generated.append(plot_dir / f"axon_reconstruction_raw{suffix}_full.png")
             except Exception as e:
@@ -333,8 +621,8 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
 
             # Axon Reconstruction Clean
             try:
-                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False)
-                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True)
+                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}", fresh_plots=True, plot_full_template=False) #Sravya
+                generate_axon_reconstruction_clean(gtr, plot_dir, unit_id, recon_dir, successful_recons, suffix=f"_{suffix}_full", fresh_plots=True, plot_full_template=True) #Sravya
                 paths_files_generated.append(plot_dir / f"axon_reconstruction_clean{suffix}.png")
                 paths_files_generated.append(plot_dir / f"axon_reconstruction_clean{suffix}_full.png")
             except Exception as e:
@@ -344,7 +632,7 @@ def process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, s
 
             # Axon Reconstruction Velocities
             try:
-                generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, suffix=f"_{suffix}")
+                generate_axon_reconstruction_velocities(gtr, plot_dir, unit_id, suffix=f"_{suffix}") #@Sravya want
                 paths_files_generated.append(plot_dir / f"axon_reconstruction_velocities{suffix}.png")
             except Exception as e:
                 if logger: 
@@ -421,52 +709,55 @@ def analyze_and_reconstruct(templates, params=None, analysis_options=None, recon
             for ext in ['png', 'svg', 'jpg']:
                 for file in plot_dir.glob(f"*{suffix}*.{ext}"):
                     file.unlink()
+
+    # Accessing the 'streams' dictionary directly
+    streams = templates['streams']
     
-    for key, tmps in templates.items():
-        for stream_id, stream_templates in tmps['streams'].items():
-            if stream_select is not None and stream_id != f'well{stream_select:03}':
-                continue
-            
-            unit_templates = stream_templates['units']
-            date = tmps['date']
-            chip_id = tmps['chip_id']
-            scanType = tmps['scanType']
-            run_id = tmps['run_id']
-            recon_dir = Path(recon_dir) / date / chip_id / scanType / run_id / stream_id
-            successful_recons = {str(recon_dir): {"successful_units": {}}}
-            failed_recons = {}
-            
+    for stream_id, stream_templates in streams.items():
+        if stream_select is not None and stream_id != f'well{stream_select:03}':
+            continue
+
+        unit_templates = stream_templates['units']
+        date = templates['date']
+        chip_id = templates['chip_id']
+        scanType = templates['scanType']
+        run_id = templates['run_id']
+        recon_dir = Path(recon_dir) / date / chip_id / scanType / run_id / stream_id
+        successful_recons = {str(recon_dir): {"successful_units": {}}}
+        failed_recons = {}
+
+        if logger:
             logger.info(f'Processing {len(unit_templates)} units, with {n_jobs} workers')
 
-            all_analytics = {key: {metric: [] for metric in [
-                'units', 'branch_ids', 'velocities', 'path_lengths', 'r2s', 'extremums', 
-                'num_channels_included', 'channel_density', 'init_chans'
-            ]} for key in [
-                'merged_template', 'dvdt_merged_template', 
-            ]}
-            
-            #n_jobs = 1
-            if unit_select is not None: n_jobs = 1
-            if n_jobs > 1:
-                with ProcessPoolExecutor(max_workers=n_jobs) as executor:
-                    futures = [
-                        executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger)
-                        for unit_id, unit_templates in unit_templates.items()
-                    ]
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
-                            if result:
-                                process_result(result, all_analytics)
-                        except Exception as exc:
+        all_analytics = {key: {metric: [] for metric in [
+            'units', 'branch_ids', 'velocities', 'path_lengths', 'r2s', 'extremums', 
+            'num_channels_included', 'channel_density', 'init_chans'
+        ]} for key in [
+            'merged_template', 'dvdt_merged_template', 
+        ]}
+
+        if unit_select is not None: n_jobs = 1
+        if n_jobs > 1:
+            with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+                futures = [
+                    executor.submit(process_unit, unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger)
+                    for unit_id, unit_templates in unit_templates.items()
+                ]
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        if result:
+                            process_result(result, all_analytics)
+                    except Exception as exc:
+                        if logger:
                             logger.info(f'Unit generated an exception: {exc}')
-                            if 'A process in the process pool was terminated abruptly' in str(exc):
-                                raise exc
-            else:
-                for unit_id, unit_templates in unit_templates.items():
-                    if unit_select is not None and unit_id != unit_select: continue
-                    result = process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=logger)
-                    if result:
-                        process_result(result, all_analytics)
-                    
-            save_results(stream_id, all_analytics, recon_dir, logger=logger)
+                        if 'A process in the process pool was terminated abruptly' in str(exc):
+                            raise exc
+        else:
+            for unit_id, unit_templates in unit_templates.items():
+                if unit_select is not None and unit_id != unit_select: continue
+                result = process_unit(unit_id, unit_templates, recon_dir, params, analysis_options, successful_recons, failed_recons, logger=logger)
+                if result:
+                    process_result(result, all_analytics)
+
+        save_results(stream_id, all_analytics, recon_dir, logger=logger)
