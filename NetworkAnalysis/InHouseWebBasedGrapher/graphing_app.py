@@ -17,4 +17,4 @@ def find_free_port():
 
 if __name__ == '__main__':
     free_port = find_free_port()
-    app.run_server(debug=True, port=free_port)
+    app.run(debug=True, port=free_port)
