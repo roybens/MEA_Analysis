@@ -272,13 +272,16 @@ def register_callbacks(app):
 
         graphs = []
         # Define fixed columns to exclude
-        fixed_exclusions = ['DIV', 'Assay','NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time','LogISI_BurstPeaks','LogISI_BurstDuration']
+        fixed_exclusions = ['DIV', 'Assay','NeuronType', 'Chip_ID', 'Well', 'Chip_Well', 'Run_ID', 'Time']
 
         # Add any columns that contain "List"
-        list_columns = [col for col in df.columns if re.search(r'list', col, re.IGNORECASE)]
+        distribution_columns = [col for col in df.columns if re.search(r'distribution', col, re.IGNORECASE)]
+        
+        #ADD any columns that contain the "Log" 
+        log_columns = [col for col in df.columns if re.search(r'log', col, re.IGNORECASE)]
 
         # Combine both lists
-        excluded_columns = fixed_exclusions + list_columns
+        excluded_columns = fixed_exclusions + distribution_columns + log_columns
         selected_metrics = [col for col in df.columns if col not in excluded_columns]
 
        	all_svg_bytes_list = []
