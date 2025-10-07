@@ -577,6 +577,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 sorting_obj,
                 recording_chunk
             )
+            sorting_obj = si.remove_duplicated_spikes( sorting_obj,censored_period_ms=0.1 )
             #sorting_obj.save(folder=kilosort_output_folder,overwrite=True)  # Overwrite with cleaned sorting
             # Save checkpoint after sorting
             checkpoint.save_checkpoint(
@@ -651,6 +652,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             # Re-apply cleaning
             sorting_obj = sorting_obj.remove_empty_units()
             sorting_obj = si.remove_excess_spikes(sorting_obj, recording_chunk)
+            sorting_obj = si.remove_duplicated_spikes( sorting_obj,censored_period_ms=0.1 )
 
     except Exception as e:
         error_msg = f"ERROR in {project_name},{chip_id} {date} {run_id} {stream_id}/{rec_name}: {str(e)}"
@@ -713,6 +715,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     return_in_uV=True,
                     folder=analyzer_folder
                 )
+
+            sorting_analyzer = si.remove_redundant_units(sorting_analyzer,duplicate_threshold=0.9,remove_strategy="minimum_shift")
             
             # Check which extensions are already computed
             existing_extensions = sorting_analyzer.get_loaded_extension_names()
@@ -796,7 +800,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             )
             
             logging.info(f"Loaded analyzer with extensions: {sorting_analyzer.get_loaded_extension_names()}")
-            
+
+            sorting_analyzer = si.remove_redundant_units(sorting_analyzer,duplicate_threshold=0.9,remove_strategy="minimum_shift")   #this and clean sorting should go inside a curation funciton
             # Check if any extensions are missing (in case of partial completion)
             existing_extensions = sorting_analyzer.get_loaded_extension_names()
             all_available = sorting_analyzer.get_computable_extensions()
@@ -861,6 +866,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             template_metrics.to_excel(f"{output_dir}/template_metrics_unfiltered.xlsx")
             
             # Filter units
+
             update_qual_metrics = automatic_curation(qual_metrics, thresholds)
             non_violated_units = update_qual_metrics.index.values
             numunits = len(non_violated_units)
@@ -1230,13 +1236,22 @@ def main():
         logger.info(f"The specified data path '{path}' does not exist.")
         sys.exit(1)
 
-
     thresholds = None
     if args.params:
         try:
-            thresholds = json.loads(args.params)
+            # Support both file path and JSON string
+            if os.path.isfile(args.params):
+                with open(args.params, 'r') as f:
+                    thresholds = json.load(f)
+                logger.info(f"Loaded parameters from file: {args.params}")
+            else:
+                thresholds = json.loads(args.params)
+                logger.info("Loaded parameters from command line string")
         except json.JSONDecodeError:
-            logger.info("Invalid JSON string provided for parameters.")
+            logger.error("Invalid JSON format in parameters.")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error loading parameters: {e}")
             sys.exit(1)
 
     #pdb.set_trace()
