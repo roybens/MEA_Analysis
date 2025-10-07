@@ -2,18 +2,7 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
-import spikeinterface
 import spikeinterface.full as si
-import spikeinterface.extractors as se
-import spikeinterface.sorters as ss
-import spikeinterface.comparison as sc
-import spikeinterface.widgets as sw
-import spikeinterface.postprocessing as sp
-import spikeinterface.preprocessing as spre
-import spikeinterface.qualitymetrics as qm
-from spikeinterface.sorters import run_sorter_local
-from spikeinterface.sorters import run_sorter
-from spikeinterface.exporters import export_to_phy
 import helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
@@ -36,52 +25,181 @@ import matplotlib.pyplot as plt
 from scipy.signal import convolve, find_peaks
 from scipy.stats import norm
 import json
+import h5py
+import psutil
+
+from enum import Enum
+
+
 
 #os.environ['HDF5_PLUGIN_PATH']='/home/mmp/Documents/Maxlab/so/'
 # Configure the logger
 # Manually clear the log file
+
+args =None
 with open('./application.log', 'w'):
     pass
 logging.basicConfig(
     filename='./application.log',  # Log file name
-    level=logging.DEBUG,  # Log level
+    level=logging.INFO ,  # Log level
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(module)s - %(lineno)d', # Log format
     datefmt='%Y-%m-%d %H:%M:%S' # Timestamp format
 )
+
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
+logging.getLogger('kilosort').setLevel(logging.WARNING)
 logger = logging.getLogger("mea_pipeline")
 
+def log_resource_usage():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    logging.debug(f"Memory usage: {mem_info.rss / 1024**3:.2f} GB")
+    logging.debug(f"CPU usage: {process.cpu_percent()}%")
+
+##DEFINING GLOBAL VARIABLES
 
 BASE_FILE_PATH =  os.path.dirname(os.path.abspath(__file__))
 
 
 job_kwargs = dict(n_jobs=32, chunk_duration="1s", progress_bar=False)
 
+## CHECKPOINTING CODE (inspirred from Claude Sonnet)
+
+
+class ProcessingStage(Enum):
+    """Pipeline stages for checkpointing"""
+    NOT_STARTED = 0
+    SORTING_COMPLETE = 1
+    ANALYZER_COMPLETE = 2
+    REPORTS_COMPLETE = 3
+    FAILED = -1
+
+class PipelineCheckpoint:
+    """Manage checkpoints for MEA processing pipeline"""
+    
+    def __init__(self, base_path, project_name,date,chip_id,run_id, well_id, rec_name):
+        self.run_id = run_id
+        self.well_id = well_id
+        self.rec_name = rec_name
+        self.project_name = project_name
+        self.date = date
+        self.chip_id = chip_id
+        self.checkpoint_dir = Path(base_path) / "checkpoints"
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_file = self.checkpoint_dir / f"{project_name}_{date}_{chip_id}_{run_id}_{well_id}_{rec_name}_checkpoint.json"
+        self.state = self.load_checkpoint()
+    
+    def load_checkpoint(self):
+        """Load existing checkpoint or create new one"""
+        if self.checkpoint_file.exists():
+            with open(self.checkpoint_file, 'r') as f:
+                return json.load(f)
+        else:
+            return {
+                'project_name': self.project_name,
+                'date': self.date,
+                'chip_id': self.chip_id,
+                'run_id': self.run_id,
+                'well_id': self.well_id,
+                'rec_name': self.rec_name,
+                'stage': ProcessingStage.NOT_STARTED.value,
+                'stage_name': ProcessingStage.NOT_STARTED.name,
+                'analyzer_folder': None,
+                'last_updated': None,
+                'error': None
+            }
+    
+    def save_checkpoint(self, stage, **kwargs):
+        """Save checkpoint with current stage and metadata"""
+        self.state['stage'] = stage.value
+        self.state['stage_name'] = stage.name
+        self.state['last_updated'] = str(datetime.now())
+        
+        # Update any additional metadata
+        for key, value in kwargs.items():
+            self.state[key] = value
+        
+        with open(self.checkpoint_file, 'w') as f:
+            json.dump(self.state, f, indent=2)
+        
+        logging.info(f"Checkpoint saved:{self.project_name},{self.chip_id},{self.date},{self.run_id},{self.chip_id} {self.well_id}/{self.rec_name} - {stage.name}")
+    
+    def get_stage(self):
+        """Get current processing stage"""
+        return ProcessingStage(self.state['stage'])
+    
+    def is_completed(self):
+        """Check if processing is fully completed"""
+        return self.get_stage() == ProcessingStage.REPORTS_COMPLETE
+    
+    def should_skip(self, args):
+        """Determine if processing should be skipped based on checkpoint"""
+        if not args.resume:
+            return False
+        
+        stage = self.get_stage()
+        if stage == ProcessingStage.REPORTS_COMPLETE: 
+            
+            if args.force_restart:
+                logging.info(f"Restarting {self.well_id}/{self.rec_name} from scratch")
+                return False
+            else:
+                logging.info(f"Skipping {self.well_id}/{self.rec_name} - already completed")
+                return True
+        
+        return False
+        
+    def mark_failed(self, error_msg, failed_at_stage=None):
+        """
+        Mark processing as failed while preserving last successful stage
+        
+        Args:
+            error_msg: Description of the error
+            failed_at_stage: Which stage failed (for logging)
+        """
+        # Keep current stage (last successful one)
+        current_stage = self.get_stage()
+        
+        # Save with current stage preserved, just add error info
+        self.save_checkpoint(
+            current_stage,  # ✅ Preserve last successful stage
+            failed=True,
+            failed_at_stage=failed_at_stage,
+            error=str(error_msg),
+            error_traceback=traceback.format_exc()
+        )
+        
+        logging.error(f"Processing failed at {failed_at_stage }")
+        logging.error(f"Last successful stage: {current_stage}")
+
+
+
 
 
 
 #breakpoint()    
-def save_to_zarr(filepath,op_folder):
+def save_zarr_wrapper(filepath,op_folder):
     """
     saves and compresses the file into the zarr format. 
     IP: file and the corresponding output folder.
     """
+    import spikeinterface.full as si
     from flac_numcodecs import Flac
     compressor = Flac(level =8)
-    rec_original = se.read_maxwell(filepath)
-    rec_int32 = spre.scale(rec_original, dtype="int32")
+    rec_original = si.read_maxwell(filepath)
+    rec_int32 = si.scale(rec_original, dtype="int32")
     # remove the 2^15 offset
-    rec_rm_offset = spre.scale(rec_int32, offset=-2 ** 15)
+    rec_rm_offset = si.scale(rec_int32, offset=-2 ** 15)
     # now we can safely cast to int16
-    rec_int16 = spre.scale(rec_rm_offset, dtype="int16")
+    rec_int16 = si.scale(rec_rm_offset, dtype="int16")
     recording_zarr = rec_int16.save(format = "zarr",folder=op_folder,compressor=compressor,
                                     channel_chunk_size =2,n_jobs=64,chunk_duration="1s")
     return recording_zarr
 
-def export_to_phy_datatype(we):
+def export_to_phy_datatype(sorting_analyzer):
 
     from spikeinterface.exporters import export_to_phy
-    export_to_phy(we,output_folder='/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/phy_folder',**job_kwargs)
+    export_to_phy(sorting_analyzer,output_folder='/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/phy_folder',**job_kwargs)
 
 
 
@@ -105,86 +223,27 @@ def preprocess(recording):  ## some hardcoded stuff.
     Does the bandpass filtering and the common average referencing of the signal
     
     """
-    recording_bp = spre.bandpass_filter(recording, freq_min=300, freq_max=3000)
+    recording_signed = si.unsigned_to_signed(recording)
+    recording_bp = si.bandpass_filter(recording_signed, freq_min=300, freq_max=3000)
     
 
-    recording_cmr = spre.common_reference(recording_bp, reference='global', operator='median')
+    recording_cmr = si.common_reference(recording_bp, reference='global', operator='median')
 
     recording_cmr.annotate(is_filtered=True)
 
     return recording_cmr
 
-def get_kilosort_result(folder):
-
-    sorter = ss.Kilosort3Sorter._get_result_from_folder(folder)
-    return sorter
-
-def get_waveforms_result(folder,with_recording= True,sorter = None):
-
-    waveforms = si.load_waveforms(folder,with_recording=with_recording,sorting=sorter)
-
-    return waveforms
-
-def run_kilosort(recording,output_folder):
-    logging.debug("run_kilosort_output folder:"+output_folder) 
-    default_KS2_params = ss.get_default_sorter_params('kilosort2')
-
-    #current papers are using these default parameters.
-    #default_KS2_params['keep_good_only'] = True
-    # default_KS2_params['detect_threshold'] = 12
-    # default_KS2_params['projection_threshold']=[18, 10]
-    # default_KS2_params['preclust_threshold'] = 14
-    run_sorter=run_sorter_local(sorter_name="kilosort2",recording=recording, output_folder=output_folder, delete_output_folder=False,verbose=True,with_output=True,**default_KS2_params)
-    #sorting=run_sorter(sorter_name="kilosort2",recording=recording,output_folder=output_folder,remove_existing_folder=True, delete_output_folder=False,verbose=True,docker_image="rohanmalige/rohan_si-98:v8",with_output=True, **default_KS2_params)
-    #run_sorter = ss.run_sorter('kilosort2',recording=recording, output_folder=output_folder,docker_image= "rohanmalige/benshalom:v3",verbose=True, **default_KS2_params)
-    #run_sorter = ss.run_kilosort2(recording, output_folder=output_folder, docker_image= "si-98-ks2-maxwell",verbose=True, **default_KS2_params) #depreciation warning 
-    #sorting_KS3 = ss.Kilosort3Sorter._get_result_from_folder(output_folder+'/sorter_output/')
-    return run_sorter
-
-def extract_waveforms(recording,sorting_KS3,folder):
-   
-    folder = Path(folder)
-    logging.debug(f"waveforms_folder:{folder}") #rohan made changes here 
-    global_job_kwargs = dict(n_jobs=24) 
-    si.set_global_job_kwargs(**global_job_kwargs)
-    waveforms = si.extract_waveforms(recording=recording,sorting=sorting_KS3,sparse=False,folder=folder,max_spikes_per_unit=500,overwrite=True)
-    #waveforms = si.extract_waveforms(recording,sorting_KS3,folder=folder,overwrite=True, sparse = True, ms_before=1., ms_after=2.,allow_unfiltered=True,**job_kwargs)
-    return waveforms
-
-
-def get_template_metrics(waveforms):
-    return sp.compute_template_metrics(waveforms,load_if_exists=True)
-
-def get_temp_similarity_matrix(waveforms):
-    return sp.compute_template_similarity(waveforms,load_if_exists=True)
-
-
-
-
-def get_quality_metrics(waveforms): 
-    
-    #TO DO: to fix the SNR showing as INF by looking at the extensions of waveforms
-    # This is because the noise levels are 0.0
-    # Similar issue with https://github.com/SpikeInterface/spikeinterface/issues/1467 
-    # Best solution proposed was to stick with applying a gain to the entire recording before all preprocessing
-    sp.compute_spike_amplitudes(waveforms,**job_kwargs)
-    metrics = qm.compute_quality_metrics(waveforms, metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
-                                                       'isi_violation', 'amplitude_cutoff','amplitude_median'], **job_kwargs)
-
-    return metrics
-
-
-def remove_violated_units(metrics, thresholds=None):
+def automatic_curation(metrics, thresholds=None):
     """
     Removing based on provided thresholds or default values.
     """
     # Default thresholds
     default_thresholds = {
-        'num_spikes': 200,
-        'presence_ratio': 0.98,
-        'isi_violations_ratio': 0.98,
-        'firing_rate': 0.01,
-        'amplitude_median': 20
+        'num_spikes': 300,
+        'presence_ratio': 0.9,
+        'rp_contamination': 1,   #used instead of isi_violations_ratio
+        'firing_rate': 0.05, # in Hz about 3 spikes in 1 min at least
+        'amplitude_median':-20
     }
 
     # Update default thresholds with provided values
@@ -196,9 +255,9 @@ def remove_violated_units(metrics, thresholds=None):
         conditions = {
             'num_spikes': f"({key} > {value})",
             'presence_ratio': f"({key} > {value})",
-            'isi_violations_ratio': f"({key} < {value})",
+            'rp_contamination': f"({key} < {value})",
             'firing_rate': f"({key} > {value})",
-            'amplitude_median': f"({key} > {value})"
+            'amplitude_median': f"({key} <= {value})"
         }
         # Return the appropriate condition or a default condition if key is not found
         return conditions.get(key, f"({key} > {value})")
@@ -245,9 +304,9 @@ def find_connected_components(pairs):
 
 def merge_similar_templates(sorting,waveforms,sim_score =0.7):
 
-    matrix = sp.compute_template_similarity(waveforms,load_if_exists=True)
-    metrics = qm.compute_quality_metrics(waveforms,load_if_exists=True)
-    temp_metrics = sp.compute_template_metrics(waveforms,load_if_exists=True)
+    matrix = si.compute_template_similarity(waveforms,load_if_exists=True)
+    metrics = si.compute_quality_metrics(waveforms,load_if_exists=True)
+    temp_metrics = si.compute_template_metrics(waveforms,load_if_exists=True)
     n = matrix.shape[0]
 
     # Find indices where values are greater than 0.5 and not on the diagonal
@@ -269,9 +328,9 @@ def merge_similar_templates(sorting,waveforms,sim_score =0.7):
 
 def remove_similar_templates(waveforms,sim_score =0.7):
 
-    matrix = sp.compute_template_similarity(waveforms,load_if_exists=True)
-    metrics = qm.compute_quality_metrics(waveforms,load_if_exists=True)
-    temp_metrics = sp.compute_template_metrics(waveforms,load_if_exists=True)
+    matrix = si.compute_template_similarity(waveforms,load_if_exists=True)
+    metrics = si.compute_quality_metrics(waveforms,load_if_exists=True)
+    temp_metrics = si.compute_template_metrics(waveforms,load_if_exists=True)
     n = matrix.shape[0]
 
     # Find indices where values are greater than 0.5 and not on the diagonal
@@ -304,12 +363,10 @@ def analyse_waveforms_sigui(waveforms_folder) :
     return
 
 
+""" 
+
 def get_unique_templates_channels(good_units, waveform):
-    """
-    Analyses all the units and their corresponding extremum channels.. Removes units which correspond to same channel keeping the highest amplitude one.
-    
-    ToDO : have to do some kind of peak matching to remove units which have same extremum electrode.
-    """
+
     
     #get_extremum_channels.
     unit_extremum_channel =spikeinterface.full.get_template_extremum_channel(waveform, peak_sign='neg')
@@ -340,6 +397,10 @@ def get_unique_templates_channels(good_units, waveform):
     required_templates = {key:value for key,value in unit_extremum_channel.items() if key not in new_list}
 
     return required_templates
+     
+ """
+
+
 
 def get_channel_locations_mapping(recording):
 
@@ -352,363 +413,759 @@ def get_data_maxwell(file_path,stream_id,rec_num):
 
     rec_num =  str(rec_num).zfill(4)
     rec_name = 'rec' + rec_num
-    recording = se.read_maxwell(file_path,rec_name=rec_name,stream_id=stream_id)
+    recording = si.read_maxwell(file_path,rec_name=rec_name,stream_id=stream_id,install_maxwell_plugin=False)
     return recording,rec_name
 
 
 
 
-def process_block(file_path,time_in_s= None,stream_id = 'well000',recnumber=0, sorting_folder = f"{BASE_FILE_PATH}/Sorting_Intermediate_files",clear_temp_files=True,thresholds=None):
+def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0, 
+                  clear_temp_files=False, thresholds=None):
     
-    
-    #check if sorting_folder exists and empty
-    if helper.isexists_folder_not_empty(sorting_folder):
-        logging.info("clearing sorting folder")
-        helper.empty_directory(sorting_folder)
 
-    #breakpoint()
-    recording,rec_name = get_data_maxwell(file_path,stream_id,recnumber)
-    logging.info(f"Processing recording: {rec_name}")
-    fs, num_chan, channel_ids, total_rec_time= get_channel_recording_stats(recording)
-    if time_in_s == None:  # sometimes the recording are less than 300s
+    global args,logger,BASE_FILE_PATH,job_kwargs
 
-        time_in_s = total_rec_time - 1
-    time_start = 0
-    time_end = time_start+time_in_s
-    recording_chunk = recording.frame_slice(start_frame= int(time_start*fs),end_frame=int(time_end*fs))
-    recording_chunk = preprocess(recording_chunk)
-    
-    
-    logging.debug("current directory of the file.:"+ BASE_FILE_PATH)
-    try:
+    # Setup paths and checkpoint manager
+    if file_path.endswith('.raw.h5'):
+        recording, rec_name = get_data_maxwell(file_path, stream_id, recnumber)
         pattern = r"/(\d+)/data.raw.h5"
         run_id = int(re.search(pattern, file_path).group(1))
         file_pattern = os.path.dirname(file_path)
-
-        # Split the pattern into parts using '/' as the separator
         parts = file_pattern.split('/')
+        project_name =parts[-5] if len(parts)>=5 else 'UnknownProject'
+        date = parts[-4] if len(parts)>=4 else 'UnknownDate'
+        chip_id = parts[-3] if len(parts)>=3 else 'UnknownChip'
 
-        # Extract the desired pattern
-        desired_pattern = '/'.join(parts[-6:])  #  # this is a hardcoding TODO Assuming you want the last 6 parts 
-        logging.debug(f"pattern of the file: {desired_pattern}")
-        dir_name = sorting_folder
-        
-        logging.debug(f"Sorting directory: {dir_name}") 
-        os.chdir(dir_name)
-        logging.debug(f"CUrrent directory after change: {os.getcwd()}") 
-        
-        os.makedirs(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}",mode=0o777, exist_ok=True)
-        kilosort_output_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/kilosort2__{rec_name}"
-        logging.info("ks folder:"+ kilosort_output_folder)
-        start = timer()
-        sortingKS3 = run_kilosort(recording_chunk,output_folder=f'{kilosort_output_folder}')
-        logging.debug("Sorting complete")
-        sortingKS3 = sortingKS3.remove_empty_units()
-        sortingKS3 = spikeinterface.curation.remove_excess_spikes(sortingKS3,recording_chunk) #Sometimes KS returns spikes outside the number of samples. < https://github.com/SpikeInterface/spikeinterface/pull/1378>
-        
-        sortingKS3= sortingKS3.save(folder = f"{kilosort_output_folder}_2", overwrite=True)
+        desired_pattern = '/'.join(parts[-6:])
 
-        # sorting_analyzer = spikeinterface.create_sorting_analyzer(sortingKS3, recording,
-        #                                       format="binary_folder", folder="/my_sorting_analyzer",
-        #                                       **job_kwargs)/
-        # sorting_analyzer.compute("random_spikes", method="uniform", max_spikes_per_unit=500)
-        # sorting_analyzer.compute("waveforms", **job_kwargs)
-        # sorting_analyzer.compute("templates")
-        # sorting_analyzer.compute("noise_levels")
-        # sorting_analyzer.compute("unit_locations", method="monopolar_triangulation")
-        # sorting_analyzer.compute("isi_histograms")
-        # sorting_analyzer.compute("correlograms", window_ms=100, bin_ms=5.)
-        # sorting_analyzer.compute("principal_components", n_components=3, mode='by_channel_global', whiten=True, **job_kwargs)
-        # sorting_analyzer.compute("quality_metrics", metric_names=["snr", "firing_rate"])
-        # sorting_analyzer.compute("spike_amplitudes", **job_kwargs)
-        #         #rohan made changes
-        waveform_folder =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms__{rec_name}"
-        logging.info(f"waveform folder: {waveform_folder}")
-        logging.info("Extracting waveforms")
-        waveforms = extract_waveforms(recording_chunk,sortingKS3,folder = waveform_folder)
-        end = timer()
-        logging.debug(f"Sort and extract waveforms takes: { end - start}")
-        
-        start = timer()
-        #TODO need to see what is the differnce in the export folder and the kilosort output folder
-        #export_to_phy(waveform_extractor=waveforms, output_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/phy",**job_kwargs)
-        qual_metrics = get_quality_metrics(waveforms)  
-        qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics_unfiltered.xlsx")
-        sp.compute_spike_amplitudes(waveforms,load_if_exists=True,**job_kwargs)
-        update_qual_metrics = remove_violated_units(qual_metrics)
-        non_violated_units  = update_qual_metrics.index.values
-        numunits = len(non_violated_units)
-        template_metrics=sp.compute_template_metrics(waveforms)
-        #check for template similarity.
-        # curation_sortin_obj = merge_similar_templates(sortingKS3,w      aveforms)
-        # #rohan made changes
-        # curation_sortin_obj.save(folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/sorting")
-        # curatedmerged = curation_sortin_obj.get_unit_ids()
-        # end = timer()
-         #todo: need to extract metrics here.
-        logging.debug(f"Removing redundant items takes{end - start}")  
-                                                  #todo: need to extract metrics here.
-        #non_violated_units_new = [item for item in curatedmerged if item not in non_violated_units]
-        
-        
-       # waveforms= extract_waveforms(recording_chunk,curation_sortin_obj,folder = waveform_folder)
-        #rohan made change
-        #waveform_good = waveforms.select_units(non_violated_units,new_folder=f"{current_directory}/../AnalyzedData/{desired_pattern}/waveforms_good")
-        
-        #template_metrics = sp.compute_template_metrics(waveform_good)
-        #template_metrics = template_metrics.loc[update_qual_metrics.index.values]
-        #qual_metrics = qm.compute_quality_metrics(waveform_good ,metric_names=['num_spikes','firing_rate', 'presence_ratio', 'snr',
-         #                                              'isi_violation', 'amplitude_cutoff','amplitude_median'])  ## to do : have to deal with NAN values
-        #rohan made change here
-        template_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/template_metrics_unfiltered.xlsx")
-        template_metrics = template_metrics.loc[non_violated_units]
-        template_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/template_metrics.xlsx")
-        locations = si.compute_unit_locations(waveforms)
-        qual_metrics['location_X'] = locations[:,0]
-        qual_metrics['location_Y'] = locations[:,1]
-        qual_metrics['location_Z'] = locations[:,2]
-        #rohan made change here 
-        qual_metrics = qual_metrics.loc[non_violated_units]
-        qual_metrics.to_excel(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/quality_metrics.xlsx")
-        import seaborn as sns
-        # After calculating qual_metrics but before saving to Excel
-        plt.figure(figsize=(8, 6))
-        sns.histplot(data=qual_metrics['firing_rate'], bins='auto', kde=False)
-        plt.title('Distribution of Firing Rates')
-        plt.xlabel('Firing Rate (Hz)')
-        plt.ylabel('Count')
-        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/firing_rate_distribution.png")
-        plt.close()
-        
-
-        unit_ids = waveforms.unit_ids
-        
-        unit_locations =dict(zip(unit_ids,locations))
-        fig1,ax1 = plt.subplots(figsize=(10.5,6.5))
-        sw.plot_probe_map(recording_chunk,ax=ax1,with_channel_ids=False)
-        for unit_id, (x,y,z) in unit_locations.items() :  # in new si 1.00 they are returning three points.
-            ax1.scatter(x,y,s=10,c='blue')
-        ax1.invert_yaxis()    
-        #rohan made changes here
-        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/locations_unfiltered_units.pdf")
-        plt.clf()
-        fig2,ax2 = plt.subplots(figsize=(10.5,6.5))
-        sw.plot_probe_map(recording_chunk,ax=ax2,with_channel_ids=False)
-        unit_locations =dict(zip(unit_ids,locations))
-        for unit_id, (x,y,z) in unit_locations.items() :  # in new si 1.00 they are returning three points.
-            if unit_id in non_violated_units:
-                ax2.scatter(x,y,s=10,c='blue')
-        ax2.invert_yaxis()    
-        #rohan made changes here
-        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/locations_{numunits}_units.pdf")
-        plt.clf()
+    else:
+        rec_name = "binary_recording"   #implement fr binary
+        logging.error("Binary file processing not implemented yet")
 
 
-        #template_channel_dict = get_unique_templates_channels(non_violated_units,waveforms)
-        #non_redundant_templates = list(template_channel_dict.keys())
-        # extremum_channel_dict = 
-        # ToDo Until the peak matching routine is implemented. We use this.
-        unit_extremum_channel =si.get_template_extremum_channel(waveforms, peak_sign='both')
-        #Step 1: keep only units that are in good_units 
-        unit_extremum_channel = {key:value for key,value in unit_extremum_channel.items() if key in non_violated_units}
-        #waveform_good = waveforms.select_units(non_violated_units,new_folder=dir_name+'/waveforms_good_'+rec_name)
-        
-        #get the spike trains
-        #rohan made change here
+    # Initialize checkpoint manager
+    checkpoint = PipelineCheckpoint(
+        base_path=f"{BASE_FILE_PATH}/../AnalyzedData",
+        project_name=project_name,
+        date=date,
+        chip_id=chip_id,
+        run_id=run_id,
+        well_id=stream_id,
+        rec_name=rec_name
+    )
+    
+    # Check if should skip
+    if checkpoint.should_skip(args):
+        return None,None                            #need ot handle thies
+    
+    if args.force_restart:
+        logging.info(f"Restarting {stream_id}/{rec_name} from scratch")
+        #manually delete checkpoint file to restart
+        if checkpoint.checkpoint_file.exists():
+            checkpoint.checkpoint_file.unlink()
+            checkpoint.state = checkpoint.load_checkpoint()  # Reset state
 
-        #EXPERIIMENTAL
-        os.makedirs(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/",mode=0o777, exist_ok=True) 
-        import matplotlib.backends.backend_pdf as pdf
-        # Create a PDF file to save the subplots
-        pdf_file = f'{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/waveforms_subplots.pdf'
-        with pdf.PdfPages(pdf_file) as pdf_pages:
-            # Calculate the number of rows and columns for the subplots
+    try:
+        # Get current stage to resume from
+        current_stage = checkpoint.get_stage()
+        logging.info(f"Starting from stage: {current_stage.name}")
+        
+        # ============== STAGE 0: Setup and Preprocessing ==============
+        if current_stage.value < ProcessingStage.SORTING_COMPLETE.value:
+            logging.info(f"[STAGE 0] Loading and preprocessing recording...")
             
-            num_cols = 4
-            num_rows = 3
+            # Your existing preprocessing code
+            if file_path.endswith('.raw.h5'):
+                # Setup output paths
+                pattern = r"/(\d+)/data.raw.h5"
+                run_id = int(re.search(pattern, file_path).group(1))          # might be redundant #TODO
+                file_pattern = os.path.dirname(file_path)
+                parts = file_pattern.split('/')
+                desired_pattern = '/'.join(parts[-6:])
+                   
+                os.makedirs(
+                    f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}",
+                    mode=0o777,
+                    exist_ok=True
+                )
 
+                recording, rec_name = get_data_maxwell(file_path, stream_id, recnumber)
+                logging.info(f"Processing recording: {rec_name}")
+                fs, num_chan, channel_ids, total_rec_time = get_channel_recording_stats(recording)
+                
+                if time_in_s is None:
+                    time_in_s = total_rec_time - 1
+                
+                time_start = 0
+                time_end = time_start + time_in_s
+                recording_chunk = recording.frame_slice(
+                    start_frame=int(time_start*fs),
+                    end_frame=int(time_end*fs)
+                )
+                recording_chunk = preprocess(recording_chunk)
+                
+                recording_chunk.save(
+                    folder=f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary",
+                    format='binary',
+                    overwrite=True,
+                    **job_kwargs
+                )
+                recording_chunk = si.load(
+                    f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+                )
+            else:
+                recording_chunk = si.load(file_path)
             
 
-            # Iterate over the units and plot the waveforms
-            for i in range(0,len(non_violated_units),num_rows*num_cols):
+         
+            analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            
+            # ============== STAGE 1: Spike Sorting ==============
+            logging.info(f"[STAGE 1] Running spike sorting...")
+            if args.debug:
+                log_resource_usage()
+            start = timer()
+            
+            if args.docker:
+                sorting_obj = si.run_sorter(
+                    sorter_name="kilosort2",
+                    recording=recording_chunk,
+                    output_folder=analyzer_folder,
+                    remove_existing_folder=True,
+                    delete_output_folder=False,
+                    verbose=True,
+                    docker_image=args.docker,
+                    with_output=True
+                )
+            else:
+                if args.sorter == 'kilosort2':
+                    default_KS2_params = si.get_default_sorter_params('kilosort2')
+                    sorting_obj = si.run_sorter_local(
+                        sorter_name="kilosort2",
+                        recording=recording_chunk,
+                        output_folder=analyzer_folder,
+                        delete_output_folder=False,
+                        verbose=True,
+                        with_output=True,
+                        **default_KS2_params
+                    )
+                else:
+                    default_KS4_params = si.get_default_sorter_params('kilosort4')
+                    default_KS4_params.update({
+                        'batch_size': int(fs),
+                        'clear_cache': True,
+                        'invert_sign': True,
+                        'cluster_downsampling': 10,
+                        'max_cluster_subset': None,
+                    })
+                    
+                    sorting_obj = si.run_sorter_local(
+                        sorter_name="kilosort4",
+                        recording=recording_chunk,
+                        folder=analyzer_folder,
+                        delete_output_folder=False,
+                        verbose=True,
+                        with_output=True,
+                        **default_KS4_params
+                    )
+            
+            logging.debug(f"Sorting complete in: {timer()-start:.2f}s")
+            
+            # Clean up sorting
+            sorting_obj = sorting_obj.remove_empty_units()
+            sorting_obj = si.remove_excess_spikes(
+                sorting_obj,
+                recording_chunk
+            )
+            #sorting_obj.save(folder=kilosort_output_folder,overwrite=True)  # Overwrite with cleaned sorting
+            # Save checkpoint after sorting
+            checkpoint.save_checkpoint(
+                ProcessingStage.SORTING_COMPLETE,
+                analyzer_folder=analyzer_folder,
 
 
-                units_to_plot = non_violated_units[i:i+num_rows*num_cols]
-                # Create a single figure with the required number of subplots
-                fig, axes = plt.subplots(num_rows, num_cols, figsize=(12, 8), squeeze=False)
-                plt.subplots_adjust(hspace=1, wspace=0.5)
-                for j, unit_id in enumerate(units_to_plot):
-                    row = j // num_cols
-                    col = j % num_cols
-                    ax = axes[row, col]
+            )
+        
+            if args.debug:
+                log_resource_usage()
+            
+        else:
+            # Resume from checkpoint - load existing sorting
+            logging.info(f"[STAGE 1] Resuming - loading existing sorting...")
+            analyzer_folder = checkpoint.state['analyzer_folder']
+            
+            logging.info(f"desired_pattern: {desired_pattern}")
+            # Reload recording
+            recording_chunk = si.load(
+                f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+            )
+            
+            # Try multiple loading strategies
+            sorting_obj = None
+            
+            # Attempt 1: Try read_sorter_folder (if SpikeInterface metadata exists)
+            try:
+                logging.info("Attempt 1: Using read_sorter_folder")
+                sorting_obj = si.read_sorter_folder(folder=analyzer_folder)
+                logging.info(f"Successfully loaded with read_sorter_folder: {len(sorting_obj.get_unit_ids())} units")
+            except Exception as e:
+                logging.debug(f"read_sorter_folder failed: {e}")
+            
+            # Attempt 2: Try NumpySorting (if analyzer was created)
+            if sorting_obj is None:
+                try:
+                    logging.info("Attempt 2: Using read_numpy_sorting")
+                    sorting_path = f"{analyzer_folder}/sorting"
+                    if os.path.exists(sorting_path):
+                        sorting_obj = si.read_numpy_sorting_folder(sorting_path)
+                        logging.info(f"Successfully loaded with read_numpy_sorting: {len(sorting_obj.get_unit_ids())} units")
+                except Exception as e:
+                    logging.debug(f"read_numpy_sorting failed: {e}")
+            
+            # Attempt 3: Try reading from Kilosort native format
+            if sorting_obj is None:
+                try:
+                    logging.info("Attempt 3: Using read_kilosort from sorter_output")
+                    sorter_output = f"{analyzer_folder}/sorter_output"
+                    if os.path.exists(sorter_output):
+                        sorting_obj = si.read_kilosort(folder=sorter_output)
+                        logging.info(f"Successfully loaded with read_kilosort: {len(sorting_obj.get_unit_ids())} units")
+                except Exception as e:
+                    logging.debug(f"read_kilosort from sorter_output failed: {e}")
+            
+            # Attempt 4: Try reading Kilosort from analyzer_folder directly
+            if sorting_obj is None:
+                try:
+                    logging.info("Attempt 4: Using read_kilosort from analyzer_folder")
+                    sorting_obj = si.read_kilosort(folder=analyzer_folder)
+                    logging.info(f"Successfully loaded with read_kilosort: {len(sorting_obj.get_unit_ids())} units")
+                except Exception as e:
+                    logging.debug(f"read_kilosort from analyzer_folder failed: {e}")
+            
+            # If all attempts failed
+            if sorting_obj is None:
+                logging.error(f"Failed to load sorting from: {analyzer_folder}")
+                logging.error("Tried: read_sorter_folder, read_numpy_sorting_folder, read_kilosort (multiple paths)")
+                raise FileNotFoundError(f"Could not load sorting from any format in {analyzer_folder}")
+            
+            # Re-apply cleaning
+            sorting_obj = sorting_obj.remove_empty_units()
+            sorting_obj = si.remove_excess_spikes(sorting_obj, recording_chunk)
 
-                    wf = waveforms.get_waveforms(unit_id)
-                    channel_id_str = str(int(unit_extremum_channel[unit_id]))
-                    number = waveforms.channel_ids_to_indices([channel_id_str])
-
-                    ax.plot(wf[:, :, number[0]].T, lw=1, color='black', alpha=0.1, linestyle='-', marker='', markersize=0)
-                    ax.set_title(f"Waveforms of Unit {unit_id}")
-                    ax.set_ylabel("Amplitude (µV)")
-                    ax.set_ylim(-700, 400)
-                    ax.set_xlabel("Sampled timepoints (5e-2 ms)")
-                    ax.set_facecolor('white')
-                    ax.tick_params(axis='x', colors='black')
-                    ax.tick_params(axis='y', colors='black')
-                    ax.spines['top'].set_color('white')
-                    ax.spines['right'].set_color('white')
-
-                    # Saving each subplot separately
-                    fig_single = plt.figure()
-                    ax_single = fig_single.add_subplot(111)
-                    ax_single.plot(wf[:, :, number[0]].T, lw=1, color='black', alpha=0.1, linestyle='-', marker='', markersize=0)
-                    ax_single.set_title(f"Waveforms of Unit {unit_id}")
-                    ax_single.set_ylabel("Amplitude (µV)")
-                    ax_single.set_ylim(-700, 400)
-                    ax_single.set_xlabel("Sampled timepoints (5e-2 ms)")
-                    ax_single.set_facecolor('white')
-                    ax_single.tick_params(axis='x', colors='black')
-                    ax_single.tick_params(axis='y', colors='black')
-                    ax_single.spines['top'].set_color('white')
-                    ax_single.spines['right'].set_color('white')
-                    fig_single.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/{unit_id}.svg", format="svg")
-                    plt.close(fig_single)
-                    #ax.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/{unit_id}.svg", format="svg")
-
-                # Remove empty subplots
-                num_units_to_plot = len(units_to_plot)
-                for i in range(num_units_to_plot, num_rows * num_cols):
-                    row = i // num_cols
-                    col = i % num_cols
-                    ax = axes[row, col]
-                    ax.axis('off')
-
-                # Save the subplots to the PDF file
-                pdf_pages.savefig(fig)
-                plt.close(fig)
-
-        # Print the path to the PDF file
-        print(f"Subplots saved to: {pdf_file}")
-        fs=recording_chunk.get_sampling_frequency()
-        t_start = 0 
-        t_end = int(time_in_s * fs)
-        dt = 1
-        frame_numbers = t_end
-        spike_times = {}    
-        #spike_array = np.zeros((len(non_violated_units),frame_numbers), dtype= int)
-        for idx, unit_id in enumerate(non_violated_units):
-            spike_train = sortingKS3.get_unit_spike_train(unit_id,start_frame=t_start,end_frame=t_end)
-            # for spike_time in spike_train:
-            #     spike_array[idx,spike_time] = 1
-            if len(spike_train) > 0:
-                spike_times[idx] = spike_train / float(fs)
+    except Exception as e:
+        error_msg = f"ERROR in {project_name},{chip_id} {date} {run_id} {stream_id}/{rec_name}: {str(e)}"
+        logging.error(error_msg)
+        logging.error(f"TRACEBACK: {traceback.format_exc()}")
+        
+        # Mark as failed in checkpoint
+        checkpoint.mark_failed(error_msg,"Sorting Stage")
+        
 
         
-        np.save(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/spike_times.npy", spike_times)
-       
-        fig, axs = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
-        # Define the ISI threshold for burst detection (e.g., 0.1 seconds)
-        isi_threshold = 0.1
-        # Detect bursts for each unit
-        burst_statistics = helper.detect_bursts_statistics(spike_times, isi_threshold)
-        bursts = [unit_stats['bursts'] for unit_stats in burst_statistics.values()]
-        # Extracting ISIs as combined arrays
-        all_isis_within_bursts = np.concatenate([stats['isis_within_bursts'] for stats in burst_statistics.values() if stats['isis_within_bursts'].size > 0])
-        all_isis_outside_bursts = np.concatenate([stats['isis_outside_bursts'] for stats in burst_statistics.values() if stats['isis_outside_bursts'].size > 0])
-        all_isis = np.concatenate([stats['isis_all'] for stats in burst_statistics.values() if stats['isis_all'].size > 0])
+        return "error",error_msg
 
-        # Calculate combined statistics
-        mean_isi_within_combined = np.mean(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
-        cov_isi_within_combined = np.cov(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+    try:
+        # ============== STAGE 2: Sorting Analyzer ==============
+        if current_stage.value < ProcessingStage.ANALYZER_COMPLETE.value:
+            logging.info(f"[STAGE 2] Computing sorting analyzer...")
+            start = timer()
+            
+            analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            
+            # Check if analyzer already exists (partial completion scenario)
+            if Path(analyzer_folder).exists():
+                logging.info("Found existing analyzer folder, attempting to load...")
+                try:
+                    sorting_analyzer = si.load_sorting_analyzer(
+                        folder=analyzer_folder,
+                        recording=recording_chunk
+                    )
+                    logging.info("Successfully loaded existing analyzer")
+                except Exception as e:
+                    logging.warning(f"Could not load existing analyzer: {e}. Creating new one...")
+                    # Remove corrupted folder and start fresh
+                    import shutil
+                    shutil.rmtree(analyzer_folder)
+                    sorting_analyzer = None
+            else:
+                sorting_analyzer = None
+            
+            # Create new analyzer if needed
+            if sorting_analyzer is None:
+                logging.info("Creating new sorting analyzer...")
+                
+                # Optimal sparsity for HD-MEA (Maxwell Biosystems)
+                sparsity = si.estimate_sparsity(
+                    sorting=sorting_obj,
+                    recording=recording_chunk,
+                    method='radius',      # Best for spatial arrays
+                    radius_um=50,         # 40-70 um typical for HD-MEA (17.5 um pitch)
+                    peak_sign='neg'   # Most HD-MEA use negative peaks
+                )
+                
+                #logging.info(f"Estimated sparsity: avg {sparsity.num_active_channels_per_unit().mean():.1f} channels/unit")
+                
+                sorting_analyzer = si.create_sorting_analyzer(
+                    sorting_obj,
+                    recording_chunk,
+                    format="binary_folder",
+                    sparsity=sparsity,  # Use pre-computed ChannelSparsity object
+                    return_in_uV=True,
+                    folder=analyzer_folder
+                )
+            
+            # Check which extensions are already computed
+            existing_extensions = sorting_analyzer.get_loaded_extension_names()
+            logging.info(f"Existing extensions: {existing_extensions}")
+            
+            # Get all available extensions
+            all_available = sorting_analyzer.get_computable_extensions()
+            logging.info(f"All available extensions: {all_available}")
+            
+            # Determine which extensions need to be computed
+            missing_extensions = [ext for ext in all_available if ext not in existing_extensions]
+            
+            if missing_extensions:
+                logging.info(f"Computing {len(missing_extensions)} missing extensions: {missing_extensions}")
+                
+                if args.debug:
+                    log_resource_usage()
+                
+                # Compute missing extensions with error handling
+                successfully_computed = []
+                failed_extensions = []
+                
+                for ext_name in missing_extensions:
+                    try:
+                        logging.info(f"  Computing {ext_name}...")
+                        ext_start = timer()
+                        
+                        # Compute individual extension
+                        sorting_analyzer.compute(ext_name, save=True, **job_kwargs)
+                        
+                        duration = timer() - ext_start
+                        successfully_computed.append(ext_name)
+                        logging.info(f"  ✓ {ext_name} completed in {duration:.2f}s")
+                        
+                    except Exception as e:
+                        logging.error(f"  ✗ Failed to compute {ext_name}: {e}")
+                        failed_extensions.append(ext_name)
+                        
+                        # Only fail if it's a critical extension
+                        critical_extensions = ['waveforms', 'templates', 'noise_levels']
+                        if ext_name in critical_extensions:
+                            raise RuntimeError(f"Critical extension {ext_name} failed: {e}")
+                
+                if args.debug:
+                    log_resource_usage()
+                
+                logging.info(f"Successfully computed: {successfully_computed}")
+                if failed_extensions:
+                    logging.warning(f"Failed extensions (non-critical): {failed_extensions}")
+            else:
+                logging.info("All extensions already computed!")
+            
+            # Verify critical extensions exist
+            critical_extensions = ['waveforms', 'templates', 'quality_metrics', 'template_metrics']
+            missing_critical = [ext for ext in critical_extensions 
+                            if not sorting_analyzer.has_extension(ext)]
+            
+            if missing_critical:
+                raise RuntimeError(f"Critical extensions missing: {missing_critical}")
+            
+            total_duration = timer() - start
+            logging.debug(f"Analyzer stage complete in: {total_duration:.2f}s")
+            
+            # Save checkpoint after analyzer
+            checkpoint.save_checkpoint(
+                ProcessingStage.ANALYZER_COMPLETE,
+                analyzer_folder=analyzer_folder,
+                extensions_computed=sorting_analyzer.get_loaded_extension_names()
+            )
 
-        mean_isi_outside_combined = np.mean(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
-        cov_isi_outside_combined = np.cov(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
-
-        mean_isi_all_combined = np.mean(all_isis) if all_isis.size > 0 else np.nan
-        cov_isi_all_combined = np.cov(all_isis) if all_isis.size > 0 else np.nan
-
-        # Calculate spike counts for each unit
-        spike_counts = {unit: len(times) for unit, times in spike_times.items()}
-
-        # Sort units by ascending spike counts
-        sorted_units = sorted(spike_counts, key=spike_counts.get)
-
-        axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
-
-        # Call the plot_network_activity function and pass the SpikeTimes dictionary
-        axs[1],network_data= helper.plot_network_activity(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
-
-        network_data['MeanWithinBurstISI'] = mean_isi_within_combined
-        network_data['CoVWithinBurstISI'] = cov_isi_within_combined
-        network_data['MeanOutsideBurstISI'] = mean_isi_outside_combined   
-        network_data['CoVOutsideBurstISI'] = cov_isi_outside_combined
-        network_data['MeanNetworkISI'] = mean_isi_all_combined
-        network_data['CoVNetworkISI'] = cov_isi_all_combined
-        network_data['NumUnits'] = len(non_violated_units)
-        network_data["fileName"]=f"{desired_pattern}/{stream_id}"
-
-       
-
-
-        plt.tight_layout()
-        plt.xlim(0, 60)
-        plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/sorted_raster_plot.eps", format="eps")
-     
-        #fig2, axs2 = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
-        #axs2[0] = helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=None, title_suffix="(Origininal Raster Order)")
-        # Copy the second plot to the new figure
-        #fig2._axstack.add(fig2._make_key(axs2[1]), axs[1])
-        #plt.tight_layout()
-        #plt.xlim(0, 60)
-        #plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/original_raster_plot.eps", format="eps")
-        # Save the network data to a JSON file
-        helper.save_json(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/network_data.json", network_data)
+        else:
+            # Resume from checkpoint - load existing analyzer
+            logging.info(f"[STAGE 2] Resuming - loading existing analyzer...")
+            analyzer_folder = checkpoint.state['analyzer_folder']
+            
         
-        compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
-        file_exists = os.path.isfile(compiledNetworkData)
-        with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
-            fieldnames = network_data.keys()
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(network_data)
+            
+            # Load analyzer
+            sorting_analyzer = si.load(
+                analyzer_folder
+            )
+            
+            logging.info(f"Loaded analyzer with extensions: {sorting_analyzer.get_loaded_extension_names()}")
+            
+            # Check if any extensions are missing (in case of partial completion)
+            existing_extensions = sorting_analyzer.get_loaded_extension_names()
+            all_available = sorting_analyzer.get_computable_extensions()
+            missing_extensions = [ext for ext in all_available if ext not in existing_extensions]
+            
+            if missing_extensions:
+                logging.info(f"Found {len(missing_extensions)} missing extensions, computing them...")
+                
+                for ext_name in missing_extensions:
+                    try:
+                        logging.info(f"  Computing missing extension: {ext_name}...")
+                        sorting_analyzer.compute(ext_name, save=True, **job_kwargs)
+                        logging.info(f"  ✓ {ext_name} completed")
+                    except Exception as e:
+                        logging.warning(f"  ✗ Failed to compute {ext_name}: {e}")
+                        
+                        # Only fail if critical
+                        critical_extensions = ['waveforms', 'templates', 'quality_metrics']
+                        if ext_name in critical_extensions:
+                            raise RuntimeError(f"Critical extension {ext_name} failed: {e}")
+                
+                # Update checkpoint with newly computed extensions
+                checkpoint.save_checkpoint(
+                    ProcessingStage.ANALYZER_COMPLETE,
+                    analyzer_folder=analyzer_folder,
+                    extensions_computed=sorting_analyzer.get_loaded_extension_names()
+                )
+            else:
+                logging.info("All extensions already present")
+
+
+    except Exception as e:
+        error_msg = f"ERROR in {project_name},{chip_id} {date} {run_id} {stream_id}/{rec_name}: {str(e)}"
+        logging.error(error_msg)
+        logging.error(f"TRACEBACK: {traceback.format_exc()}")
+        
+        # Mark as failed in checkpoint
+        checkpoint.mark_failed(error_msg,"Sorter ANalyzing Stage")
+        
+        return "error",error_msg
+
+    try:
+        # ============== STAGE 3: Generate Reports ==============
+        if current_stage.value < ProcessingStage.REPORTS_COMPLETE.value:
+            logging.info(f"[STAGE 3] Generating reports and metrics...")
+            
+            # Extract metrics
+            qual_metrics = sorting_analyzer.get_extension('quality_metrics').get_data()
+            template_metrics = sorting_analyzer.get_extension('template_metrics').get_data()
+            
+            # Get output pattern
+            pattern = r"/(\d+)/data.raw.h5"
+            run_id = int(re.search(pattern, file_path).group(1))
+            file_pattern = os.path.dirname(file_path)
+            parts = file_pattern.split('/')
+            desired_pattern = '/'.join(parts[-6:])
+            
+            output_dir = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}"
+            
+            # Save unfiltered metrics
+            qual_metrics.to_excel(f"{output_dir}/quality_metrics_unfiltered.xlsx")
+            template_metrics.to_excel(f"{output_dir}/template_metrics_unfiltered.xlsx")
+            
+            # Filter units
+            update_qual_metrics = automatic_curation(qual_metrics, thresholds)
+            non_violated_units = update_qual_metrics.index.values
+            numunits = len(non_violated_units)
+            
+            if numunits == 0:
+                logging.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
+                checkpoint.save_checkpoint(
+                    ProcessingStage.REPORTS_COMPLETE,
+                    num_units_filtered=0,
+                    warning="No units passed quality criteria"
+                )
+                return None, 0
+            
+            # Save filtered metrics
+            template_metrics_filtered = template_metrics.loc[non_violated_units]
+            template_metrics_filtered.to_excel(f"{output_dir}/template_metrics.xlsx")
+            
+            # Get locations
+            if sorting_analyzer.has_extension('unit_locations'):
+                locations = sorting_analyzer.get_extension('unit_locations').get_data()
+            else:
+                sorting_analyzer.compute('unit_locations', method='monopolar_triangulation')
+                locations = sorting_analyzer.get_extension('unit_locations').get_data()
+            
+            qual_metrics_filtered = qual_metrics.loc[non_violated_units]
+            qual_metrics_filtered['location_X'] = locations[non_violated_units, 0]
+            qual_metrics_filtered['location_Y'] = locations[non_violated_units, 1]
+            qual_metrics_filtered['location_Z'] = locations[non_violated_units, 2]
+            qual_metrics_filtered.to_excel(f"{output_dir}/quality_metrics.xlsx")
+            
+            # Generate plots
+            unit_ids = sorting_analyzer.unit_ids
+            unit_locations = dict(zip(unit_ids, locations))
+            
+            # Plot unfiltered units
+            fig1, ax1 = plt.subplots(figsize=(10.5, 6.5))
+            si.plot_probe_map(recording_chunk, ax=ax1, with_channel_ids=False)
+            for unit_id, (x, y, z) in unit_locations.items():
+                ax1.scatter(x, y, s=10, c='blue', alpha=0.6)
+            ax1.invert_yaxis()
+            fig1.savefig(f"{output_dir}/locations_unfiltered_units.pdf")
+            plt.close(fig1)
+            
+            # Plot filtered units
+            fig2, ax2 = plt.subplots(figsize=(10.5, 6.5))
+            si.plot_probe_map(recording_chunk, ax=ax2, with_channel_ids=False)
+            for unit_id, (x, y, z) in unit_locations.items():
+                if unit_id in non_violated_units:
+                    ax2.scatter(x, y, s=10, c='blue', alpha=0.6)
+            ax2.invert_yaxis()
+            fig2.savefig(f"{output_dir}/locations_{numunits}_units.pdf")
+            plt.close(fig2)
+            
+            # Generate waveform plots
+            unit_extremum_channel = si.get_template_extremum_channel(
+                sorting_analyzer,
+                peak_sign='neg'
+            )
+            unit_extremum_channel = {
+                key: value for key, value in unit_extremum_channel.items()
+                if key in non_violated_units
+            }
+            
+            os.makedirs(f"{output_dir}/waveforms/", mode=0o777, exist_ok=True)
+            import matplotlib.backends.backend_pdf as pdf
+
+            pdf_file = f'{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/waveforms_subplots.pdf'
+
+            with pdf.PdfPages(pdf_file) as pdf_pages:
+                num_cols = 4
+                num_rows = 3
+                
+                # Get waveforms extension and sparsity information
+                waveform_ext = sorting_analyzer.get_extension('waveforms')
+                sparsity = waveform_ext.sparsity
+                
+                # Get templates extension for fallback channel selection
+                templates_ext = sorting_analyzer.get_extension('templates')
+                
+                for i in range(0, len(non_violated_units), num_rows * num_cols):
+                    units_to_plot = non_violated_units[i:i + num_rows * num_cols]
+                    
+                    fig, axes = plt.subplots(num_rows, num_cols, figsize=(12, 8), squeeze=False)
+                    plt.subplots_adjust(hspace=1, wspace=0.5)
+                    
+                    for j, unit_id in enumerate(units_to_plot):
+                        row = j // num_cols
+                        col = j % num_cols
+                        ax = axes[row, col]
+
+                        try:
+                            # Get waveforms for this unit
+                            wf = waveform_ext.get_waveforms_one_unit(unit_id)
+                            
+                            # Get extremum channel ID (global)
+                            extremum_channel_id = unit_extremum_channel[unit_id]
+                            channel_id_str = str(int(extremum_channel_id))
+                            
+                            # Handle sparsity correctly
+                            if sparsity is not None:
+                                # Get the sparse channel IDs for this unit
+                                unit_channel_ids = sparsity.unit_id_to_channel_ids[unit_id]
+                                unit_channel_ids_str = [str(int(ch)) for ch in unit_channel_ids]
+                                
+                                if channel_id_str in unit_channel_ids_str:
+                                    # Extremum channel is in sparse set
+                                    sparse_idx = unit_channel_ids_str.index(channel_id_str)
+                                    channel_label = f"extremum ch {channel_id_str}"
+                                else:
+                                    # Extremum channel not in sparse set - find channel with maximum amplitude
+                                    template = templates_ext.get_unit_template(unit_id=unit_id)
+                                    max_amp_sparse_idx = np.argmax(np.abs(template).max(axis=0))
+                                    sparse_idx = max_amp_sparse_idx
+                                    actual_channel = unit_channel_ids[sparse_idx]
+                                    
+                                    logging.warning(
+                                        f"Unit {unit_id}: extremum channel {channel_id_str} not in sparse set. "
+                                        f"Using max amplitude channel {actual_channel} instead."
+                                    )
+                                    channel_label = f"ch {actual_channel} (max amp)"
+                            else:
+                                # Dense waveforms - use global channel index
+                                sparse_idx = sorting_analyzer.channel_ids_to_indices([channel_id_str])[0]
+                                channel_label = f"extremum ch {channel_id_str}"
+                            
+                            # Plot waveforms
+                            ax.plot(wf[:, :, sparse_idx].T, lw=1, color='black', alpha=0.1, 
+                                linestyle='-', marker='', markersize=0)
+                            ax.set_title(f"Unit {unit_id}\n{channel_label}", fontsize=9)
+                            ax.set_ylabel("Amplitude (µV)")
+                            ax.set_ylim(-700, 400)
+                            ax.set_xlabel("Sampled timepoints (5e-2 ms)")
+                            ax.set_facecolor('white')
+                            ax.tick_params(axis='x', colors='black')
+                            ax.tick_params(axis='y', colors='black')
+                            ax.spines['top'].set_color('white')
+                            ax.spines['right'].set_color('white')
+
+                            # Save individual subplot
+                            fig_single = plt.figure()
+                            ax_single = fig_single.add_subplot(111)
+                            ax_single.plot(wf[:, :, sparse_idx].T, lw=1, color='black', alpha=0.1, 
+                                        linestyle='-', marker='', markersize=0)
+                            ax_single.set_title(f"Waveforms of Unit {unit_id}\n{channel_label}")
+                            ax_single.set_ylabel("Amplitude (µV)")
+                            ax_single.set_ylim(-700, 400)
+                            ax_single.set_xlabel("Sampled timepoints (5e-2 ms)")
+                            ax_single.set_facecolor('white')
+                            ax_single.tick_params(axis='x', colors='black')
+                            ax_single.tick_params(axis='y', colors='black')
+                            ax_single.spines['top'].set_color('white')
+                            ax_single.spines['right'].set_color('white')
+                            fig_single.savefig(
+                                f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/{unit_id}.svg", 
+                                format="svg"
+                            )
+                            plt.close(fig_single)
+                            
+                        except Exception as e:
+                            # Fallback for plotting errors
+                            logging.error(f"Failed to plot waveforms for unit {unit_id}: {e}")
+                            ax.text(0.5, 0.5, f"Unit {unit_id}\nPlot failed", 
+                                ha='center', va='center', transform=ax.transAxes, fontsize=8)
+                            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+                    # Remove empty subplots
+                    num_units_to_plot = len(units_to_plot)
+                    for k in range(num_units_to_plot, num_rows * num_cols):
+                        row = k // num_cols
+                        col = k % num_cols
+                        ax = axes[row, col]
+                        ax.axis('off')
+
+                    # Save the subplots to the PDF file
+                    pdf_pages.savefig(fig)
+                    plt.close(fig)
+
+            logging.info(f"Waveform subplots saved to: {pdf_file}")
 
 
     
+            # Generate spike train analysis
+            fs = recording_chunk.get_sampling_frequency()
+            frame_start = 0
+            if time_in_s is None:
+                time_in_s = (recording_chunk.get_num_frames() / fs ) -1
+            frame_end = recording_chunk.get_num_frames()                                            ##for the resume option it is required to reload the recording chunk
+            spike_times = {}
+            
+            for idx, unit_id in enumerate(non_violated_units):
+                spike_train = sorting_obj.get_unit_spike_train(
+                    unit_id,
+                    start_frame=frame_start,
+                    end_frame=frame_end
+                )
+                if len(spike_train) > 0:
+                    spike_times[idx] = spike_train / float(fs)
+            
+            np.save(f"{output_dir}/spikesorted_spike_times_dict.npy", spike_times)
+
+            ##BURST ANALYSIS CODE
+       
+            fig, axs = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
+            # Define the ISI threshold for burst detection (e.g., 0.1 seconds)
+            isi_threshold = 0.1
+            # Detect bursts for each unit
+            burst_statistics = helper.detect_bursts_statistics(spike_times, isi_threshold)
+            bursts = [unit_stats['bursts'] for unit_stats in burst_statistics.values()]
+            # Extracting ISIs as combined arrays
+            all_isis_within_bursts = np.concatenate([stats['isis_within_bursts'] for stats in burst_statistics.values() if stats['isis_within_bursts'].size > 0])
+            all_isis_outside_bursts = np.concatenate([stats['isis_outside_bursts'] for stats in burst_statistics.values() if stats['isis_outside_bursts'].size > 0])
+            all_isis = np.concatenate([stats['isis_all'] for stats in burst_statistics.values() if stats['isis_all'].size > 0])
+
+            # Calculate combined statistics
+            mean_isi_within_combined = np.mean(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+            cov_isi_within_combined = np.cov(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+
+            mean_isi_outside_combined = np.mean(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
+            cov_isi_outside_combined = np.cov(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
+
+            mean_isi_all_combined = np.mean(all_isis) if all_isis.size > 0 else np.nan
+            cov_isi_all_combined = np.cov(all_isis) if all_isis.size > 0 else np.nan
+
+            # Calculate spike counts for each unit
+            spike_counts = {unit: len(times) for unit, times in spike_times.items()}
+
+            # Sort units by ascending spike counts
+            sorted_units = sorted(spike_counts, key=spike_counts.get)
+
+            axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
+
+            # Call the plot_network_activity function and pass the SpikeTimes dictionary
+            axs[1],network_data= helper.plot_network_activity(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
+
+            network_data['MeanWithinBurstISI'] = mean_isi_within_combined
+            network_data['CoVWithinBurstISI'] = cov_isi_within_combined
+            network_data['MeanOutsideBurstISI'] = mean_isi_outside_combined   
+            network_data['CoVOutsideBurstISI'] = cov_isi_outside_combined
+            network_data['MeanNetworkISI'] = mean_isi_all_combined
+            network_data['CoVNetworkISI'] = cov_isi_all_combined
+            network_data['NumUnits'] = len(non_violated_units)
+            network_data["fileName"]=f"{desired_pattern}/{stream_id}"
+
         
-        electrodes = None
-        if clear_temp_files:
-            helper.empty_directory(sorting_folder)
-        return electrodes, len(update_qual_metrics)
+
+
+            plt.tight_layout()
+            plt.xlim(0, 60)
+            plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/spike_sorted_raster_plot.svg", format="svg")
+        
+            #fig2, axs2 = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
+            #axs2[0] = helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=None, title_suffix="(Origininal Raster Order)")
+            # Copy the second plot to the new figure
+            #fig2._axstack.add(fig2._make_key(axs2[1]), axs[1])
+            #plt.tight_layout()
+            #plt.xlim(0, 60)
+            #plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/original_raster_plot.eps", format="eps")
+            # Save the network data to a JSON file
+            helper.save_json(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/network_data.json", network_data)
+            
+            compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
+            file_exists = os.path.isfile(compiledNetworkData)
+            with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
+                fieldnames = network_data.keys()
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(network_data)
+
+
+            # Save final checkpoint
+            checkpoint.save_checkpoint(
+                ProcessingStage.REPORTS_COMPLETE,
+                num_units_filtered=numunits
+            )
+            
+            logging.info(f"[STAGE 3] Reports complete - {numunits} units detected")
+            
+            
+            electrodes = None
+
+
+      # Cleanup
+        if clear_temp_files and current_stage != ProcessingStage.REPORTS_COMPLETE:
+            #helper.empty_directory(sorting_folder)
+            pass
+        
+
+        return None, checkpoint.state.get('num_units_filtered', 0)
+    
     except Exception as e:
-        logger.info(f"ERROR :{e}\n TRACEBACK: {traceback.format_exc()}")
-        logging.info(f"Error in {rec_name} processing. Continuing to the next block")
-        if clear_temp_files:
-            helper.empty_directory(sorting_folder)
-        e = "The sorting failed."
-        return e,e
+        error_msg = f"ERROR in {stream_id}/{rec_name}: {str(e)}"
+        logging.error(error_msg)
+        logging.error(f"TRACEBACK: {traceback.format_exc()}")
+        
+        # Mark as failed in checkpoint
+        checkpoint.mark_failed(error_msg,"Report Generation Stage")
+        
+        # if clear_temp_files:
+        #     helper.empty_directory(sorting_folder)
+        
+        return "The sorting failed.", "The sorting failed."
     #helper.dumpdicttofile(failed_sorting_rec,'./failed_recording_sorting')
 
 
-def routine_sequential(file_path,number_of_configurations,time_in_s):
-
-    for rec_number in range(number_of_configurations):
-        process_block(rec_number,file_path,time_in_s)
-    return
-
- 
-def routine_parallel(file_path,number_of_configurations,time_in_s):
-
-    inputs = [(x, file_path, time_in_s) for x in range(number_of_configurations)]
-    pool = multiprocessing.Pool(processes=4)
-    results = pool.starmap(process_block, inputs)
-    # close the pool of processes
-    pool.close()
-    
-    # wait for all the processes to finish
-    pool.join()
-
-    return results
-    
 
 
     
@@ -721,21 +1178,44 @@ def main():
     This direct main function run would be silent run on server.
 
     """
-    
+    global args, logger
+
+
     parser = argparse.ArgumentParser(description="Process inpout filepaths")
     # Check if the correct number of command-line arguments is provided
    
      # Positional argument (mandatory)
     parser.add_argument('file_dir_path', type=str, help='Path to the file or directory', nargs='?')
 
-    parser.add_argument('-r', '--reference', type=str, help='Path to the reference file (optional)')
+    parser.add_argument('--reference', type=str, help='Path to the reference file (optional)')
 
-    parser.add_argument('-t','--type',nargs='+',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
+    parser.add_argument('--type',nargs='+',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
     
-    parser.add_argument('-p', '--params', type=str, help='JSON string of parameters for remove_violated_units (optional)')
+    parser.add_argument( '--params', type=str, help='JSON string of parameters for remove_violated_units (optional)')
     
-    #parser.add_argument('-d','--docker',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
+    parser.add_argument('--docker',type=str, help='Array types (Optional)')
+
+    parser.add_argument('--wells',nargs='+',type=str,default=['well000','well001','well002','well003','well004','well005'], help='Well IDs to process (Optional)')
+
+    parser.add_argument('--clear',action='store_true', help='Clear temporary files (Optional)')
+
+    parser.add_argument('--debug',action='store_true', help='Debug mode (Optional)')
+
+    parser.add_argument('--sorter',type=str,default='kilosort4', help='Sorter to use (e.g., kilosort2, spyking-circus)')
+
+    parser.add_argument('--resume', action='store_true',
+                       help='Resume from checkpoint if available')
+    parser.add_argument('--force-restart', action='store_true',
+                       help='Ignore checkpoints and restart from beginning')
+    parser.add_argument('--checkpoint-dir', type=str,
+                       default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints',
+                       help='Directory for checkpoint files')
+
     args = parser.parse_args()
+
+    
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
     # Check if the mandatory file path/dir path is provided
     if args.file_dir_path is None:
@@ -764,10 +1244,17 @@ def main():
     if os.path.isfile(path):
         logger.debug(f"'{path}' is a file.")
         # Perform actions for a file here
-        for stream_id in ['well001','well002','well003','well004','well005']:
+        wells_to_process = []
+        if args.wells:
+            wells_to_process = args.wells
+        else:
+            h5py_file = h5py.File(path, mode="r")
+            wells_to_process =h5py_file['wells'].keys()
+        if wells_to_process is None:
+            logger.info("No wells found in the file.")
+            sys.exit(1)
+        for stream_id in wells_to_process:
         	_ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
-        
-
 
     # Check if the path is a folder
     elif os.path.isdir(path):
@@ -784,15 +1271,15 @@ def main():
             array_types = args.type
 
             data_df = pd.read_excel(data_f)
-            network_today_runs = data_df[data_df['Assay'].str.lower().isin(array_types)]
-            network_today_run_numbers = network_today_runs['Run #'].to_list()
+            assay_runs = data_df[data_df['Assay'].str.lower().isin(array_types)]
+            assay_run_numbers = assay_runs['Run #'].to_list()
             for path in result:   ##TO DO: check if the run number is in ref file.
                 try:
                     parts = path.split("/")
                     run_id = int(parts[-2])
-                    if run_id in network_today_run_numbers:
+                    if run_id in assay_run_numbers:
 
-                        import h5py
+                       
                     
                         h5 = h5py.File(path, mode="r")                 # I do reading operations here, but it is done once more in process_block. TODO: noat effiocient
                         for stream_id in h5['wells'].keys():
@@ -808,9 +1295,7 @@ def main():
             logger.debug("Reference file not provided, so analysing all the files in the folder.")
             logger.debug(result)
             for path in result:   ##TODO: check if the run number is in ref file.
-                
-
-                import h5py
+            
             
                 h5 = h5py.File(path, mode="r")
                 for stream_id in h5['wells'].keys():
