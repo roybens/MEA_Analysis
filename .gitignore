@@ -24,5 +24,6 @@ nohup.out
 **.pdf
 **.h5
 **.raw
-
+si_ks4/
 IPNAnalysis/kilosort_output/sorter_output/
+NetworkAnalysis/ActivityQuality/*.csv
