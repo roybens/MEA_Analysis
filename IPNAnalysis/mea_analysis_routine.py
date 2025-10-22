@@ -36,25 +36,40 @@ from enum import Enum
 # Configure the logger
 # Manually clear the log file
 
-args =None
-with open('./application.log', 'w'):
-    pass
-logging.basicConfig(
-    filename='./application.log',  # Log file name
-    level=logging.INFO ,  # Log level
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(module)s - %(lineno)d', # Log format
-    datefmt='%Y-%m-%d %H:%M:%S' # Timestamp format
-)
+def setup_logger(log_file='./application.log'):
+    #make dirs if not exist
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    open(log_file, 'w').close()  # Clear log file on each run
 
-logging.getLogger('matplotlib').setLevel(logging.WARNING)
-logging.getLogger('kilosort').setLevel(logging.WARNING)
-logger = logging.getLogger("mea_pipeline")
+    logger = logging.getLogger("mea_pipeline")
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s - %(module)s - %(lineno)d')
+
+    fh = logging.FileHandler(log_file)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    logger.info(f"Logging to {log_file}")
+    return logger
+
+
+
+args =None
+
+logger =None  #placeholder for global logger
 
 def log_resource_usage():
     process = psutil.Process(os.getpid())
     mem_info = process.memory_info()
-    logging.debug(f"Memory usage: {mem_info.rss / 1024**3:.2f} GB")
-    logging.debug(f"CPU usage: {process.cpu_percent()}%")
+    logger.debug(f"Memory usage: {mem_info.rss / 1024**3:.2f} GB")
+    logger.debug(f"CPU usage: {process.cpu_percent()}%")
 
 ##DEFINING GLOBAL VARIABLES
 
@@ -121,9 +136,9 @@ class PipelineCheckpoint:
         
         with open(self.checkpoint_file, 'w') as f:
             json.dump(self.state, f, indent=2)
-        
-        logging.info(f"Checkpoint saved:{self.project_name},{self.chip_id},{self.date},{self.run_id},{self.chip_id} {self.well_id}/{self.rec_name} - {stage.name}")
-    
+
+        logger.info(f"Checkpoint saved:{self.project_name},{self.chip_id},{self.date},{self.run_id},{self.chip_id} {self.well_id}/{self.rec_name} - {stage.name}")
+
     def get_stage(self):
         """Get current processing stage"""
         return ProcessingStage(self.state['stage'])
@@ -141,10 +156,10 @@ class PipelineCheckpoint:
         if stage == ProcessingStage.REPORTS_COMPLETE: 
             
             if args.force_restart:
-                logging.info(f"Restarting {self.well_id}/{self.rec_name} from scratch")
+                logger.info(f"Restarting {self.well_id}/{self.rec_name} from scratch")
                 return False
             else:
-                logging.info(f"Skipping {self.well_id}/{self.rec_name} - already completed")
+                logger.info(f"Skipping {self.well_id}/{self.rec_name} - already completed")
                 return True
         
         return False
@@ -315,7 +330,7 @@ def merge_similar_templates(sorting,waveforms,sim_score =0.7):
     pairs = []
     # Print the indices
     for ind in indices:
-        logging.debug(f"{temp_metrics.index[ind[0]],temp_metrics.index[ind[1]]}")
+        logger.debug(f"{temp_metrics.index[ind[0]],temp_metrics.index[ind[1]]}")
         pairs.append((temp_metrics.index[ind[0]],temp_metrics.index[ind[1]]))
     connected_components = find_connected_components(pairs)
     cs = CurationSorting(sorting)
@@ -416,7 +431,17 @@ def get_data_maxwell(file_path,stream_id,rec_num):
     recording = si.read_maxwell(file_path,rec_name=rec_name,stream_id=stream_id,install_maxwell_plugin=False)
     return recording,rec_name
 
+def parse_h5_path(file_path):
+    pattern = r"/(\d+)/data.raw.h5"
+    run_id = int(re.search(pattern, file_path).group(1))
+    file_pattern = os.path.dirname(file_path)
+    parts = file_pattern.split('/')
+    project_name =parts[-5] if len(parts)>=5 else 'UnknownProject'
+    date = parts[-4] if len(parts)>=4 else 'UnknownDate'
+    chip_id = parts[-3] if len(parts)>=3 else 'UnknownChip'
 
+    desired_pattern = '/'.join(parts[-6:])
+    return run_id,project_name,date,chip_id,desired_pattern
 
 
 def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0, 
@@ -428,19 +453,13 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
     # Setup paths and checkpoint manager
     if file_path.endswith('.raw.h5'):
         recording, rec_name = get_data_maxwell(file_path, stream_id, recnumber)
-        pattern = r"/(\d+)/data.raw.h5"
-        run_id = int(re.search(pattern, file_path).group(1))
-        file_pattern = os.path.dirname(file_path)
-        parts = file_pattern.split('/')
-        project_name =parts[-5] if len(parts)>=5 else 'UnknownProject'
-        date = parts[-4] if len(parts)>=4 else 'UnknownDate'
-        chip_id = parts[-3] if len(parts)>=3 else 'UnknownChip'
-
-        desired_pattern = '/'.join(parts[-6:])
+        logger.info(f"Processing recording: {file_path}")
+        #file pattern extraction
+        run_id,project_name,date,chip_id,desired_pattern = parse_h5_path(file_path)
 
     else:
         rec_name = "binary_recording"   #implement fr binary
-        logging.error("Binary file processing not implemented yet")
+        logger.error("Binary file processing not implemented yet")
 
 
     # Initialize checkpoint manager
@@ -459,7 +478,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
         return None,None                            #need ot handle thies
     
     if args.force_restart:
-        logging.info(f"Restarting {stream_id}/{rec_name} from scratch")
+        logger.info(f"Restarting {stream_id}/{rec_name} from scratch")
         #manually delete checkpoint file to restart
         if checkpoint.checkpoint_file.exists():
             checkpoint.checkpoint_file.unlink()
@@ -468,20 +487,16 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
     try:
         # Get current stage to resume from
         current_stage = checkpoint.get_stage()
-        logging.info(f"Starting from stage: {current_stage.name}")
+        logger.info(f"Starting from stage: {current_stage.name}")
         
         # ============== STAGE 0: Setup and Preprocessing ==============
         if current_stage.value < ProcessingStage.SORTING_COMPLETE.value:
-            logging.info(f"[STAGE 0] Loading and preprocessing recording...")
-            
+            logger.info(f"[STAGE 0] Loading and preprocessing recording...")
+
             # Your existing preprocessing code
             if file_path.endswith('.raw.h5'):
                 # Setup output paths
-                pattern = r"/(\d+)/data.raw.h5"
-                run_id = int(re.search(pattern, file_path).group(1))          # might be redundant #TODO
-                file_pattern = os.path.dirname(file_path)
-                parts = file_pattern.split('/')
-                desired_pattern = '/'.join(parts[-6:])
+                run_id, project_name, date, chip_id, desired_pattern = parse_h5_path(file_path)
                    
                 os.makedirs(
                     f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}",
@@ -490,7 +505,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 )
 
                 recording, rec_name = get_data_maxwell(file_path, stream_id, recnumber)
-                logging.info(f"Processing recording: {rec_name}")
+                logger.info(f"Processing recording: {rec_name}")
                 fs, num_chan, channel_ids, total_rec_time = get_channel_recording_stats(recording)
                 
                 if time_in_s is None:
@@ -521,56 +536,80 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             
             # ============== STAGE 1: Spike Sorting ==============
-            logging.info(f"[STAGE 1] Running spike sorting...")
+            logger.info(f"[STAGE 1] Running spike sorting...")
             if args.debug:
                 log_resource_usage()
             start = timer()
             
             if args.docker:
-                sorting_obj = si.run_sorter(
-                    sorter_name="kilosort2",
-                    recording=recording_chunk,
-                    output_folder=analyzer_folder,
-                    remove_existing_folder=True,
-                    delete_output_folder=False,
-                    verbose=True,
-                    docker_image=args.docker,
-                    with_output=True
-                )
-            else:
-                if args.sorter == 'kilosort2':
-                    default_KS2_params = si.get_default_sorter_params('kilosort2')
-                    sorting_obj = si.run_sorter_local(
-                        sorter_name="kilosort2",
+                if args.sorter == 'kilosort2' or args.sorter == 'kilosort3':
+                    sorting_obj = si.run_sorter(
+                        sorter_name=args.sorter,
                         recording=recording_chunk,
                         output_folder=analyzer_folder,
+                        remove_existing_folder=True,
                         delete_output_folder=False,
                         verbose=True,
-                        with_output=True,
-                        **default_KS2_params
+                        docker_image=args.docker,
+                        with_output=True
                     )
-                else:
-                    default_KS4_params = si.get_default_sorter_params('kilosort4')
-                    default_KS4_params.update({
+                elif args.sorter == 'kilosort4':
+                    ks_params ={
                         'batch_size': int(fs),
                         'clear_cache': True,
                         'invert_sign': True,
                         'cluster_downsampling': 10,
                         'max_cluster_subset': None,
-                    })
+                    }
+                    sorting_obj = si.run_sorter(
+                        sorter_name="kilosort4",
+                        recording=recording_chunk,
+                        output_folder=analyzer_folder,
+                        delete_output_folder=False,
+                        verbose=True,
+                        with_output=True,
+                        **ks_params
+                    )
+                else:
+
+                    logger.error(f"Unsupported Mode with sorter with docker: {args.sorter}")
+                    raise ValueError(f"Unsupported Mode with sorter with docker: {args.sorter}")
+            else:
+                if args.sorter == 'kilosort2' or args.sorter == 'kilosort3':
+                    sorting_obj = si.run_sorter_local(
+                        sorter_name=args.sorter,
+                        recording=recording_chunk,
+                        folder=analyzer_folder,
+                        remove_existing_folder=True,
+                        delete_output_folder=False,
+                        verbose=True,
+                        with_output=True
+                    )
+                elif args.sorter == 'kilosort4':
+                    
+                    ks_params ={
+                        'batch_size': int(fs),
+                        'clear_cache': True,
+                        'invert_sign': True,
+                        'cluster_downsampling': 10,
+                        'max_cluster_subset': None,
+                    }
                     
                     sorting_obj = si.run_sorter_local(
-                        sorter_name="kilosort4",
+                        sorter_name=args.sorter,
                         recording=recording_chunk,
                         folder=analyzer_folder,
                         delete_output_folder=False,
                         verbose=True,
                         with_output=True,
-                        **default_KS4_params
+                        **ks_params
                     )
-            
-            logging.debug(f"Sorting complete in: {timer()-start:.2f}s")
-            
+                else:
+                    logger.error(f"Unsupported Mode with sorter without docker: {args.sorter}")
+                    raise ValueError(f"Unsupported Mode with sorter without docker: {args.sorter}")
+
+            logger.debug(f"Sorting complete in: {timer()-start:.2f}s")
+
             # Clean up sorting
             sorting_obj = sorting_obj.remove_empty_units()
             sorting_obj = si.remove_excess_spikes(
@@ -578,6 +617,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 recording_chunk
             )
             sorting_obj = si.remove_duplicated_spikes( sorting_obj,censored_period_ms=0.1 )
+            #remove redundant units based on template similarity 
+            #sorting_obj = si.remove_redundant_units(sorting_obj,duplicate_threshold=0.9,remove_strategy="minimum_shift") #TODO
             #sorting_obj.save(folder=kilosort_output_folder,overwrite=True)  # Overwrite with cleaned sorting
             # Save checkpoint after sorting
             checkpoint.save_checkpoint(
@@ -592,10 +633,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             
         else:
             # Resume from checkpoint - load existing sorting
-            logging.info(f"[STAGE 1] Resuming - loading existing sorting...")
+            logger.info(f"[STAGE 1] Resuming - loading existing sorting...")
             analyzer_folder = checkpoint.state['analyzer_folder']
-            
-            logging.info(f"desired_pattern: {desired_pattern}")
+
+            logger.info(f"desired_pattern: {desired_pattern}")
             # Reload recording
             recording_chunk = si.load(
                 f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
@@ -606,47 +647,47 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             
             # Attempt 1: Try read_sorter_folder (if SpikeInterface metadata exists)
             try:
-                logging.info("Attempt 1: Using read_sorter_folder")
+                logger.info("Attempt 1: Using read_sorter_folder")
                 sorting_obj = si.read_sorter_folder(folder=analyzer_folder)
-                logging.info(f"Successfully loaded with read_sorter_folder: {len(sorting_obj.get_unit_ids())} units")
+                logger.info(f"Successfully loaded with read_sorter_folder: {len(sorting_obj.get_unit_ids())} units")
             except Exception as e:
-                logging.debug(f"read_sorter_folder failed: {e}")
-            
+                logger.debug(f"read_sorter_folder failed: {e}")
+
             # Attempt 2: Try NumpySorting (if analyzer was created)
             if sorting_obj is None:
                 try:
-                    logging.info("Attempt 2: Using read_numpy_sorting")
+                    logger.info("Attempt 2: Using read_numpy_sorting")
                     sorting_path = f"{analyzer_folder}/sorting"
                     if os.path.exists(sorting_path):
                         sorting_obj = si.read_numpy_sorting_folder(sorting_path)
-                        logging.info(f"Successfully loaded with read_numpy_sorting: {len(sorting_obj.get_unit_ids())} units")
+                        logger.info(f"Successfully loaded with read_numpy_sorting: {len(sorting_obj.get_unit_ids())} units")
                 except Exception as e:
-                    logging.debug(f"read_numpy_sorting failed: {e}")
-            
+                    logger.debug(f"read_numpy_sorting failed: {e}")
+
             # Attempt 3: Try reading from Kilosort native format
             if sorting_obj is None:
                 try:
-                    logging.info("Attempt 3: Using read_kilosort from sorter_output")
+                    logger.info("Attempt 3: Using read_kilosort from sorter_output")
                     sorter_output = f"{analyzer_folder}/sorter_output"
                     if os.path.exists(sorter_output):
                         sorting_obj = si.read_kilosort(folder=sorter_output)
-                        logging.info(f"Successfully loaded with read_kilosort: {len(sorting_obj.get_unit_ids())} units")
+                        logger.info(f"Successfully loaded with read_kilosort: {len(sorting_obj.get_unit_ids())} units")
                 except Exception as e:
-                    logging.debug(f"read_kilosort from sorter_output failed: {e}")
-            
+                    logger.debug(f"read_kilosort from sorter_output failed: {e}")
+
             # Attempt 4: Try reading Kilosort from analyzer_folder directly
             if sorting_obj is None:
                 try:
-                    logging.info("Attempt 4: Using read_kilosort from analyzer_folder")
+                    logger.info("Attempt 4: Using read_kilosort from analyzer_folder")
                     sorting_obj = si.read_kilosort(folder=analyzer_folder)
-                    logging.info(f"Successfully loaded with read_kilosort: {len(sorting_obj.get_unit_ids())} units")
+                    logger.info(f"Successfully loaded with read_kilosort: {len(sorting_obj.get_unit_ids())} units")
                 except Exception as e:
-                    logging.debug(f"read_kilosort from analyzer_folder failed: {e}")
-            
+                    logger.debug(f"read_kilosort from analyzer_folder failed: {e}")
+
             # If all attempts failed
             if sorting_obj is None:
-                logging.error(f"Failed to load sorting from: {analyzer_folder}")
-                logging.error("Tried: read_sorter_folder, read_numpy_sorting_folder, read_kilosort (multiple paths)")
+                logger.error(f"Failed to load sorting from: {analyzer_folder}")
+                logger.error("Tried: read_sorter_folder, read_numpy_sorting_folder, read_kilosort (multiple paths)")
                 raise FileNotFoundError(f"Could not load sorting from any format in {analyzer_folder}")
             
             # Re-apply cleaning
@@ -656,9 +697,9 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
     except Exception as e:
         error_msg = f"ERROR in {project_name},{chip_id} {date} {run_id} {stream_id}/{rec_name}: {str(e)}"
-        logging.error(error_msg)
-        logging.error(f"TRACEBACK: {traceback.format_exc()}")
-        
+        logger.error(error_msg)
+        logger.error(f"TRACEBACK: {traceback.format_exc()}")
+
         # Mark as failed in checkpoint
         checkpoint.mark_failed(error_msg,"Sorting Stage")
         
@@ -669,22 +710,22 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
     try:
         # ============== STAGE 2: Sorting Analyzer ==============
         if current_stage.value < ProcessingStage.ANALYZER_COMPLETE.value:
-            logging.info(f"[STAGE 2] Computing sorting analyzer...")
+            logger.info(f"[STAGE 2] Computing sorting analyzer...")
             start = timer()
             
             analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             
             # Check if analyzer already exists (partial completion scenario)
             if Path(analyzer_folder).exists():
-                logging.info("Found existing analyzer folder, attempting to load...")
+                logger.info("Found existing analyzer folder, attempting to load...")
                 try:
                     sorting_analyzer = si.load_sorting_analyzer(
                         folder=analyzer_folder,
                         recording=recording_chunk
                     )
-                    logging.info("Successfully loaded existing analyzer")
+                    logger.info("Successfully loaded existing analyzer")
                 except Exception as e:
-                    logging.warning(f"Could not load existing analyzer: {e}. Creating new one...")
+                    logger.warning(f"Could not load existing analyzer: {e}. Creating new one...")
                     # Remove corrupted folder and start fresh
                     import shutil
                     shutil.rmtree(analyzer_folder)
@@ -694,7 +735,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             
             # Create new analyzer if needed
             if sorting_analyzer is None:
-                logging.info("Creating new sorting analyzer...")
+                logger.info("Creating new sorting analyzer...")
                 
                 # Optimal sparsity for HD-MEA (Maxwell Biosystems)
                 sparsity = si.estimate_sparsity(
@@ -716,21 +757,20 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     folder=analyzer_folder
                 )
 
-            sorting_analyzer = si.remove_redundant_units(sorting_analyzer,duplicate_threshold=0.9,remove_strategy="minimum_shift")
             
             # Check which extensions are already computed
             existing_extensions = sorting_analyzer.get_loaded_extension_names()
-            logging.info(f"Existing extensions: {existing_extensions}")
+            logger.info(f"Existing extensions: {existing_extensions}")
             
             # Get all available extensions
             all_available = sorting_analyzer.get_computable_extensions()
-            logging.info(f"All available extensions: {all_available}")
-            
+            logger.info(f"All available extensions: {all_available}")
+
             # Determine which extensions need to be computed
             missing_extensions = [ext for ext in all_available if ext not in existing_extensions]
             
             if missing_extensions:
-                logging.info(f"Computing {len(missing_extensions)} missing extensions: {missing_extensions}")
+                logger.info(f"Computing {len(missing_extensions)} missing extensions: {missing_extensions}")
                 
                 if args.debug:
                     log_resource_usage()
@@ -741,7 +781,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 
                 for ext_name in missing_extensions:
                     try:
-                        logging.info(f"  Computing {ext_name}...")
+                        logger.info(f"  Computing {ext_name}...")
                         ext_start = timer()
                         
                         # Compute individual extension
@@ -749,10 +789,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                         
                         duration = timer() - ext_start
                         successfully_computed.append(ext_name)
-                        logging.info(f"  ✓ {ext_name} completed in {duration:.2f}s")
+                        logger.info(f"  ✓ {ext_name} completed in {duration:.2f}s")
                         
                     except Exception as e:
-                        logging.error(f"  ✗ Failed to compute {ext_name}: {e}")
+                        logger.error(f"  ✗ Failed to compute {ext_name}: {e}")
                         failed_extensions.append(ext_name)
                         
                         # Only fail if it's a critical extension
@@ -762,13 +802,13 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 
                 if args.debug:
                     log_resource_usage()
-                
-                logging.info(f"Successfully computed: {successfully_computed}")
+
+                logger.info(f"Successfully computed: {successfully_computed}")
                 if failed_extensions:
-                    logging.warning(f"Failed extensions (non-critical): {failed_extensions}")
+                    logger.warning(f"Failed extensions (non-critical): {failed_extensions}")
             else:
-                logging.info("All extensions already computed!")
-            
+                logger.info("All extensions already computed!")
+
             # Verify critical extensions exist
             critical_extensions = ['waveforms', 'templates', 'quality_metrics', 'template_metrics']
             missing_critical = [ext for ext in critical_extensions 
@@ -778,7 +818,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 raise RuntimeError(f"Critical extensions missing: {missing_critical}")
             
             total_duration = timer() - start
-            logging.debug(f"Analyzer stage complete in: {total_duration:.2f}s")
+            logger.debug(f"Analyzer stage complete in: {total_duration:.2f}s")
+
+
+            #sorting_analyzer = si.remove_redundant_units(sorting_analyzer,duplicate_threshold=0.9,remove_strategy="minimum_shift")
             
             # Save checkpoint after analyzer
             checkpoint.save_checkpoint(
@@ -789,7 +832,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
         else:
             # Resume from checkpoint - load existing analyzer
-            logging.info(f"[STAGE 2] Resuming - loading existing analyzer...")
+            logger.info(f"[STAGE 2] Resuming - loading existing analyzer...")
             analyzer_folder = checkpoint.state['analyzer_folder']
             
         
@@ -798,26 +841,28 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             sorting_analyzer = si.load(
                 analyzer_folder
             )
-            
-            logging.info(f"Loaded analyzer with extensions: {sorting_analyzer.get_loaded_extension_names()}")
 
-            sorting_analyzer = si.remove_redundant_units(sorting_analyzer,duplicate_threshold=0.9,remove_strategy="minimum_shift")   #this and clean sorting should go inside a curation funciton
+            logger.info(f"Loaded analyzer with extensions: {sorting_analyzer.get_loaded_extension_names()}")
+
+            #sorting_analyzer = si.remove_redundant_units(sorting_analyzer,duplicate_threshold=0.9,remove_strategy="minimum_shift")   #this and clean sorting should go inside a curation funciton
+
+            
             # Check if any extensions are missing (in case of partial completion)
             existing_extensions = sorting_analyzer.get_loaded_extension_names()
             all_available = sorting_analyzer.get_computable_extensions()
             missing_extensions = [ext for ext in all_available if ext not in existing_extensions]
             
             if missing_extensions:
-                logging.info(f"Found {len(missing_extensions)} missing extensions, computing them...")
+                logger.info(f"Found {len(missing_extensions)} missing extensions, computing them...")
                 
                 for ext_name in missing_extensions:
                     try:
-                        logging.info(f"  Computing missing extension: {ext_name}...")
+                        logger.info(f"  Computing missing extension: {ext_name}...")
                         sorting_analyzer.compute(ext_name, save=True, **job_kwargs)
-                        logging.info(f"  ✓ {ext_name} completed")
+                        logger.info(f"  ✓ {ext_name} completed")
                     except Exception as e:
-                        logging.warning(f"  ✗ Failed to compute {ext_name}: {e}")
-                        
+                        logger.warning(f"  ✗ Failed to compute {ext_name}: {e}")
+
                         # Only fail if critical
                         critical_extensions = ['waveforms', 'templates', 'quality_metrics']
                         if ext_name in critical_extensions:
@@ -830,23 +875,23 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     extensions_computed=sorting_analyzer.get_loaded_extension_names()
                 )
             else:
-                logging.info("All extensions already present")
+                logger.info("All extensions already present")
 
 
     except Exception as e:
         error_msg = f"ERROR in {project_name},{chip_id} {date} {run_id} {stream_id}/{rec_name}: {str(e)}"
-        logging.error(error_msg)
-        logging.error(f"TRACEBACK: {traceback.format_exc()}")
-        
+        logger.error(error_msg)
+        logger.error(f"TRACEBACK: {traceback.format_exc()}")
+
         # Mark as failed in checkpoint
-        checkpoint.mark_failed(error_msg,"Sorter ANalyzing Stage")
-        
+        checkpoint.mark_failed(error_msg,"Sorter Analyzing Stage")
+
         return "error",error_msg
 
     try:
         # ============== STAGE 3: Generate Reports ==============
         if current_stage.value < ProcessingStage.REPORTS_COMPLETE.value:
-            logging.info(f"[STAGE 3] Generating reports and metrics...")
+            logger.info(f"[STAGE 3] Generating reports and metrics...")
             
             # Extract metrics
             qual_metrics = sorting_analyzer.get_extension('quality_metrics').get_data()
@@ -872,7 +917,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             numunits = len(non_violated_units)
             
             if numunits == 0:
-                logging.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
+                logger.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
                 checkpoint.save_checkpoint(
                     ProcessingStage.REPORTS_COMPLETE,
                     num_units_filtered=0,
@@ -981,8 +1026,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                                     max_amp_sparse_idx = np.argmax(np.abs(template).max(axis=0))
                                     sparse_idx = max_amp_sparse_idx
                                     actual_channel = unit_channel_ids[sparse_idx]
-                                    
-                                    logging.warning(
+
+                                    logger.warning(
                                         f"Unit {unit_id}: extremum channel {channel_id_str} not in sparse set. "
                                         f"Using max amplitude channel {actual_channel} instead."
                                     )
@@ -1027,7 +1072,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                             
                         except Exception as e:
                             # Fallback for plotting errors
-                            logging.error(f"Failed to plot waveforms for unit {unit_id}: {e}")
+                            logger.error(f"Failed to plot waveforms for unit {unit_id}: {e}")
                             ax.text(0.5, 0.5, f"Unit {unit_id}\nPlot failed", 
                                 ha='center', va='center', transform=ax.transAxes, fontsize=8)
                             ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -1044,8 +1089,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     pdf_pages.savefig(fig)
                     plt.close(fig)
 
-            logging.info(f"Waveform subplots saved to: {pdf_file}")
-
+            logger.info(f"Waveform subplots saved to: {pdf_file}")
 
     
             # Generate spike train analysis
@@ -1142,25 +1186,61 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 ProcessingStage.REPORTS_COMPLETE,
                 num_units_filtered=numunits
             )
-            
-            logging.info(f"[STAGE 3] Reports complete - {numunits} units detected")
-            
-            
+
+            logger.info(f"[STAGE 3] Reports complete - {numunits} units detected")
+
+
             electrodes = None
+        if args.export_to_phy:
+            # Export to Phy format
+            phy_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/phy_output"
+            if not os.path.exists(phy_folder):
+                os.makedirs(phy_folder, exist_ok=True)
+            si.export_to_phy(
+                sorting_analyzer=sorting_analyzer,
+                output_folder=phy_folder,
+                remove_if_exists=True,
+                **job_kwargs
+            )
+            logger.info(f"Exported sorting to Phy format at: {phy_folder}")
 
-
-      # Cleanup
-        if clear_temp_files and current_stage != ProcessingStage.REPORTS_COMPLETE:
-            #helper.empty_directory(sorting_folder)
-            pass
+        # Cleanup folders
+        if clear_temp_files and current_stage == ProcessingStage.REPORTS_COMPLETE:
+            logger.info("Clearing stored files...")
+            binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+            if os.path.exists(binary_folder):
+                shutil.rmtree(binary_folder)
+            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/sorting_output"
+            if os.path.exists(sorting_folder):
+                shutil.rmtree(sorting_folder)
+            
+        # Final resource cleanup
         
+        import gc
+        import shutil
 
+        # === Resource cleanup ===
+        del recording_chunk
+        del sorting_obj
+        del sorting_analyzer
+        gc.collect()
+        # Optional: free GPU memory
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except:
+            pass
+        try:
+            import cupy
+            cupy.get_default_memory_pool().free_all_blocks()
+        except:
+            pass
         return None, checkpoint.state.get('num_units_filtered', 0)
     
     except Exception as e:
         error_msg = f"ERROR in {stream_id}/{rec_name}: {str(e)}"
-        logging.error(error_msg)
-        logging.error(f"TRACEBACK: {traceback.format_exc()}")
+        logger.error(error_msg)
+        logger.error(f"TRACEBACK: {traceback.format_exc()}")
         
         # Mark as failed in checkpoint
         checkpoint.mark_failed(error_msg,"Report Generation Stage")
@@ -1173,73 +1253,40 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
 
 
-
-    
-
-
-
 def main():
+    global args,logger
 
-    """
-    This direct main function run would be silent run on server.
+    parser = argparse.ArgumentParser(description="Process single MEA file and well")
 
-    """
-    global args, logger
-
-
-    parser = argparse.ArgumentParser(description="Process inpout filepaths")
-    # Check if the correct number of command-line arguments is provided
-   
-     # Positional argument (mandatory)
-    parser.add_argument('file_dir_path', type=str, help='Path to the file or directory', nargs='?')
-
-    parser.add_argument('--reference', type=str, help='Path to the reference file (optional)')
-
-    parser.add_argument('--type',nargs='+',type=str,default=['network today', 'network today/best'], help='Array types (Optional)')
-    
-    parser.add_argument( '--params', type=str, help='JSON string of parameters for remove_violated_units (optional)')
-    
-    parser.add_argument('--docker',type=str, help='Array types (Optional)')
-
-    parser.add_argument('--wells',nargs='+',type=str,default=['well000','well001','well002','well003','well004','well005'], help='Well IDs to process (Optional)')
-
-    parser.add_argument('--clear',action='store_true', help='Clear temporary files (Optional)')
-
-    parser.add_argument('--debug',action='store_true', help='Debug mode (Optional)')
-
-    parser.add_argument('--sorter',type=str,default='kilosort4', help='Sorter to use (e.g., kilosort2, spyking-circus)')
-
-    parser.add_argument('--resume', action='store_true',
-                       help='Resume from checkpoint if available')
-    parser.add_argument('--force-restart', action='store_true',
-                       help='Ignore checkpoints and restart from beginning')
-    parser.add_argument('--checkpoint-dir', type=str,
-                       default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints',
-                       help='Directory for checkpoint files')
+    parser.add_argument('file_dir_path', type=str, help='Path to the .h5 file')
+    parser.add_argument('--well', type=str, required=True, help='Well IDs to process')
+    parser.add_argument('--params', type=str, help='JSON string or path with curation thresholds')
+    parser.add_argument('--docker', type=str, help='Docker image (if using containerized sorter)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--sorter', type=str, default='kilosort4', help='Sorter to use')
+    parser.add_argument('--resume', action='store_true', help='Resume from checkpoint')
+    parser.add_argument('--force-restart', action='store_true', help='Restart even if completed')
+    parser.add_argument('--clean-up', action='store_true', help='Clear temporary files')
+    parser.add_argument('--checkpoint-dir', type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help='Checkpoint folder')
 
     args = parser.parse_args()
-
-    
+    path = args.file_dir_path
+    well = args.well
+    #parse file path
+    run_id,project_name,date,chip_id,desired_pattern = parse_h5_path(args.file_dir_path)
+    logger = setup_logger(log_file=f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/logs/{run_id}_{chip_id}_{date}_{well}.log")
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    # Check if the mandatory file path/dir path is provided
-    if args.file_dir_path is None:
-        logger.info("Usage: python script.py <file_or_folder_path> ")
-        sys.exit(1)
 
-    # Get the user-provided path from the command-line argument
-    path = args.file_dir_path
-    
-    # Check if the path exists
     if not os.path.exists(path):
-        logger.info(f"The specified data path '{path}' does not exist.")
+        logger.error(f"Path does not exist: {path}")
         sys.exit(1)
 
+    # Load thresholds
     thresholds = None
     if args.params:
         try:
-            # Support both file path and JSON string
             if os.path.isfile(args.params):
                 with open(args.params, 'r') as f:
                     thresholds = json.load(f)
@@ -1247,94 +1294,19 @@ def main():
             else:
                 thresholds = json.loads(args.params)
                 logger.info("Loaded parameters from command line string")
-        except json.JSONDecodeError:
-            logger.error("Invalid JSON format in parameters.")
-            sys.exit(1)
         except Exception as e:
-            logger.error(f"Error loading parameters: {e}")
+            logger.error(f"Failed to parse params: {e}")
             sys.exit(1)
-
-    #pdb.set_trace()
-    # Check if the path is a file
-    if os.path.isfile(path):
-        logger.debug(f"'{path}' is a file.")
-        # Perform actions for a file here
-        wells_to_process = []
-        if args.wells:
-            wells_to_process = args.wells
-        else:
-            h5py_file = h5py.File(path, mode="r")
-            wells_to_process =h5py_file['wells'].keys()
-        if wells_to_process is None:
-            logger.info("No wells found in the file.")
-            sys.exit(1)
-        for stream_id in wells_to_process:
-        	_ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
-
-    # Check if the path is a folder
-    elif os.path.isdir(path):
-        
-        logger.debug(f"'{path}' is a folder.")
-        # Perform actions for a folder here
-        file_name_pattern = "data.raw.h5"
-        subfolder_name = "Network"
-        result = helper.find_files_with_subfolder(path, file_name_pattern, subfolder_name)
-        
-        if args.reference:
-            
-            data_f = args.reference
-            array_types = args.type
-
-            data_df = pd.read_excel(data_f)
-            assay_runs = data_df[data_df['Assay'].str.lower().isin(array_types)]
-            assay_run_numbers = assay_runs['Run #'].to_list()
-            for path in result:   ##TO DO: check if the run number is in ref file.
-                try:
-                    parts = path.split("/")
-                    run_id = int(parts[-2])
-                    if run_id in assay_run_numbers:
-
-                       
-                    
-                        h5 = h5py.File(path, mode="r")                 # I do reading operations here, but it is done once more in process_block. TODO: noat effiocient
-                        for stream_id in h5['wells'].keys():
-
-                            _ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
-                    else:
-                        logger.info(f"{run_id} not a network assay")   
-                        continue
-                except Exception as e:
-                    logger.info(e)
-                    continue
-        else:
-            logger.debug("Reference file not provided, so analysing all the files in the folder.")
-            logger.debug(result)
-            for path in result:   ##TODO: check if the run number is in ref file.
-            
-            
-                h5 = h5py.File(path, mode="r")
-                for stream_id in h5['wells'].keys():
-                    try:
-                        _ = process_block(path,stream_id=stream_id,thresholds=thresholds) 
-
-                    except Exception as e:
-                        logger.info(f"ERROR :{e}\n TRACEBACK: {traceback.format_exc()}")
-                                    
-                        continue
-
-
-            sys.exit(1)
-
-
-        # Extract the 'Run #' values from the filtered DataFrame
-        
-
-                
-    # If it's neither a file nor a folder, display an error message
-    else:
-        logger.info(f"'{path}' is neither a file nor a folder.")
+    try:
+        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=True if args.clean_up else False)
+    except Exception as e:
+        logger.error(f"Processing failed for {well}: {e}")
+        logger.error(traceback.format_exc())
         sys.exit(1)
-    # You can add your code to perform specific actions for files and folders here
-    
-if __name__ =="__main__" :
+
+
+if __name__ == "__main__":
     main()
+    
+
+
