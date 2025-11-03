@@ -5,6 +5,7 @@
 
 # ==========================================================
 
+import time
 import os
 import sys
 import argparse
@@ -78,6 +79,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument("--dry", action="store_true", help="Dry run only (no processing)")
     parser.add_argument("--clean-up", action="store_true", help="Clear sorter outputs etc.")
+    parser.add_argument("--export-to-phy", action="store_true", help="Export results to Phy format")
     parser.add_argument("--checkpoint-dir", type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help="Checkpoint directory")
 
     args = parser.parse_args()
@@ -101,8 +103,11 @@ def main():
     if args.params: extra_args.append(f"--params '{args.params}'")
     if args.clean_up: extra_args.append("--clean-up")
     if args.checkpoint_dir: extra_args.append(f"--checkpoint-dir '{args.checkpoint_dir}'")
+    if args.export_to_phy: extra_args.append("--export-to-phy")
     extra_arg_string = " ".join(extra_args)
-
+    logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
+    #ticker
+    start_clock = time.time()
     # ------------------------------------------------------
     # Handle Directory Mode
     # ------------------------------------------------------
@@ -210,7 +215,11 @@ def main():
         logger.error(f"Invalid path type: {path}")
         sys.exit(1)
 
-
+    # Stop the timer and log the duration
+    end_clock = time.time()
+    duration = end_clock - start_clock
+    logger.info(f"Pipeline driver completed in {duration:.2f} seconds")
+    
 # ----------------------------------------------------------
 # Entry
 # ----------------------------------------------------------
