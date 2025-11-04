@@ -39,7 +39,7 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
 
     % ADD THESE TWO LINES HERE (added by Shruti):
     titleText = {plotTitle, 'Neural Activity Raster'};  % Two-line title
-    title(titleText, 'Interpreter', 'none', 'FontSize', 10, 'bold');
+    title(titleText, 'Interpreter', 'none', 'FontSize', 10, 'FontWeight', 'bold');
 
     %title('Neural Activity Raster', 'FontSize', 11, 'FontWeight', 'bold');
     box off; set(gca, 'YDir', 'normal', 'FontSize', 9, 'TickDir', 'out');
