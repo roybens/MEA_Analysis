@@ -254,7 +254,7 @@ function [] = compileNetworkFiles(data)
                                           burstsSummaryRow.mean_IBI,burstsSummaryRow.mean_Burst_Peak);
                         
                         plotFileBase = sprintf('Raster_%s_Well%d_%s_DIV%d_%s',scan_runID_text, wellID, scan_chipID, scan_div, neuronSourceType);
-                         % CREATE TITLE STRING:
+                        % Create Title for Rasters --- (Shruti Added) 
                         plotTitle = sprintf('Raster_%s_Well%d_%s_DIV%d_%s', scan_runID_text, wellID, ...
                         scan_chipID, scan_div, strrep(neuronSourceType, ' ', ''));
                         locData = struct()

@@ -37,7 +37,7 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     
     ylabel('Channel', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
 
-    % ADD THESE TWO LINES HERE (added by Shruti):
+    % Title Text Added (SS) --- 
     titleText = {plotTitle, 'Neural Activity Raster'};  % Two-line title
     title(titleText, 'Interpreter', 'none', 'FontSize', 10, 'FontWeight', 'bold');
 
