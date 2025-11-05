@@ -252,7 +252,11 @@ function [] = compileNetworkFiles(data)
                         textStr = sprintf('#Bursts:%d | MeanDur:%.1fs | SpB:%.1f | IBI:%.1fs | Peak:%.1f', ...
                                           burstsSummaryRow.Number_Bursts, burstsSummaryRow.mean_BurstDuration,  burstsSummaryRow.mean_Spike_per_Burst, ...
                                           burstsSummaryRow.mean_IBI,burstsSummaryRow.mean_Burst_Peak);
+                        
                         plotFileBase = sprintf('Raster_%s_Well%d_%s_DIV%d_%s',scan_runID_text, wellID, scan_chipID, scan_div, neuronSourceType);
+                         % CREATE TITLE STRING:
+                        plotTitle = sprintf('Raster_%s_Well%d_%s_DIV%d_%s', scan_runID_text, wellID, ...
+                        scan_chipID, scan_div, strrep(neuronSourceType, ' ', ''));
                         locData = struct()
                         locData.channel = networkData.fileObj.map.channel;
                         locData.xpos = networkData.fileObj.map.x;
@@ -260,7 +264,7 @@ function [] = compileNetworkFiles(data)
                         plotRasterNetwork( networkAct, networkStats, ...
                                            relativeSpikeTimes,locData, binSize, opDir, chipWellDir, ...
                                            xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
-                                            baselineFiringRate);
+                                            baselineFiringRate, plotTitle);
      
                     end
 
