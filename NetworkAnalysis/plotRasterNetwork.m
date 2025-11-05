@@ -1,5 +1,5 @@
 function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,binSize, ...
-    opDir,chipWellFolder,xlimNetwork,ylimNetwork,textString,plotFileName,baselineFiringRate)
+    opDir,chipWellFolder,xlimNetwork,ylimNetwork,textString,plotFileName,baselineFiringRate, plotTitle)
     
     %% NO INPUT PARSER - Simpler for PARFOR
     % Direct color settings
@@ -36,7 +36,12 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     end
     
     ylabel('Channel', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
-    title('Neural Activity Raster', 'FontSize', 11, 'FontWeight', 'bold');
+
+    % ADD THESE TWO LINES HERE (added by Shruti):
+    titleText = {plotTitle, 'Neural Activity Raster'};  % Two-line title
+    title(titleText, 'Interpreter', 'none', 'FontSize', 10, 'FontWeight', 'bold');
+
+    %title('Neural Activity Raster', 'FontSize', 11, 'FontWeight', 'bold');
     box off; set(gca, 'YDir', 'normal', 'FontSize', 9, 'TickDir', 'out');
     set(gca, 'XColor', [0.2 0.2 0.2], 'YColor', [0.2 0.2 0.2]);
     set(gca, 'XTickLabel', []);
