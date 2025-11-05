@@ -1057,7 +1057,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                                         linestyle='-', marker='', markersize=0)
                             ax_single.set_title(f"Waveforms of Unit {unit_id}\n{channel_label}")
                             ax_single.set_ylabel("Amplitude (µV)")
-                            ax_single.set_ylim(-700, 400)
+                            #ax_single.set_ylim(-700, 400)
                             ax_single.set_xlabel("Sampled timepoints (5e-2 ms)")
                             ax_single.set_facecolor('white')
                             ax_single.tick_params(axis='x', colors='black')
@@ -1267,6 +1267,7 @@ def main():
     parser.add_argument('--resume', action='store_true', help='Resume from checkpoint')
     parser.add_argument('--force-restart', action='store_true', help='Restart even if completed')
     parser.add_argument('--clean-up', action='store_true', help='Clear temporary files')
+    parser.add_argument('--export-to-phy', action='store_true', help='Export results to Phy format')
     parser.add_argument('--checkpoint-dir', type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help='Checkpoint folder')
 
     args = parser.parse_args()
