@@ -8,7 +8,8 @@ def logISI_burst_detection(spike_times,
                            void_threshold=0.7,  # Void parameter threshold
                            min_spikes_in_burst=3,
                            hist_bins=100,
-                           smooth_sigma=2.0):
+                           smooth_sigma=2.0,
+                           ):
     """
     Detect bursts using the LogISI method (Pasquale et al. 2010).
     
@@ -451,9 +452,13 @@ def plot_network_bursts_logISI(ax, SpikeTimes,
         electrodes_bursting_count.append(count)
     
     electrodes_bursting_count = np.array(electrodes_bursting_count)
+
+    smoothing_sigma =1.0
+    electrode_bursting_count_smooth = gaussian_filter1d(electrodes_bursting_count.astype(float), sigma=smoothing_sigma)
+
     
     # Step 3: Identify network bursts where enough electrodes burst simultaneously
-    network_burst_active = electrodes_bursting_count >= min_electrodes_threshold
+    network_burst_active = electrode_bursting_count_smooth >= min_electrodes_threshold
     
     # Find continuous regions of network bursting
     network_bursts = []
@@ -490,7 +495,35 @@ def plot_network_bursts_logISI(ax, SpikeTimes,
                                 (all_spike_times <= current_burst_end))
         network_bursts.append((current_burst_start, current_burst_end, 
                               spikes_in_burst, current_burst_max_electrodes))
-    
+    #Drop bursts shorter than min duration
+    min_network_burst_duration = 0.1  # 100 ms
+    network_bursts = [nb for nb in network_bursts if (nb[1] - nb[0]) >= min_network_burst_duration]
+    #Merge bursts separated by less than min duration
+    min_gap_to_merge = 0.05  # 50 ms
+    if len(network_bursts) > 1:
+        network_bursts = sorted(network_bursts, key=lambda x: x[0])
+        merged_bursts = []
+        for nb in network_bursts:
+            if not merged_bursts:
+                merged_bursts.append(nb)
+                continue
+            last = merged_bursts[-1]
+            last_start, last_end, last_spikes, last_electrodes = last
+            this_start, this_end, this_spikes, this_electrodes = nb
+
+            #compute gap
+            gap = this_start - last_end
+            if gap <= min_gap_to_merge:
+                last[1] = this_end
+                last[2] = last_spikes + this_spikes
+                last[3] = max(last_electrodes, this_electrodes)
+            else:
+                merged_bursts.append(list(nb))
+        network_bursts = [tuple(nb) for nb in merged_bursts]
+
+
+
+
     # Step 4: Calculate network burst statistics
     if len(network_bursts) > 0:
         burst_durations = [nb[1] - nb[0] for nb in network_bursts]
@@ -574,4 +607,4 @@ def plot_network_bursts_logISI(ax, SpikeTimes,
     ax.legend(loc='upper right', fontsize=9)
     ax.grid(True, alpha=0.3)
     
-    return network_data
+    return ax, network_data
