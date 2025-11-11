@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
 import helper_functions as helper
+from logISINetworkBurst import plot_network_bursts_logISI
 from pathlib import Path
 from timeit import default_timer as timer
 import multiprocessing
@@ -254,7 +255,6 @@ def automatic_curation(metrics, thresholds=None):
     """
     # Default thresholds
     default_thresholds = {
-        'num_spikes': 300,
         'presence_ratio': 0.9,
         'rp_contamination': 1,   #used instead of isi_violations_ratio
         'firing_rate': 0.05, # in Hz about 3 spikes in 1 min at least
@@ -542,11 +542,11 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             start = timer()
             
             if args.docker:
-                if args.sorter == 'kilosort2' or args.sorter == 'kilosort3':
+                if args.sorter in ['kilosort2','kilosort2_5', 'kilosort3']:
                     sorting_obj = si.run_sorter(
                         sorter_name=args.sorter,
                         recording=recording_chunk,
-                        output_folder=analyzer_folder,
+                        folder=analyzer_folder,
                         remove_existing_folder=True,
                         delete_output_folder=False,
                         verbose=True,
@@ -564,7 +564,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     sorting_obj = si.run_sorter(
                         sorter_name="kilosort4",
                         recording=recording_chunk,
-                        output_folder=analyzer_folder,
+                        folder=analyzer_folder,
                         delete_output_folder=False,
                         verbose=True,
                         with_output=True,
@@ -925,6 +925,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 )
                 return None, 0
             
+            curated_sorting = sorting_obj.select_units(non_violated_units)
+            curated_analyzer = sorting_analyzer.select_units(non_violated_units)
+            #curated_analyzer.save(folder=f"{output_dir}/analyzer_curated", overwrite=True)
+
             # Save filtered metrics
             template_metrics_filtered = template_metrics.loc[non_violated_units]
             template_metrics_filtered.to_excel(f"{output_dir}/template_metrics.xlsx")
@@ -1064,10 +1068,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                             ax_single.tick_params(axis='y', colors='black')
                             ax_single.spines['top'].set_color('white')
                             ax_single.spines['right'].set_color('white')
-                            fig_single.savefig(
-                                f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/{unit_id}.svg", 
-                                format="svg"
-                            )
+                            #fig_single.savefig(
+                            #   f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/{unit_id}.svg", 
+                            #    format="svg"
+                           #)
                             plt.close(fig_single)
                             
                         except Exception as e:
@@ -1143,8 +1147,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
 
             # Call the plot_network_activity function and pass the SpikeTimes dictionary
-            axs[1],network_data= helper.plot_network_activity(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
-
+            #axs[1],network_data= helper.plot_network_bursts(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
+            axs[1],network_data= plot_network_bursts_logISI(axs[1],spike_times)
             network_data['MeanWithinBurstISI'] = mean_isi_within_combined
             network_data['CoVWithinBurstISI'] = cov_isi_within_combined
             network_data['MeanOutsideBurstISI'] = mean_isi_outside_combined   
@@ -1197,7 +1201,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             if not os.path.exists(phy_folder):
                 os.makedirs(phy_folder, exist_ok=True)
             si.export_to_phy(
-                sorting_analyzer=sorting_analyzer,
+                sorting_analyzer=curated_analyzer,
                 output_folder=phy_folder,
                 remove_if_exists=True,
                 **job_kwargs
