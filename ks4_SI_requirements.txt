@@ -99,7 +99,7 @@ spikeinterface==0.103.0
 stack-data==0.6.3
 sympy==1.14.0
 threadpoolctl==3.6.0
-torch==2.9.0+cu128
+#torch==2.9.0+cu128
 tornado==6.5.2
 tqdm==4.67.1
 traitlets==5.14.3
