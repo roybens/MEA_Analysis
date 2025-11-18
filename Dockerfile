@@ -11,11 +11,16 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /workspace
 
 # --- Copy your Python environment spec ---
-COPY requirements.txt .
+COPY ks4_SI_requirements.txt .
 
-# --- Install dependencies (matches your si_ks4 venv) ---
-RUN pip install --upgrade pip setuptools wheel \
- && pip install -r requirements.txt
+# --- Install base pip tools ---
+RUN pip install --upgrade pip setuptools wheel
+
+# --- Install PyTorch CUDA 12.8 (REQUIRED before requirements.txt) ---
+RUN pip install torch==2.9.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# --- Install the rest of your environment (excluding torch deps) ---
+RUN pip install -r ks4_SI_requirements.txt --no-deps
 
 # --- Environment configuration ---
 ENV PYTHONUNBUFFERED=1 \
