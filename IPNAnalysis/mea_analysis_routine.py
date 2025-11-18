@@ -1303,7 +1303,13 @@ def main():
             logger.error(f"Failed to parse params: {e}")
             sys.exit(1)
     try:
-        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=True if args.clean_up else False)
+        if args.clean_up:
+            logger.info("Starting processing with cleanup enabled")
+            clear_temp_files = True
+        else:
+            logger.info("Starting processing without cleanup")
+            clear_temp_files = False
+        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=clear_temp_files)
     except Exception as e:
         logger.error(f"Processing failed for {well}: {e}")
         logger.error(traceback.format_exc())
