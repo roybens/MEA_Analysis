@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
+from parameter_free_burst_detector import plot_network_bursts
 import helper_functions as helper
 from logISINetworkBurst import plot_network_bursts_logISI
 from pathlib import Path
@@ -249,16 +250,89 @@ def preprocess(recording):  ## some hardcoded stuff.
 
     return recording_cmr
 
+import numpy as np
+import pandas as pd
+
 def automatic_curation(metrics, thresholds=None):
     """
-    Removing based on provided thresholds or default values.
+    Apply thresholds only when values exist (NaN -> skip filtering).
+    Also produce a full rejection log showing which rule failed.
     """
+
+    # Default thresholds
+    default_thresholds = {
+        'presence_ratio': 0.75,
+        'rp_contamination': 0.15,
+        'firing_rate': 0.05,
+        'amplitude_median': -50,          # amplitude must be <= -50 µV
+        'amplitude_cv_median': 0.3,       # stable waveform
+    }
+
+    if thresholds:
+        default_thresholds.update(thresholds)
+
+    # Rejection log list
+    rejection_records = []
+
+    # Boolean mask for accepted units
+    keep_mask = np.ones(len(metrics), dtype=bool)
+
+    # Iterate rows
+    for idx, row in metrics.iterrows():
+        reasons = []
+
+        for key, thr in default_thresholds.items():
+
+            if key not in row:
+                continue
+
+            val = row[key]
+
+            # Skip filtering if NaN
+            if pd.isna(val):
+                continue
+
+            #### APPLY RULES ####
+            if key == "presence_ratio" and not (val > thr):
+                reasons.append(f"{key} <= {thr} ({val:.3f})")
+
+            elif key == "rp_contamination" and not (val < thr):
+                reasons.append(f"{key} >= {thr} ({val:.3f})")
+
+            elif key == "firing_rate" and not (val > thr):
+                reasons.append(f"{key} <= {thr} ({val:.3f})")
+
+            elif key == "amplitude_median" and not (val <= thr):
+                reasons.append(f"{key} > {thr} ({val:.1f} µV)")
+
+            elif key == "amplitude_cv_median" and not (val < thr):
+                reasons.append(f"{key} >= {thr} ({val:.3f})")
+
+        # If any reasons collected → mark as rejected
+        if len(reasons) > 0:
+            keep_mask[idx] = False
+            rejection_records.append({
+                "unit_id": row.get("unit_id", idx),
+                "reasons": "; ".join(reasons)
+            })
+
+    # Final outputs
+    kept_units = metrics[keep_mask].copy()
+    rejection_log = pd.DataFrame(rejection_records)
+
+    return kept_units, rejection_log
+
+
+
+""" def automatic_curation(metrics, thresholds=None):
+
     # Default thresholds
     default_thresholds = {
         'presence_ratio': 0.9,
-        'rp_contamination': 1,   #used instead of isi_violations_ratio
+        'rp_contamination': 0.2,   #used instead of isi_violations_ratio
         'firing_rate': 0.05, # in Hz about 3 spikes in 1 min at least
-        'amplitude_median':-20
+        'amplitude_median':-20,
+        'amplitude_cv_median':0.5
     }
 
     # Update default thresholds with provided values
@@ -272,7 +346,9 @@ def automatic_curation(metrics, thresholds=None):
             'presence_ratio': f"({key} > {value})",
             'rp_contamination': f"({key} < {value})",
             'firing_rate': f"({key} > {value})",
-            'amplitude_median': f"({key} <= {value})"
+            'amplitude_median': f"({key} <= {value})",
+            'amplitude_cv_median': f"({key} < {value})"
+
         }
         # Return the appropriate condition or a default condition if key is not found
         return conditions.get(key, f"({key} > {value})")
@@ -285,6 +361,7 @@ def automatic_curation(metrics, thresholds=None):
 
     metrics = metrics.query(our_query)
     return metrics
+"""
 
 
 def find_connected_components(pairs):
@@ -912,7 +989,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             
             # Filter units
 
-            update_qual_metrics = automatic_curation(qual_metrics, thresholds)
+            update_qual_metrics, rejected_record = automatic_curation(qual_metrics, thresholds)
+            rejected_record.to_excel(f"{output_dir}/automatic_curation_rejection_log.xlsx", index=False)
             non_violated_units = update_qual_metrics.index.values
             numunits = len(non_violated_units)
             
@@ -1148,13 +1226,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
             # Call the plot_network_activity function and pass the SpikeTimes dictionary
             #axs[1],network_data= helper.plot_network_bursts(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
-            axs[1],network_data= plot_network_bursts_logISI(axs[1],spike_times)
-            network_data['MeanWithinBurstISI'] = mean_isi_within_combined
-            network_data['CoVWithinBurstISI'] = cov_isi_within_combined
-            network_data['MeanOutsideBurstISI'] = mean_isi_outside_combined   
-            network_data['CoVOutsideBurstISI'] = cov_isi_outside_combined
-            network_data['MeanNetworkISI'] = mean_isi_all_combined
-            network_data['CoVNetworkISI'] = cov_isi_all_combined
+            axs[1],network_data= plot_network_bursts(axs[1],spike_times)
+
             network_data['NumUnits'] = len(non_violated_units)
             network_data["fileName"]=f"{desired_pattern}/{stream_id}"
 
@@ -1175,14 +1248,14 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             # Save the network data to a JSON file
             helper.save_json(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/network_data.json", network_data)
             
-            compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
-            file_exists = os.path.isfile(compiledNetworkData)
-            with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
-                fieldnames = network_data.keys()
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow(network_data)
+            # compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
+            # file_exists = os.path.isfile(compiledNetworkData)
+            # with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
+            #     fieldnames = network_data.keys()
+            #     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            #     if not file_exists:
+            #         writer.writeheader()
+            #     writer.writerow(network_data)
 
 
             # Save final checkpoint
