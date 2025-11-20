@@ -177,9 +177,12 @@ for k = 1:numFiles
                 frLim = [0.1, 15];
                 ampLim = [10, 250];  %hard coding
                 aaLim = [0, 5];
+                % -- Add plot title-- (SS)
+                plotTitle = sprintf('Activity_Run%s_Chip%s_Well%d_DIV%d_%s', ...
+                    scan_runID_text, scan_chipID, wellID, scan_div, strrep(neuronType, ' ', '_'));
                 plotSummaryMontage(activityScanData, meanFiringRate, amplitude90perc, xpos_elec, ypos_elec, ...
                     meanISI, scan_runID_text, scan_chipID, wellID, scan_div, neuronType, ...
-                    fullfile(opDir, 'ActivityScan_outputs'), frLim, ampLim, aaLim);
+                    fullfile(opDir, 'ActivityScan_outputs'), frLim, ampLim, aaLim, plotTitle);
             end
 
         catch ME
@@ -267,13 +270,15 @@ end
 
 function plotSummaryMontage(activityScanData, meanFiringRate, amplitude90perc, xpos, ypos, ...
     meanISI, runID, chipID, wellID, div, neuronType, ...
-    outputDir, fixedFR_Caxis, fixedAmp_Caxis, fixedAA_Caxis)
+    outputDir, fixedFR_Caxis, fixedAmp_Caxis, fixedAA_Caxis, plotTitle)
 
 % Create a summary montage for Firing Rate, Amplitude, Active Area, and ISI metrics
 
 fig = figure('Visible','off','Color','w','Position',[100 100 1800 1200]);
 t = tiledlayout(3,3,'TileSpacing','tight','Padding','compact');
 
+% -- Add Plot Title --- 
+title(t, plotTitle, 'Interpreter', 'none', 'FontSize', 12, 'FontWeight', 'bold')
 % --- 1. Firing Rate Map ---
 nexttile(t,1);
 customCmap = customDivergingColorMap(256);
