@@ -1,3 +1,5 @@
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,11 +7,9 @@ from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
 from parameter_free_burst_detector import plot_network_bursts
 import helper_functions as helper
-from logISINetworkBurst import plot_network_bursts_logISI
 from pathlib import Path
 from timeit import default_timer as timer
 import multiprocessing
-import os
 import sys
 from datetime import datetime
 import logging
@@ -38,7 +38,9 @@ from enum import Enum
 # Configure the logger
 # Manually clear the log file
 
-def setup_logger(log_file='./application.log'):
+def setup_logger(log_file=None):
+    if log_file is None:
+        log_file =f'./applicaiton_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
     #make dirs if not exist
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     open(log_file, 'w').close()  # Clear log file on each run
@@ -235,23 +237,43 @@ def get_channel_recording_stats(recording):
     print(f"total_recording: {total_recording} s")
     return fs,num_chan,channel_ids, total_recording
 
-def preprocess(recording):  ## some hardcoded stuff.
-    """
-    Does the bandpass filtering and the common average referencing of the signal
+def preprocess(recording):
+    global logger
+    # 1. Convert to Signed (Essential for Maxwell)
+    recording = si.unsigned_to_signed(recording)
     
-    """
-    recording_signed = si.unsigned_to_signed(recording)
-    recording_bp = si.bandpass_filter(recording_signed, freq_min=300, freq_max=3000)
-    
+    # 2. REMOVE DC OFFSET (Highpass Only)
+    # Don't lowpass (freq_max). Let KS4 see the sharp spike details.
+    # KS4 expects data centered at 0.
+    recording = si.highpass_filter(recording, freq_min=300)
 
-    recording_cmr = si.common_reference(recording_bp, reference='global', operator='median')
+    # 3. LOCAL Common Reference (Critical for Superbursts)
+    # Instead of 'global', use 'local'.
+    # This removes local electrical noise without deleting network-wide bursts.
+    # radius=250um is a good balance for Maxwell chips.
+    try:
+        recording = si.common_reference(
+            recording, 
+            reference='local', 
+            operator='median', 
+            local_radius=(250, 250) # radius in um
+        )
+    except Exception as e:
+        # Fallback if channel locations aren't loaded correctly
+        logger.warning(f"Local CMR failed ({e}), falling back to Global")
+        recording = si.common_reference(recording, reference='global', operator='median')
 
-    recording_cmr.annotate(is_filtered=True)
+    recording.annotate(is_filtered=True)
 
-    return recording_cmr
+    # 4. Enforce float32 -> int16 conversion 
+    # KS4 runs faster on int16. Maxwell Raw is float/int mix sometimes.
+    # This scale step ensures the dynamic range fits into int16 without clipping.
+    # (Optional but recommended if you aren't already handling dtype elsewhere)
+    if recording.get_dtype() != 'int16':
+        recording = si.scale(recording, dtype='int16')
 
-import numpy as np
-import pandas as pd
+    return recording
+
 
 def automatic_curation(metrics, thresholds=None):
     """
@@ -632,11 +654,14 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     )
                 elif args.sorter == 'kilosort4':
                     ks_params ={
-                        'batch_size': int(fs),
+                        'batch_size': int(fs) * 2,
                         'clear_cache': True,
                         'invert_sign': True,
-                        'cluster_downsampling': 10,
+                        'cluster_downsampling': 20,
                         'max_cluster_subset': None,
+                        'nblocks':0,
+                        'dmin':17,
+                        'do_correction': False,
                     }
                     sorting_obj = si.run_sorter(
                         sorter_name="kilosort4",
@@ -665,11 +690,14 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 elif args.sorter == 'kilosort4':
                     
                     ks_params ={
-                        'batch_size': int(fs),
+                        'batch_size': int(fs) *2,
                         'clear_cache': True,
                         'invert_sign': True,
-                        'cluster_downsampling': 10,
+                        'cluster_downsampling': 20,
                         'max_cluster_subset': None,
+                        'nblocks':0,
+                        'dmin':17,
+                        'do_correction': False,
                     }
                     
                     sorting_obj = si.run_sorter_local(
@@ -995,7 +1023,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             numunits = len(non_violated_units)
             
             if numunits == 0:
-                logger.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
+                logger.warning(f"No units passed quality criteria for {sream_id}/{rec_name}")
                 checkpoint.save_checkpoint(
                     ProcessingStage.REPORTS_COMPLETE,
                     num_units_filtered=0,
