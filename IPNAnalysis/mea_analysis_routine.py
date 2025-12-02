@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
-from parameter_free_burst_detector import plot_network_bursts
+from IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
 import helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
@@ -1251,10 +1251,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             sorted_units = sorted(spike_counts, key=spike_counts.get)
 
             axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
-
-            # Call the plot_network_activity function and pass the SpikeTimes dictionary
-            #axs[1],network_data= helper.plot_network_bursts(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
-            axs[1],network_data= plot_network_bursts(axs[1],spike_times)
+            network_data = compute_network_bursts(ax_raster=None,ax_macro=ax[1],SpikeTimes=spike_times,plot=True)
 
             network_data['NumUnits'] = len(non_violated_units)
             network_data["fileName"]=f"{desired_pattern}/{stream_id}"
