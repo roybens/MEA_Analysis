@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
-from IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
+from parameter_free_burst_detector import compute_network_bursts
 import helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
@@ -574,7 +574,37 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
     
     # Check if should skip
     if checkpoint.should_skip(args):
-        return None,None                            #need ot handle thies
+        #resource cleanup
+                
+        import gc
+        import shutil
+        # Cleanup folders
+        if clear_temp_files:
+            logger.info("Clearing stored files if exists.")
+            binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+            if os.path.exists(binary_folder):
+                shutil.rmtree(binary_folder)
+            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            if os.path.exists(sorting_folder):
+                shutil.rmtree(sorting_folder)
+            
+        # Final resource cleanup
+
+
+        gc.collect()
+        # Optional: free GPU memory
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except:
+            pass
+        try:
+            import cupy
+            cupy.get_default_memory_pool().free_all_blocks()
+        except:
+            pass
+
+        return None,None                        
     
     if args.force_restart:
         logger.info(f"Restarting {stream_id}/{rec_name} from scratch")
@@ -1023,7 +1053,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             numunits = len(non_violated_units)
             
             if numunits == 0:
-                logger.warning(f"No units passed quality criteria for {sream_id}/{rec_name}")
+                logger.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
                 checkpoint.save_checkpoint(
                     ProcessingStage.REPORTS_COMPLETE,
                     num_units_filtered=0,
@@ -1251,7 +1281,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             sorted_units = sorted(spike_counts, key=spike_counts.get)
 
             axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
-            network_data = compute_network_bursts(ax_raster=None,ax_macro=ax[1],SpikeTimes=spike_times,plot=True)
+            network_data = compute_network_bursts(ax_raster=None,ax_macro=axs[1],SpikeTimes=spike_times,plot=True)
 
             network_data['NumUnits'] = len(non_violated_units)
             network_data["fileName"]=f"{desired_pattern}/{stream_id}"
@@ -1312,7 +1342,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
             if os.path.exists(binary_folder):
                 shutil.rmtree(binary_folder)
-            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/sorting_output"
+            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             if os.path.exists(sorting_folder):
                 shutil.rmtree(sorting_folder)
             
