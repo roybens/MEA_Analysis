@@ -1,14 +1,15 @@
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
+from parameter_free_burst_detector import compute_network_bursts
 import helper_functions as helper
-from logISINetworkBurst import plot_network_bursts_logISI
 from pathlib import Path
 from timeit import default_timer as timer
 import multiprocessing
-import os
 import sys
 from datetime import datetime
 import logging
@@ -37,7 +38,9 @@ from enum import Enum
 # Configure the logger
 # Manually clear the log file
 
-def setup_logger(log_file='./application.log'):
+def setup_logger(log_file=None):
+    if log_file is None:
+        log_file =f'./applicaiton_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
     #make dirs if not exist
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     open(log_file, 'w').close()  # Clear log file on each run
@@ -234,31 +237,124 @@ def get_channel_recording_stats(recording):
     print(f"total_recording: {total_recording} s")
     return fs,num_chan,channel_ids, total_recording
 
-def preprocess(recording):  ## some hardcoded stuff.
-    """
-    Does the bandpass filtering and the common average referencing of the signal
+def preprocess(recording):
+    global logger
+    # 1. Convert to Signed (Essential for Maxwell)
+    recording = si.unsigned_to_signed(recording)
     
-    """
-    recording_signed = si.unsigned_to_signed(recording)
-    recording_bp = si.bandpass_filter(recording_signed, freq_min=300, freq_max=3000)
-    
+    # 2. REMOVE DC OFFSET (Highpass Only)
+    # Don't lowpass (freq_max). Let KS4 see the sharp spike details.
+    # KS4 expects data centered at 0.
+    recording = si.highpass_filter(recording, freq_min=300)
 
-    recording_cmr = si.common_reference(recording_bp, reference='global', operator='median')
+    # 3. LOCAL Common Reference (Critical for Superbursts)
+    # Instead of 'global', use 'local'.
+    # This removes local electrical noise without deleting network-wide bursts.
+    # radius=250um is a good balance for Maxwell chips.
+    try:
+        recording = si.common_reference(
+            recording, 
+            reference='local', 
+            operator='median', 
+            local_radius=(250, 250) # radius in um
+        )
+    except Exception as e:
+        # Fallback if channel locations aren't loaded correctly
+        logger.warning(f"Local CMR failed ({e}), falling back to Global")
+        recording = si.common_reference(recording, reference='global', operator='median')
 
-    recording_cmr.annotate(is_filtered=True)
+    recording.annotate(is_filtered=True)
 
-    return recording_cmr
+    # 4. Enforce float32 -> int16 conversion 
+    # KS4 runs faster on int16. Maxwell Raw is float/int mix sometimes.
+    # This scale step ensures the dynamic range fits into int16 without clipping.
+    # (Optional but recommended if you aren't already handling dtype elsewhere)
+    if recording.get_dtype() != 'int16':
+        recording = si.scale(recording, dtype='int16')
+
+    return recording
+
 
 def automatic_curation(metrics, thresholds=None):
     """
-    Removing based on provided thresholds or default values.
+    Apply thresholds only when values exist (NaN -> skip filtering).
+    Also produce a full rejection log showing which rule failed.
     """
+
+    # Default thresholds
+    default_thresholds = {
+        'presence_ratio': 0.75,
+        'rp_contamination': 0.15,
+        'firing_rate': 0.05,
+        'amplitude_median': -50,          # amplitude must be <= -50 µV
+        'amplitude_cv_median': 0.3,       # stable waveform
+    }
+
+    if thresholds:
+        default_thresholds.update(thresholds)
+
+    # Rejection log list
+    rejection_records = []
+
+    # Boolean mask for accepted units
+    keep_mask = np.ones(len(metrics), dtype=bool)
+
+    # Iterate rows
+    for idx, row in metrics.iterrows():
+        reasons = []
+
+        for key, thr in default_thresholds.items():
+
+            if key not in row:
+                continue
+
+            val = row[key]
+
+            # Skip filtering if NaN
+            if pd.isna(val):
+                continue
+
+            #### APPLY RULES ####
+            if key == "presence_ratio" and not (val > thr):
+                reasons.append(f"{key} <= {thr} ({val:.3f})")
+
+            elif key == "rp_contamination" and not (val < thr):
+                reasons.append(f"{key} >= {thr} ({val:.3f})")
+
+            elif key == "firing_rate" and not (val > thr):
+                reasons.append(f"{key} <= {thr} ({val:.3f})")
+
+            elif key == "amplitude_median" and not (val <= thr):
+                reasons.append(f"{key} > {thr} ({val:.1f} µV)")
+
+            elif key == "amplitude_cv_median" and not (val < thr):
+                reasons.append(f"{key} >= {thr} ({val:.3f})")
+
+        # If any reasons collected → mark as rejected
+        if len(reasons) > 0:
+            keep_mask[idx] = False
+            rejection_records.append({
+                "unit_id": row.get("unit_id", idx),
+                "reasons": "; ".join(reasons)
+            })
+
+    # Final outputs
+    kept_units = metrics[keep_mask].copy()
+    rejection_log = pd.DataFrame(rejection_records)
+
+    return kept_units, rejection_log
+
+
+
+""" def automatic_curation(metrics, thresholds=None):
+
     # Default thresholds
     default_thresholds = {
         'presence_ratio': 0.9,
-        'rp_contamination': 1,   #used instead of isi_violations_ratio
+        'rp_contamination': 0.2,   #used instead of isi_violations_ratio
         'firing_rate': 0.05, # in Hz about 3 spikes in 1 min at least
-        'amplitude_median':-20
+        'amplitude_median':-20,
+        'amplitude_cv_median':0.5
     }
 
     # Update default thresholds with provided values
@@ -272,7 +368,9 @@ def automatic_curation(metrics, thresholds=None):
             'presence_ratio': f"({key} > {value})",
             'rp_contamination': f"({key} < {value})",
             'firing_rate': f"({key} > {value})",
-            'amplitude_median': f"({key} <= {value})"
+            'amplitude_median': f"({key} <= {value})",
+            'amplitude_cv_median': f"({key} < {value})"
+
         }
         # Return the appropriate condition or a default condition if key is not found
         return conditions.get(key, f"({key} > {value})")
@@ -285,6 +383,7 @@ def automatic_curation(metrics, thresholds=None):
 
     metrics = metrics.query(our_query)
     return metrics
+"""
 
 
 def find_connected_components(pairs):
@@ -475,7 +574,43 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
     
     # Check if should skip
     if checkpoint.should_skip(args):
-        return None,None                            #need ot handle thies
+        #resource cleanup
+                
+        import gc
+        import shutil
+        # Cleanup folders
+        if clear_temp_files:
+            logger.info("Clearing stored files if exists.")
+            binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+            if os.path.exists(binary_folder):
+                shutil.rmtree(binary_folder)
+                logger.info(f"Removed binary folder: {binary_folder}")
+            else:
+                logger.info(f"Binary folder does not exist: {binary_folder}")
+            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            if os.path.exists(sorting_folder):
+                shutil.rmtree(sorting_folder)
+                logger.info(f"Removed sorting folder: {sorting_folder}")    
+            else:
+                logger.info(f"Sorting folder does not exist: {sorting_folder}")
+            
+        # Final resource cleanup
+
+
+        gc.collect()
+        # Optional: free GPU memory
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except:
+            pass
+        try:
+            import cupy
+            cupy.get_default_memory_pool().free_all_blocks()
+        except:
+            pass
+
+        return None,None                        
     
     if args.force_restart:
         logger.info(f"Restarting {stream_id}/{rec_name} from scratch")
@@ -555,11 +690,14 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                     )
                 elif args.sorter == 'kilosort4':
                     ks_params ={
-                        'batch_size': int(fs),
+                        'batch_size': int(fs) * 2,
                         'clear_cache': True,
                         'invert_sign': True,
-                        'cluster_downsampling': 10,
+                        'cluster_downsampling': 20,
                         'max_cluster_subset': None,
+                        'nblocks':0,
+                        'dmin':17,
+                        'do_correction': False,
                     }
                     sorting_obj = si.run_sorter(
                         sorter_name="kilosort4",
@@ -588,11 +726,14 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 elif args.sorter == 'kilosort4':
                     
                     ks_params ={
-                        'batch_size': int(fs),
+                        'batch_size': int(fs) *2,
                         'clear_cache': True,
                         'invert_sign': True,
-                        'cluster_downsampling': 10,
+                        'cluster_downsampling': 20,
                         'max_cluster_subset': None,
+                        'nblocks':0,
+                        'dmin':17,
+                        'do_correction': False,
                     }
                     
                     sorting_obj = si.run_sorter_local(
@@ -912,7 +1053,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             
             # Filter units
 
-            update_qual_metrics = automatic_curation(qual_metrics, thresholds)
+            update_qual_metrics, rejected_record = automatic_curation(qual_metrics, thresholds)
+            rejected_record.to_excel(f"{output_dir}/automatic_curation_rejection_log.xlsx", index=False)
             non_violated_units = update_qual_metrics.index.values
             numunits = len(non_violated_units)
             
@@ -1145,16 +1287,8 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             sorted_units = sorted(spike_counts, key=spike_counts.get)
 
             axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
+            network_data = compute_network_bursts(ax_raster=None,ax_macro=axs[1],SpikeTimes=spike_times,plot=True)
 
-            # Call the plot_network_activity function and pass the SpikeTimes dictionary
-            #axs[1],network_data= helper.plot_network_bursts(axs[1],spike_times, figSize=(8, 4),binSize=0.1, gaussianSigma=0.2,min_peak_distance=10, thresholdBurst=2)
-            axs[1],network_data= plot_network_bursts_logISI(axs[1],spike_times)
-            network_data['MeanWithinBurstISI'] = mean_isi_within_combined
-            network_data['CoVWithinBurstISI'] = cov_isi_within_combined
-            network_data['MeanOutsideBurstISI'] = mean_isi_outside_combined   
-            network_data['CoVOutsideBurstISI'] = cov_isi_outside_combined
-            network_data['MeanNetworkISI'] = mean_isi_all_combined
-            network_data['CoVNetworkISI'] = cov_isi_all_combined
             network_data['NumUnits'] = len(non_violated_units)
             network_data["fileName"]=f"{desired_pattern}/{stream_id}"
 
@@ -1175,16 +1309,27 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             # Save the network data to a JSON file
             helper.save_json(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/network_data.json", network_data)
             
-            compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
-            file_exists = os.path.isfile(compiledNetworkData)
-            with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
-                fieldnames = network_data.keys()
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow(network_data)
+            # compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
+            # file_exists = os.path.isfile(compiledNetworkData)
+            # with open(compiledNetworkData, 'a' if file_exists else 'w',newline='') as csvfile:
+            #     fieldnames = network_data.keys()
+            #     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            #     if not file_exists:
+            #         writer.writeheader()
+            #     writer.writerow(network_data)
 
-
+            if args.export_to_phy:
+                # Export to Phy format
+                phy_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/phy_output"
+                if not os.path.exists(phy_folder):
+                    os.makedirs(phy_folder, exist_ok=True)
+                si.export_to_phy(
+                    sorting_analyzer=curated_analyzer,
+                    output_folder=phy_folder,
+                    remove_if_exists=True,
+                    **job_kwargs
+                )
+                logger.info(f"Exported sorting to Phy format at: {phy_folder}")
             # Save final checkpoint
             checkpoint.save_checkpoint(
                 ProcessingStage.REPORTS_COMPLETE,
@@ -1195,28 +1340,19 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
 
             electrodes = None
-        if args.export_to_phy:
-            # Export to Phy format
-            phy_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/phy_output"
-            if not os.path.exists(phy_folder):
-                os.makedirs(phy_folder, exist_ok=True)
-            si.export_to_phy(
-                sorting_analyzer=curated_analyzer,
-                output_folder=phy_folder,
-                remove_if_exists=True,
-                **job_kwargs
-            )
-            logger.info(f"Exported sorting to Phy format at: {phy_folder}")
+
 
         # Cleanup folders
-        if clear_temp_files and current_stage == ProcessingStage.REPORTS_COMPLETE:
+        if clear_temp_files and checkpoint.is_completed():
             logger.info("Clearing stored files...")
             binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
             if os.path.exists(binary_folder):
                 shutil.rmtree(binary_folder)
-            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/sorting_output"
+                logger.info(f"Removed binary folder: {binary_folder}")
+            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             if os.path.exists(sorting_folder):
                 shutil.rmtree(sorting_folder)
+                logger.info(f"Removed sorting folder: {sorting_folder}")
             
         # Final resource cleanup
         
@@ -1303,7 +1439,13 @@ def main():
             logger.error(f"Failed to parse params: {e}")
             sys.exit(1)
     try:
-        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=True if args.clean_up else False)
+        if args.clean_up:
+            logger.info("Starting processing with cleanup enabled")
+            clear_temp_files = True
+        else:
+            logger.info("Starting processing without cleanup")
+            clear_temp_files = False
+        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=clear_temp_files)
     except Exception as e:
         logger.error(f"Processing failed for {well}: {e}")
         logger.error(traceback.format_exc())
