@@ -584,9 +584,15 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
             if os.path.exists(binary_folder):
                 shutil.rmtree(binary_folder)
+                logger.info(f"Removed binary folder: {binary_folder}")
+            else:
+                logger.info(f"Binary folder does not exist: {binary_folder}")
             sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             if os.path.exists(sorting_folder):
                 shutil.rmtree(sorting_folder)
+                logger.info(f"Removed sorting folder: {sorting_folder}")    
+            else:
+                logger.info(f"Sorting folder does not exist: {sorting_folder}")
             
         # Final resource cleanup
 
@@ -1312,7 +1318,18 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             #         writer.writeheader()
             #     writer.writerow(network_data)
 
-
+            if args.export_to_phy:
+                # Export to Phy format
+                phy_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/phy_output"
+                if not os.path.exists(phy_folder):
+                    os.makedirs(phy_folder, exist_ok=True)
+                si.export_to_phy(
+                    sorting_analyzer=curated_analyzer,
+                    output_folder=phy_folder,
+                    remove_if_exists=True,
+                    **job_kwargs
+                )
+                logger.info(f"Exported sorting to Phy format at: {phy_folder}")
             # Save final checkpoint
             checkpoint.save_checkpoint(
                 ProcessingStage.REPORTS_COMPLETE,
@@ -1323,28 +1340,19 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
 
             electrodes = None
-        if args.export_to_phy:
-            # Export to Phy format
-            phy_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/phy_output"
-            if not os.path.exists(phy_folder):
-                os.makedirs(phy_folder, exist_ok=True)
-            si.export_to_phy(
-                sorting_analyzer=curated_analyzer,
-                output_folder=phy_folder,
-                remove_if_exists=True,
-                **job_kwargs
-            )
-            logger.info(f"Exported sorting to Phy format at: {phy_folder}")
+
 
         # Cleanup folders
-        if clear_temp_files and current_stage == ProcessingStage.REPORTS_COMPLETE:
+        if clear_temp_files and checkpoint.is_completed():
             logger.info("Clearing stored files...")
             binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
             if os.path.exists(binary_folder):
                 shutil.rmtree(binary_folder)
+                logger.info(f"Removed binary folder: {binary_folder}")
             sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             if os.path.exists(sorting_folder):
                 shutil.rmtree(sorting_folder)
+                logger.info(f"Removed sorting folder: {sorting_folder}")
             
         # Final resource cleanup
         
