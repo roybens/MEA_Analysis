@@ -1,5 +1,10 @@
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+# os.environ.setdefault("OMP_NUM_THREADS", "1")
+# os.environ.setdefault("MKL_NUM_THREADS", "1")
+# os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+# os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,6 +35,7 @@ import json
 import h5py
 import psutil
 from helper_functions import detect_peaks
+
 
 from enum import Enum
 
@@ -414,16 +420,18 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 channel_list = recording_chunk.get_channel_ids()
                 traces = recording_chunk.get_traces(start_frame=0, end_frame=recording_chunk.get_num_frames(), segment_index=0,return_scaled=False)
                 spike_times = {}
+                logger.info(f"Detecting spikes on {len(channel_list)} channels...")
+                logger.info(f"channel list: {channel_list}")
                 for ch in channel_list:
                     x,y = detect_peaks(traces[:,np.where(channel_list == ch)[0][0]], peak_sign="neg", abs_threshold=5.5)
-                    spike_times[ch] = x/fs  #convert to seconds
+                    spike_times[int(ch)] = x/fs  #convert to seconds
 
                 
 
                 # Save checkpoint after skipping sorting
                 checkpoint.save_checkpoint(
                     ProcessingStage.SORTING_COMPLETE,
-                    analyzer_folder=analyzer_folder,
+                    analyzer_folder=None,
                 )
          
             analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
@@ -432,13 +440,12 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
             
             
-    try:
        
-        checkpoint.save_checkpoint(
-            ProcessingStage.ANALYZER_COMPLETE,
-            analyzer_folder=analyzer_folder,
-            extensions_computed=[None]
-        )
+            checkpoint.save_checkpoint(
+                ProcessingStage.ANALYZER_COMPLETE,
+                analyzer_folder=None,
+                extensions_computed=[None]
+            )
 
 
 
@@ -448,7 +455,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
         logger.error(f"TRACEBACK: {traceback.format_exc()}")
 
         # Mark as failed in checkpoint
-        checkpoint.mark_failed(error_msg,"Sorter Analyzing Stage")
+        checkpoint.mark_failed(error_msg,"Spike det4ection Stage")
 
         return "error",error_msg
 
@@ -463,34 +470,39 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             ##BURST ANALYSIS CODE
        
             fig, axs = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
-            # Define the ISI threshold for burst detection (e.g., 0.1 seconds)
-            isi_threshold = 0.1
-            # Detect bursts for each unit
-            burst_statistics = helper.detect_bursts_statistics(spike_times, isi_threshold)
-            bursts = [unit_stats['bursts'] for unit_stats in burst_statistics.values()]
-            # Extracting ISIs as combined arrays
-            all_isis_within_bursts = np.concatenate([stats['isis_within_bursts'] for stats in burst_statistics.values() if stats['isis_within_bursts'].size > 0])
-            all_isis_outside_bursts = np.concatenate([stats['isis_outside_bursts'] for stats in burst_statistics.values() if stats['isis_outside_bursts'].size > 0])
-            all_isis = np.concatenate([stats['isis_all'] for stats in burst_statistics.values() if stats['isis_all'].size > 0])
+            # # Define the ISI threshold for burst detection (e.g., 0.1 seconds)
+            # isi_threshold = 0.1
+            # # Detect bursts for each unit
+            # burst_statistics = helper.detect_bursts_statistics(spike_times, isi_threshold)
+            # bursts = [unit_stats['bursts'] for unit_stats in burst_statistics.values()]
+            # # Extracting ISIs as combined arrays
+            # all_isis_within_bursts = np.concatenate([stats['isis_within_bursts'] for stats in burst_statistics.values() if stats['isis_within_bursts'].size > 0])
+            # all_isis_outside_bursts = np.concatenate([stats['isis_outside_bursts'] for stats in burst_statistics.values() if stats['isis_outside_bursts'].size > 0])
+            # all_isis = np.concatenate([stats['isis_all'] for stats in burst_statistics.values() if stats['isis_all'].size > 0])
 
-            # Calculate combined statistics
-            mean_isi_within_combined = np.mean(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
-            cov_isi_within_combined = np.cov(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+            # # Calculate combined statistics
+            # mean_isi_within_combined = np.mean(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
+            # cov_isi_within_combined = np.cov(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
 
-            mean_isi_outside_combined = np.mean(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
-            cov_isi_outside_combined = np.cov(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
+            # mean_isi_outside_combined = np.mean(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
+            # cov_isi_outside_combined = np.cov(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
 
-            mean_isi_all_combined = np.mean(all_isis) if all_isis.size > 0 else np.nan
-            cov_isi_all_combined = np.cov(all_isis) if all_isis.size > 0 else np.nan
+            # mean_isi_all_combined = np.mean(all_isis) if all_isis.size > 0 else np.nan
+            # cov_isi_all_combined = np.cov(all_isis) if all_isis.size > 0 else np.nan
 
-            # Calculate spike counts for each unit
-            spike_counts = {unit: len(times) for unit, times in spike_times.items()}
+            # # Calculate spike counts for each unit
+            # spike_counts = {unit: len(times) for unit, times in spike_times.items()}
 
             # Sort units by ascending spike counts
-            sorted_units = sorted(spike_counts, key=spike_counts.get)
+            #sorted_units = sorted(spike_counts, key=spike_counts.get)
+            
 
-            axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
-            network_data = compute_network_bursts(ax_raster=None,ax_macro=axs[1],SpikeTimes=spike_times,plot=True)
+            # logger.info("burst keys: %s", list(burst_statistics.keys()))
+            # logger.info("spike keys: %s", list(spike_times.keys()))
+            #logger.info("Sorted units: %s", sorted_units)
+
+            #axs[0]= helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=sorted_units, title_suffix="(Sorted Raster Order)")
+            network_data = compute_network_bursts(ax_raster=axs[0],ax_macro=axs[1],SpikeTimes=spike_times,plot=True)
 
             network_data['NumUnits'] = len(spike_times)
             network_data["fileName"]=f"{desired_pattern}/{stream_id}"
@@ -534,8 +546,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
         # === Resource cleanup ===
         del recording_chunk
-        del sorting_obj
-        del sorting_analyzer
+        del spike_times
         gc.collect()
         # Optional: free GPU memory
         try:
@@ -554,9 +565,12 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
         error_msg = f"ERROR in {stream_id}/{rec_name}: {str(e)}"
         logger.error(error_msg)
         logger.error(f"TRACEBACK: {traceback.format_exc()}")
+        resource_cleanup()
         
         # Mark as failed in checkpoint
         checkpoint.mark_failed(error_msg,"Report Generation Stage")
+
+
         
         # if clear_temp_files:
         #     helper.empty_directory(sorting_folder)
@@ -582,6 +596,7 @@ def main():
     parser.add_argument('--clean-up', action='store_true', help='Clear temporary files')
     parser.add_argument('--export-to-phy', action='store_true', help='Export results to Phy format')
     parser.add_argument('--checkpoint-dir', type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help='Checkpoint folder')
+    parser.add_argument('--skip-spikesorting', action='store_true', help='Skip spike sorting step')
 
     args = parser.parse_args()
     path = args.file_dir_path

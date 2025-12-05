@@ -220,7 +220,7 @@ def detect_bursts_statistics(spike_times, isi_threshold):
 def plot_raster_with_bursts(ax, spike_times, bursts, sorted_units=None, title_suffix=""):
     y_offset = 0
     units_to_plot = sorted_units if sorted_units else list(spike_times.keys())
-    
+    print(f"units to plot: {units_to_plot}")
     for unit in units_to_plot:
         times = spike_times[unit]
         unit_bursts = bursts[unit]

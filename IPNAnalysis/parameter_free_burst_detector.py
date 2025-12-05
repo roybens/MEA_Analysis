@@ -418,10 +418,10 @@ def compute_network_bursts(
         y = 0
         for unit in sorted_units:
             times = np.asarray(SpikeTimes[unit])
-            ax_raster.plot(times, np.ones_like(times) + y, '|', color='royalblue', markersize=1)
+            ax_raster.plot(times, np.ones_like(times) + y, '|', color='royalblue', markersize=1,rasterized=True)
             # highlight unit bursts
             for ub in unit_bursts[unit]["bursts"]:
-                ax_raster.plot(ub, np.ones_like(ub) + y, '|', color='black', markersize=1)
+                ax_raster.plot(ub, np.ones_like(ub) + y, '|', color='black', markersize=1,rasterized=True)
             y += 1
         ax_raster.set_ylabel('Units')
         ax_raster.set_title('Raster with Unit Bursts (black)')
