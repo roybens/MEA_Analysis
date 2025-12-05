@@ -51,7 +51,7 @@ def setup_driver_logger():
 # Subprocess launcher
 # ----------------------------------------------------------
 def launch_sorting_subprocess(file_path, stream_id, extra_args=""):
-    command = f"python3 {BASE_FILE_PATH}/mea_analysis_routine.py '{file_path}' --well {stream_id} {extra_args}"
+    command = f"python3 {BASE_FILE_PATH}/mea_analysis_routineV1.py '{file_path}' --well {stream_id} {extra_args}"
     logger = logging.getLogger("driver")
     logger.info(f"[DRIVER] Launching: {command}")
     
@@ -82,6 +82,7 @@ def main():
     parser.add_argument("--clean-up", action="store_true", help="Clear sorter outputs etc.")
     parser.add_argument("--export-to-phy", action="store_true", help="Export results to Phy format")
     parser.add_argument("--checkpoint-dir", type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help="Checkpoint directory")
+    parser.add_argument("--skip-spikesorting", action="store_true", help="Skip spike sorting step")
 
     args = parser.parse_args()
     logger = setup_driver_logger()
@@ -96,6 +97,7 @@ def main():
     # Build extra argument string for subprocess
     # ------------------------------------------------------
     extra_args = []
+    if args.skip_spikesorting: extra_args.append("--skip-spikesorting")
     if args.resume: extra_args.append("--resume")
     if args.force_restart: extra_args.append("--force-restart")
     if args.docker: extra_args.append(f"--docker {args.docker}")
