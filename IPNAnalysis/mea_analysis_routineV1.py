@@ -436,7 +436,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
          
             analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
             output_dir = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}"
-            np.save(f"{output_dir}/spikesorted_spike_times_dict.npy", spike_times)
+            np.save(f"{output_dir}/spike_times_dict.npy", spike_times)
 
             
             
@@ -465,7 +465,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             logger.info(f"[STAGE 3] Generating reports and metrics...")
             
             # Load spike times
-            spike_times = np.load(f"{output_dir}/spikesorted_spike_times_dict.npy",allow_pickle=True).item()
+            spike_times = np.load(f"{output_dir}/spike_times_dict.npy",allow_pickle=True).item()
 
             ##BURST ANALYSIS CODE
        
