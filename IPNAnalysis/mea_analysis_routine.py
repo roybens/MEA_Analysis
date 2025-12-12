@@ -729,14 +729,23 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 elif args.sorter == 'kilosort4':
                     
                     ks_params ={
-                        'batch_size': int(fs) *2,
+                        'batch_size': int(fs) *1,
                         'clear_cache': True,
                         'invert_sign': True,
                         'cluster_downsampling': 20,
                         'max_cluster_subset': None,
                         'nblocks':0,
-                        'dmin':17,
+                        'dmin':35,
+                        'dminx':35,
                         'do_correction': False,
+                        'nearest_templates': 20,
+                        'max_channel_distance': 30,
+                        'template_sizes':3,
+                        'n_templates': 4,
+                        'max_peels':50
+
+
+
                     }
                     
                     sorting_obj = si.run_sorter_local(
