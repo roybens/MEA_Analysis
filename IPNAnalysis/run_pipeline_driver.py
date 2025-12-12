@@ -82,6 +82,7 @@ def main():
     parser.add_argument("--clean-up", action="store_true", help="Clear sorter outputs etc.")
     parser.add_argument("--export-to-phy", action="store_true", help="Export results to Phy format")
     parser.add_argument("--checkpoint-dir", type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help="Checkpoint directory")
+    parser.add_argument("--no-curation", action="store_true", help="Skip automatic curation")
 
     args = parser.parse_args()
     logger = setup_driver_logger()
@@ -105,6 +106,7 @@ def main():
     if args.clean_up: extra_args.append("--clean-up")
     if args.checkpoint_dir: extra_args.append(f"--checkpoint-dir '{args.checkpoint_dir}'")
     if args.export_to_phy: extra_args.append("--export-to-phy")
+    if args.no_curation: extra_args.append("--no-curation")
     extra_arg_string = " ".join(extra_args)
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
     #ticker
