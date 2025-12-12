@@ -28,7 +28,6 @@ import numpy as np
 import json
 import h5py
 import psutil
-
 from enum import Enum
 
 
@@ -214,10 +213,7 @@ def save_zarr_wrapper(filepath,op_folder):
                                     channel_chunk_size =2,n_jobs=64,chunk_duration="1s")
     return recording_zarr
 
-def export_to_phy_datatype(sorting_analyzer):
 
-    from spikeinterface.exporters import export_to_phy
-    export_to_phy(sorting_analyzer,output_folder='/home/mmpatil/Documents/spikesorting/MEA_Analysis/Python/phy_folder',**job_kwargs)
 
 
 
@@ -543,7 +539,7 @@ def parse_h5_path(file_path):
 
 
 def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0, 
-                  clear_temp_files=False, thresholds=None):
+                  clear_temp_files=False, thresholds=None,checkpoint_root=None,output_root=None):
     
 
     global args,logger,BASE_FILE_PATH,job_kwargs
@@ -554,15 +550,22 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
         logger.info(f"Processing recording: {file_path}")
         #file pattern extraction
         run_id,project_name,date,chip_id,desired_pattern = parse_h5_path(file_path)
+        desired_output = os.path.join(output_root,desired_pattern,stream_id)
+        os.makedirs(
+            desired_output,
+            mode=0o777,
+            exist_ok=True
+        )
 
     else:
         rec_name = "binary_recording"   #implement fr binary
         logger.error("Binary file processing not implemented yet")
+        sys.exit(1)
 
 
     # Initialize checkpoint manager
     checkpoint = PipelineCheckpoint(
-        base_path=f"{BASE_FILE_PATH}/../AnalyzedData",
+        base_path=checkpoint_root,
         project_name=project_name,
         date=date,
         chip_id=chip_id,
@@ -580,13 +583,13 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
         # Cleanup folders
         if clear_temp_files:
             logger.info("Clearing stored files if exists.")
-            binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+            binary_folder =os.path.join(desired_output,"binary")
             if os.path.exists(binary_folder):
                 shutil.rmtree(binary_folder)
                 logger.info(f"Removed binary folder: {binary_folder}")
             else:
                 logger.info(f"Binary folder does not exist: {binary_folder}")
-            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            sorting_folder = os.path.join(desired_output, "analyzer_output")
             if os.path.exists(sorting_folder):
                 shutil.rmtree(sorting_folder)
                 logger.info(f"Removed sorting folder: {sorting_folder}")    
@@ -631,9 +634,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             if file_path.endswith('.raw.h5'):
                 # Setup output paths
                 run_id, project_name, date, chip_id, desired_pattern = parse_h5_path(file_path)
+                desired_output = os.path.join(output_root,desired_pattern,stream_id)
                    
                 os.makedirs(
-                    f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}",
+                    desired_output,
                     mode=0o777,
                     exist_ok=True
                 )
@@ -654,20 +658,20 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 recording_chunk = preprocess(recording_chunk)
                 
                 recording_chunk.save(
-                    folder=f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary",
+                    folder=os.path.join(desired_output,"binary"),
                     format='binary',
                     overwrite=True,
                     **job_kwargs
                 )
                 recording_chunk = si.load(
-                    f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+                    os.path.join(desired_output,"binary")
                 )
             else:
                 recording_chunk = si.load(file_path)
             
 
          
-            analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            analyzer_folder = os.path.join(desired_output,"analyzer_output")
             
             # ============== STAGE 1: Spike Sorting ==============
             logger.info(f"[STAGE 1] Running spike sorting...")
@@ -777,9 +781,10 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             analyzer_folder = checkpoint.state['analyzer_folder']
 
             logger.info(f"desired_pattern: {desired_pattern}")
+            desired_output = os.path.join(output_root,desired_pattern,stream_id)
             # Reload recording
             recording_chunk = si.load(
-                f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+                os.path.join(desired_output,"binary")
             )
             
             # Try multiple loading strategies
@@ -853,7 +858,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             logger.info(f"[STAGE 2] Computing sorting analyzer...")
             start = timer()
             
-            analyzer_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            analyzer_folder = os.path.join(desired_output,"analyzer_output")
             
             # Check if analyzer already exists (partial completion scenario)
             if Path(analyzer_folder).exists():
@@ -1044,11 +1049,11 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             parts = file_pattern.split('/')
             desired_pattern = '/'.join(parts[-6:])
             
-            output_dir = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}"
+            desired_output = os.path.join(output_root, desired_pattern, stream_id)
             
             # Save unfiltered metrics
-            qual_metrics.to_excel(f"{output_dir}/quality_metrics_unfiltered.xlsx")
-            template_metrics.to_excel(f"{output_dir}/template_metrics_unfiltered.xlsx")
+            qual_metrics.to_excel(f"{desired_output}/quality_metrics_unfiltered.xlsx")
+            template_metrics.to_excel(f"{desired_output}/template_metrics_unfiltered.xlsx")
             
             # Filter units
             #this should be with and without automatic curation TODO" may be a flag??
@@ -1061,7 +1066,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             else:
                 logger.info("Applying automatic curation based on quality metrics")
                 update_qual_metrics, rejected_record = automatic_curation(qual_metrics, thresholds)
-                rejected_record.to_excel(f"{output_dir}/automatic_curation_rejection_log.xlsx", index=False)
+                rejected_record.to_excel(f"{desired_output}/automatic_curation_rejection_log.xlsx", index=False)
                 non_violated_units = update_qual_metrics.index.values
                 numunits = len(non_violated_units)
             
@@ -1080,7 +1085,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
             # Save filtered metrics
             template_metrics_filtered = template_metrics.loc[non_violated_units]
-            template_metrics_filtered.to_excel(f"{output_dir}/template_metrics.xlsx")
+            template_metrics_filtered.to_excel(f"{desired_output}/template_metrics.xlsx")
             
             # Get locations
             if sorting_analyzer.has_extension('unit_locations'):
@@ -1093,7 +1098,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             qual_metrics_filtered['location_X'] = locations[non_violated_units, 0]
             qual_metrics_filtered['location_Y'] = locations[non_violated_units, 1]
             qual_metrics_filtered['location_Z'] = locations[non_violated_units, 2]
-            qual_metrics_filtered.to_excel(f"{output_dir}/quality_metrics.xlsx")
+            qual_metrics_filtered.to_excel(f"{desired_output}/quality_metrics.xlsx")
             
             # Generate plots
             unit_ids = sorting_analyzer.unit_ids
@@ -1105,7 +1110,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             for unit_id, (x, y, z) in unit_locations.items():
                 ax1.scatter(x, y, s=10, c='blue', alpha=0.6)
             ax1.invert_yaxis()
-            fig1.savefig(f"{output_dir}/locations_unfiltered_units.pdf")
+            fig1.savefig(f"{desired_output}/locations_unfiltered_units.pdf")
             plt.close(fig1)
             
             # Plot filtered units
@@ -1115,7 +1120,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 if unit_id in non_violated_units:
                     ax2.scatter(x, y, s=10, c='blue', alpha=0.6)
             ax2.invert_yaxis()
-            fig2.savefig(f"{output_dir}/locations_{numunits}_units.pdf")
+            fig2.savefig(f"{desired_output}/locations_{numunits}_units.pdf")
             plt.close(fig2)
             
             # Generate waveform plots
@@ -1131,7 +1136,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             os.makedirs(f"{output_dir}/waveforms/", mode=0o777, exist_ok=True)
             import matplotlib.backends.backend_pdf as pdf
 
-            pdf_file = f'{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/waveforms/waveforms_subplots.pdf'
+            pdf_file = os.path.join(desired_output, "waveforms", "waveforms_subplots.pdf")
 
             with pdf.PdfPages(pdf_file) as pdf_pages:
                 num_cols = 4
@@ -1262,7 +1267,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 if len(spike_train) > 0:
                     spike_times[idx] = spike_train / float(fs)
             
-            np.save(f"{output_dir}/spikesorted_spike_times_dict.npy", spike_times)
+            np.save(f"{desired_output}/spikesorted_spike_times_dict.npy", spike_times)
 
             ##BURST ANALYSIS CODE
        
@@ -1289,7 +1294,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
             plt.tight_layout()
             plt.xlim(0, 60)
-            plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/spike_sorted_raster_plot.svg", format="svg")
+            plt.savefig(f"{desired_output}/spike_sorted_raster_plot.svg", format="svg")
         
             #fig2, axs2 = plt.subplots(2, 1, figsize=(8, 8),sharex=True)
             #axs2[0] = helper.plot_raster_with_bursts(axs[0],spike_times, bursts,sorted_units=None, title_suffix="(Origininal Raster Order)")
@@ -1299,7 +1304,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             #plt.xlim(0, 60)
             #plt.savefig(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/original_raster_plot.eps", format="eps")
             # Save the network data to a JSON file
-            helper.save_json(f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/network_data.json", network_data)
+            helper.save_json(f"{desired_output}/network_data.json", network_data)
             
             # compiledNetworkData =f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/../../../../compiledNetworkData.csv"
             # file_exists = os.path.isfile(compiledNetworkData)
@@ -1312,7 +1317,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
 
             if args.export_to_phy:
                 # Export to Phy format
-                phy_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/phy_output"
+                phy_folder = os.path.join(desired_output, "phy_output")
                 if not os.path.exists(phy_folder):
                     os.makedirs(phy_folder, exist_ok=True)
                 si.export_to_phy(
@@ -1337,11 +1342,11 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
         # Cleanup folders
         if clear_temp_files and checkpoint.is_completed():
             logger.info("Clearing stored files...")
-            binary_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/binary"
+            binary_folder = os.path.join(desired_output, "binary")
             if os.path.exists(binary_folder):
                 shutil.rmtree(binary_folder)
                 logger.info(f"Removed binary folder: {binary_folder}")
-            sorting_folder = f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/{stream_id}/analyzer_output"
+            sorting_folder = os.path.join(desired_output, "analyzer_output")
             if os.path.exists(sorting_folder):
                 shutil.rmtree(sorting_folder)
                 logger.info(f"Removed sorting folder: {sorting_folder}")
@@ -1402,13 +1407,25 @@ def main():
     parser.add_argument('--export-to-phy', action='store_true', help='Export results to Phy format')
     parser.add_argument('--checkpoint-dir', type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help='Checkpoint folder')
     parser.add_argument('--no-curation', action='store_true', help='Skip automatic curation')
+    parser.add_argument("--output-dir", type=str, help="Output directory (overrides default)")
 
     args = parser.parse_args()
     path = args.file_dir_path
     well = args.well
+    output_root = args.output_dir or os.path.join(BASE_FILE_PATH, "../AnalyzedData")
+    output_root = os.path.normpath(os.path.abspath(output_root))
+
+    # Ensure output directory exists
+    os.makedirs(output_root, exist_ok=True)
+
+    # Override checkpoint_dir if not provided
+    if args.checkpoint_dir:
+        checkpoint_root = os.path.normpath(os.path.abspath(args.checkpoint_dir))
+    else:
+        checkpoint_root = os.path.join(output_root, "checkpoints")
     #parse file path
     run_id,project_name,date,chip_id,desired_pattern = parse_h5_path(args.file_dir_path)
-    logger = setup_logger(log_file=f"{BASE_FILE_PATH}/../AnalyzedData/{desired_pattern}/logs/{run_id}_{chip_id}_{date}_{well}.log")
+    logger = setup_logger(log_file=os.path.join(output_root, desired_pattern, "logs", f"{run_id}_{chip_id}_{date}_{well}.log"))
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
@@ -1438,7 +1455,7 @@ def main():
         else:
             logger.info("Starting processing without cleanup")
             clear_temp_files = False
-        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=clear_temp_files)
+        process_block(path, stream_id=well, thresholds=thresholds, clear_temp_files=clear_temp_files, checkpoint_root=checkpoint_root, output_root=output_root)
     except Exception as e:
         logger.error(f"Processing failed for {well}: {e}")
         logger.error(traceback.format_exc())

@@ -24,8 +24,11 @@ BASE_FILE_PATH = str(Path(__file__).resolve().parent)
 # ----------------------------------------------------------
 # Logger setup
 # ----------------------------------------------------------
-def setup_driver_logger():
-    log_file = os.path.join(BASE_FILE_PATH, "run_pipeline_driver.log")
+def setup_driver_logger(log_path=None):
+    if log_path is None:
+        log_file= os.path.join(BASE_FILE_PATH, "run_pipeline_driver.log")
+    else:
+        log_file = os.path.join(log_path, "run_pipeline_driver.log")
     open(log_file, 'w').close()  # Clear log file on each run
 
     logger = logging.getLogger("driver")
@@ -81,12 +84,50 @@ def main():
     parser.add_argument("--dry", action="store_true", help="Dry run only (no processing)")
     parser.add_argument("--clean-up", action="store_true", help="Clear sorter outputs etc.")
     parser.add_argument("--export-to-phy", action="store_true", help="Export results to Phy format")
-    parser.add_argument("--checkpoint-dir", type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help="Checkpoint directory")
+    parser.add_argument("--checkpoint-dir", type=str, default=None, help="Checkpoint directory")
     parser.add_argument("--no-curation", action="store_true", help="Skip automatic curation")
+    parser.add_argument("--output-dir", type=str, help="Output directory for results")
 
     args = parser.parse_args()
-    logger = setup_driver_logger()
+
+    logger = None
+
+    # -------------------------------------------------------------------
+    # Normalize output + checkpoint directory before logging setup
+    # -------------------------------------------------------------------
+
+    if args.output_dir:
+        # Make absolute normalized path
+        args.output_dir = os.path.normpath(os.path.abspath(args.output_dir))
+        os.makedirs(args.output_dir, exist_ok=True)
+
+        # Default checkpoint is inside output
+        if args.checkpoint_dir:
+            # Respect user-provided checkpoint dir (normalize)
+            args.checkpoint_dir = os.path.normpath(os.path.abspath(args.checkpoint_dir))
+        else:
+            # Set checkpoint inside output directory
+            args.checkpoint_dir = os.path.join(args.output_dir, "checkpoints")
+
+    else:
+        # No output dir ⇒ keep legacy behavior
+        if args.checkpoint_dir:
+            args.checkpoint_dir = os.path.normpath(os.path.abspath(args.checkpoint_dir))
+        else:
+            args.checkpoint_dir = None  # handled later
+
+    # -------------------------------------------------------------------
+    # Logger setup (driver)
+    # -------------------------------------------------------------------
+
+    if args.output_dir:
+        logger = setup_driver_logger(log_path=args.output_dir)
+    else:
+        logger = setup_driver_logger()
+
     logger.info(f"Starting pipeline driver on path: {args.path}")
+    logger.debug(f"Parsed arguments:\n{args}")
+
 
     path = Path(args.path)
     if not path.exists():
@@ -107,6 +148,7 @@ def main():
     if args.checkpoint_dir: extra_args.append(f"--checkpoint-dir '{args.checkpoint_dir}'")
     if args.export_to_phy: extra_args.append("--export-to-phy")
     if args.no_curation: extra_args.append("--no-curation")
+    if args.output_dir: extra_args.append(f"--output-dir '{args.output_dir}'")
     extra_arg_string = " ".join(extra_args)
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
     #ticker
