@@ -1142,7 +1142,7 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
                 if key in non_violated_units
             }
             
-            os.makedirs(f"{output_dir}/waveforms/", mode=0o777, exist_ok=True)
+            os.makedirs(f"{desired_output}/waveforms/", mode=0o777, exist_ok=True)
             import matplotlib.backends.backend_pdf as pdf
 
             pdf_file = os.path.join(desired_output, "waveforms", "waveforms_subplots.pdf")
