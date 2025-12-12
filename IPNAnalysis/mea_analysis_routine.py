@@ -1,7 +1,10 @@
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["QT_QPA_PLATFORM"] = "offscreen"  # For headless environments
 import csv
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use a non-interactive backend
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
@@ -21,11 +24,7 @@ import pandas as pd
 from spikeinterface.curation import CurationSorting
 import pdb, traceback
 from collections import defaultdict
-import yaml
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import convolve, find_peaks
-from scipy.stats import norm
 import json
 import h5py
 import psutil
@@ -1052,20 +1051,28 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             template_metrics.to_excel(f"{output_dir}/template_metrics_unfiltered.xlsx")
             
             # Filter units
-
-            update_qual_metrics, rejected_record = automatic_curation(qual_metrics, thresholds)
-            rejected_record.to_excel(f"{output_dir}/automatic_curation_rejection_log.xlsx", index=False)
-            non_violated_units = update_qual_metrics.index.values
-            numunits = len(non_violated_units)
+            #this should be with and without automatic curation TODO" may be a flag??
+            if args.no_curation:
+                logger.info("Skipping automatic curation as per user request (--no_curation)")
+                non_violated_units = qual_metrics.index.values
+                numunits = len(non_violated_units)
+                update_qual_metrics = qual_metrics
+                #rejected_record = pd.DataFrame(columns=["unit_id", "reasons"])
+            else:
+                logger.info("Applying automatic curation based on quality metrics")
+                update_qual_metrics, rejected_record = automatic_curation(qual_metrics, thresholds)
+                rejected_record.to_excel(f"{output_dir}/automatic_curation_rejection_log.xlsx", index=False)
+                non_violated_units = update_qual_metrics.index.values
+                numunits = len(non_violated_units)
             
-            if numunits == 0:
-                logger.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
-                checkpoint.save_checkpoint(
-                    ProcessingStage.REPORTS_COMPLETE,
-                    num_units_filtered=0,
-                    warning="No units passed quality criteria"
-                )
-                return None, 0
+                if numunits == 0:
+                    logger.warning(f"No units passed quality criteria for {stream_id}/{rec_name}")
+                    checkpoint.save_checkpoint(
+                        ProcessingStage.REPORTS_COMPLETE,
+                        num_units_filtered=0,
+                        warning="No units passed quality criteria"
+                    )
+                    return None, 0
             
             curated_sorting = sorting_obj.select_units(non_violated_units)
             curated_analyzer = sorting_analyzer.select_units(non_violated_units)
@@ -1265,21 +1272,6 @@ def process_block(file_path, time_in_s=None, stream_id='well000', recnumber=0,
             # Detect bursts for each unit
             burst_statistics = helper.detect_bursts_statistics(spike_times, isi_threshold)
             bursts = [unit_stats['bursts'] for unit_stats in burst_statistics.values()]
-            # Extracting ISIs as combined arrays
-            all_isis_within_bursts = np.concatenate([stats['isis_within_bursts'] for stats in burst_statistics.values() if stats['isis_within_bursts'].size > 0])
-            all_isis_outside_bursts = np.concatenate([stats['isis_outside_bursts'] for stats in burst_statistics.values() if stats['isis_outside_bursts'].size > 0])
-            all_isis = np.concatenate([stats['isis_all'] for stats in burst_statistics.values() if stats['isis_all'].size > 0])
-
-            # Calculate combined statistics
-            mean_isi_within_combined = np.mean(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
-            cov_isi_within_combined = np.cov(all_isis_within_bursts) if all_isis_within_bursts.size > 0 else np.nan
-
-            mean_isi_outside_combined = np.mean(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
-            cov_isi_outside_combined = np.cov(all_isis_outside_bursts) if all_isis_outside_bursts.size > 0 else np.nan
-
-            mean_isi_all_combined = np.mean(all_isis) if all_isis.size > 0 else np.nan
-            cov_isi_all_combined = np.cov(all_isis) if all_isis.size > 0 else np.nan
-
             # Calculate spike counts for each unit
             spike_counts = {unit: len(times) for unit, times in spike_times.items()}
 
@@ -1409,6 +1401,7 @@ def main():
     parser.add_argument('--clean-up', action='store_true', help='Clear temporary files')
     parser.add_argument('--export-to-phy', action='store_true', help='Export results to Phy format')
     parser.add_argument('--checkpoint-dir', type=str, default=f'{BASE_FILE_PATH}/../AnalyzedData/checkpoints', help='Checkpoint folder')
+    parser.add_argument('--no-curation', action='store_true', help='Skip automatic curation')
 
     args = parser.parse_args()
     path = args.file_dir_path
