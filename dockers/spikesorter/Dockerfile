@@ -2,7 +2,7 @@ FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+ENV PYTORCH_ALLOC_CONF="expandable_segments:True"
 ENV TORCH_CUDA_ARCH_LIST="8.6;8.9;9.0"
 ENV CUDA_DEVICE_MAX_CONNECTIONS=32
 
