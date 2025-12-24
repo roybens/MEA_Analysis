@@ -77,7 +77,8 @@ def main():
     parser.add_argument("--type", nargs="+", default=['network today', 'network today/best'], help="Assay types to include")
     parser.add_argument("--params", type=str, help="JSON file or string with quality thresholds")
     parser.add_argument("--docker", type=str, help="Docker image name if using containerized sorting")
-    parser.add_argument("--resume", action="store_true", help="Resume from checkpoint")
+    #parser.add_argument("--resume", action="store_true", help="Resume from checkpoint"). #auto resumes
+    parser.add_argument("--skip-spikesorting", action="store_true", help="Skip spike sorting stage")
     parser.add_argument("--force-restart", action="store_true", help="Restart even if checkpoint complete")
     parser.add_argument("--sorter", default="kilosort4", help="Sorter to use")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
@@ -148,6 +149,7 @@ def main():
     if args.checkpoint_dir: extra_args.append(f"--checkpoint-dir '{args.checkpoint_dir}'")
     if args.export_to_phy: extra_args.append("--export-to-phy")
     if args.no_curation: extra_args.append("--no-curation")
+    if args.skip_spikesorting: extra_args.append("--skip-spikesorting")
     if args.output_dir: extra_args.append(f"--output-dir '{args.output_dir}'")
     extra_arg_string = " ".join(extra_args)
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
