@@ -30,6 +30,7 @@ import spikeinterface.preprocessing as spre
 try:
     from parameter_free_burst_detector import compute_network_bursts
     import helper_functions as helper
+    from scalebury import add_scalebar
 except ImportError:
     print("Warning: Custom helper modules not found. Analysis steps may fail.")
 
@@ -250,9 +251,19 @@ class MEAPipeline:
         self.logger.info(f"--- [Phase 2] Spike Sorting ({self.sorter}) ---")
         sorter_folder = self.output_dir / "sorter_output"
 
+        import torch
+        if torch.cuda.is_available():
+            total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3) # Convert to GB
+            self.logger.info(f"GPU Detected: {torch.cuda.get_device_name(0)} with {total_vram:.2f} GB VRAM")
+        else:
+            self.logger.warning("No GPU detected! Kilosort4 will likely fail or run extremely slowly on CPU.")
+            total_vram = 0
+
+        fs = int(self.recording.get_sampling_frequency())
+
         # Parameters for 2D Static Cultures (Kilosort4)
         # Th_universal lowered to 8 to improve detection on organoids
-        ks_params ={
+        ks_params_high_vram ={
                         'batch_size': int(self.recording.get_sampling_frequency()) * 2,
                         'clear_cache': True,
                         'invert_sign': True,
@@ -262,23 +273,44 @@ class MEAPipeline:
                         'dmin':17,
                         'do_correction': False,
                     }
+        ks_params_low_vram = {
+                        'batch_size': int(self.recording.get_sampling_frequency()) * 1,
+                        'clear_cache': True,
+                        'invert_sign': True,
+                        'cluster_downsampling': 30, 
+                        'max_cluster_subset': 50000,
+                        'nblocks':0,
+                        'do_correction': False,
+        }
+
+        if total_vram >= 14:
+            ks_params = ks_params_high_vram
+        else:
+            ks_params = ks_params_low_vram
 
         start = timer()
-        self.sorting = si.run_sorter(
-            sorter_name=self.sorter,
-            recording=self.recording,
-            folder=sorter_folder,
-            delete_output_folder=False,
-            remove_existing_folder=True, # Safety flag
-            verbose=self.verbose,
-            docker_image=self.docker_image, 
-            **ks_params
-        )
-        self.logger.info(f"Sorting finished in {timer()-start:.2f}s")
+        try:
+            self.logger.info(f"Running Kilosort4 with parameters: {ks_params}")
+            torch.cuda.empty_cache()
+            self.sorting = si.run_sorter(
+                sorter_name=self.sorter,
+                recording=self.recording,
+                folder=sorter_folder,
+                delete_output_folder=False,
+                remove_existing_folder=True, # Safety flag
+                verbose=self.verbose,
+                docker_image=self.docker_image, 
+                **ks_params
+            )
+            self.logger.info(f"Sorting finished in {timer()-start:.2f}s")
 
-        #self.logger.info("Running Redundancy Removal...")
-        #self.sorting = si.remove_redundant_units(self.sorting, duplicate_threshold=0.9)
-        self._save_checkpoint(ProcessingStage.SORTING_COMPLETE)
+            #self.logger.info("Running Redundancy Removal...")
+            #self.sorting = si.remove_redundant_units(self.sorting, duplicate_threshold=0.9)
+            self._save_checkpoint(ProcessingStage.SORTING_COMPLETE)
+        except Exception as e:
+            self.logger.error(f"Sorting failed: {e}")
+            self._save_checkpoint(ProcessingStage.FAILED)
+            raise e
 
     def _spike_detection_only(self):
         """Detects spikes (threshold crossings) without sorting."""
@@ -311,7 +343,10 @@ class MEAPipeline:
             if len(times) > 0:
                 ax.plot(times, np.ones_like(times) * i, '|', markersize=1, color='black', alpha=0.5)
         ax.set_title(f"MUA Raster - {self.stream_id}")
-        plt.savefig(self.output_dir / "mua_channel_raster.png", dpi=200)
+        plt.savefig(self.output_dir / "mua_channel_raster.svg", dpi=300)
+        #also save a 30s zoom
+        ax.set_xlim(0,30)
+        plt.savefig(self.output_dir / "mua_channel_raster_30s.svg", dpi=300)
         plt.close(fig)
 
         return list(spike_times.keys())
@@ -338,7 +373,7 @@ class MEAPipeline:
             folder=analyzer_folder, sparsity=sparsity, return_in_uV=True
         )
 
-        ext_list = ["random_spikes", "waveforms", "templates", "noise_levels", 
+        ext_list = ["random_spikes","spike_amplitudes", "waveforms", "templates", "noise_levels", 
                     "quality_metrics", "template_metrics", "unit_locations"]
         
         ext_params = {
@@ -420,21 +455,63 @@ class MEAPipeline:
         fig.savefig(self.output_dir / filename)
         plt.close(fig)
 
+
     def _plot_waveforms_grid(self, unit_ids):
         pdf_path = self.output_dir / "waveforms_grid.pdf"
+        self.logger.info(f"Generating PDF: {pdf_path}")
+        
         wf_ext = self.analyzer.get_extension("waveforms")
+        
+        # [1] Get sampling freq to calculate milliseconds
+        fs = self.recording.get_sampling_frequency()
+        
         with pdf.PdfPages(pdf_path) as pdf_doc:
-            for i in range(0, len(unit_ids), 12):
-                batch = unit_ids[i:i+12]
+            units_per_page = 12 
+            for i in range(0, len(unit_ids), units_per_page):
+                batch = unit_ids[i : i + units_per_page]
                 fig, axes = plt.subplots(3, 4, figsize=(12, 9))
                 axes = axes.flatten()
+                
                 for ax, uid in zip(axes, batch):
                     wf = wf_ext.get_waveforms_one_unit(uid)
                     mean_wf = np.mean(wf, axis=0)
                     best_ch = np.argmin(np.min(mean_wf, axis=0))
-                    ax.plot(mean_wf[:, best_ch], c='red', lw=1.5)
-                    ax.axis('off')
-                for j in range(len(batch), len(axes)): axes[j].axis('off')
+                    
+                    # [2] Create time vector in milliseconds
+                    # (NumSamples / fs) * 1000
+                    time_ms = np.arange(wf.shape[1]) / fs * 1000
+
+                    # Random subset logic
+                    n_spikes = wf.shape[0]
+                    if n_spikes > 50:
+                        indices = np.random.choice(n_spikes, 50, replace=False)
+                        spikes_to_plot = wf[indices, :, best_ch]
+                    else:
+                        spikes_to_plot = wf[:, :, best_ch]
+                    
+                    # [3] Plot against time_ms (X-axis)
+                    ax.plot(time_ms, spikes_to_plot.T, c='gray', lw=0.5, alpha=0.3)
+                    ax.plot(time_ms, mean_wf[:, best_ch], c='red', lw=1.5)
+                    
+                    ax.set_title(f"Unit {uid} | Ch {best_ch}", fontsize=10)
+                    
+                    # [4] Add Scale Bar (1 ms x 50 uV)
+                    # hidex/hidey=True removes the standard axis ticks
+                    try:
+                        add_scalebar(ax, 
+                                    matchx=False, matchy=False, 
+                                    sizex=1.0, labelx='1 ms', 
+                                    sizey=50, labely='50 µV', 
+                                    loc='lower right', 
+                                    hidex=True, hidey=True)
+                    except Exception:
+                        # Fallback if scalebury is missing or fails
+                        ax.spines['top'].set_visible(False)
+                        ax.spines['right'].set_visible(False)
+
+                for j in range(len(batch), len(axes)): 
+                    axes[j].axis('off')
+                
                 pdf_doc.savefig(fig)
                 plt.close(fig)
 
@@ -470,6 +547,10 @@ class MEAPipeline:
             
             plt.tight_layout()
             plt.savefig(self.output_dir / "raster_burst_plot.svg")
+            #also save a 30s zoom
+            axs[0].set_xlim(0,30)
+            axs[1].set_xlim(0,30)
+            plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
             plt.close(fig)
             
             with open(self.output_dir / "network_results.json", 'w') as f:
