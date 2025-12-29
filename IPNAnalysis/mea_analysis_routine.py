@@ -118,7 +118,7 @@ class MEAPipeline:
             if match: meta['run_id'] = match.group(1)
             parts = path_str.split(os.sep)
             if len(parts) > 5:
-                meta['relative_pattern'] = os.path.join(*parts[-6:-2])
+                meta['relative_pattern'] = os.path.join(*parts[-6:-1])
                 meta['project'] = parts[-5]
                 meta['date'] = parts[-4]
                 meta['chip_id'] = parts[-3]
@@ -274,7 +274,7 @@ class MEAPipeline:
                         'do_correction': False,
                     }
         ks_params_low_vram = {
-                        'batch_size': int(self.recording.get_sampling_frequency()) * 1,
+                        'batch_size': int(self.recording.get_sampling_frequency() * 0.5),
                         'clear_cache': True,
                         'invert_sign': True,
                         'cluster_downsampling': 30, 
