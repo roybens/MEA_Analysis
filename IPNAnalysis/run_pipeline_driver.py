@@ -139,7 +139,7 @@ def main():
     # Build extra argument string for subprocess
     # ------------------------------------------------------
     extra_args = []
-    if args.resume: extra_args.append("--resume")
+    #if args.resume: extra_args.append("--resume")
     if args.force_restart: extra_args.append("--force-restart")
     if args.docker: extra_args.append(f"--docker {args.docker}")
     if args.sorter: extra_args.append(f"--sorter {args.sorter}")
