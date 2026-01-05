@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime
 from timeit import default_timer as timer
 from enum import Enum
+from math import floor
 import psutil
 import pandas as pd
 import numpy as np
@@ -37,11 +38,16 @@ except ImportError:
 # --- Enums for Checkpointing ---
 class ProcessingStage(Enum):
     NOT_STARTED = 0
-    PREPROCESSING_COMPLETE = 1
-    SORTING_COMPLETE = 2
-    ANALYZER_COMPLETE = 3
-    REPORTS_COMPLETE = 4
-    FAILED = -1
+    PREPROCESSING = 1
+    PREPROCESSING_COMPLETE = 2
+    SORTING = 3
+    SORTING_COMPLETE = 4
+    ANALYZER = 5
+    ANALYZER_COMPLETE = 6
+    REPORTS = 7
+    REPORTS_COMPLETE = 8
+
+
 
 # --- The Main Pipeline Class ---
 class MEAPipeline:
@@ -67,6 +73,9 @@ class MEAPipeline:
         self.metadata = self._parse_metadata()
         self.run_id = self.metadata.get('run_id', 'UnknownRun')
         self.project_name = self.metadata.get('project', 'UnknownProject')
+        self.well = self.metadata.get('well', 'UnknownWell')
+        self.chip_id = self.metadata.get('chip_id', 'UnknownChip')
+        self.date = self.metadata.get('date', 'UnknownDate')
         
         # Define Directory Structure: Output / Pattern / Well
         self.relative_pattern = self.metadata.get('relative_pattern', 'UnknownPattern')
@@ -95,7 +104,9 @@ class MEAPipeline:
         # Prevent duplicate handlers if running in loop
         if not logger.handlers:
             formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
-            fh = logging.FileHandler(log_file, mode='w') # Overwrite log per run
+            fh = logging.FileHandler(log_file, mode='a') # Append to log per run
+            #add a big header
+            fh.stream.write("\n" + "="*80 + "\n")
             fh.setFormatter(formatter)
             logger.addHandler(fh)
             ch = logging.StreamHandler(sys.stdout)
@@ -104,11 +115,11 @@ class MEAPipeline:
         return logger
 
     def _parse_metadata(self):
-        """Extracts RunID, ChipID, Date, and specific Well data based on stream_id"""
+    
         meta = {
             'run_id': None, 'chip_id': None, 'project': None, 
             'relative_pattern': f"{self.file_path.parent.parent.name}/{self.file_path.parent.name}/{self.file_path.name}",
-            'date': None,
+            'date': None, 'well': None
         }
         
         # Strategy A: Regex on path (Fallback)
@@ -119,9 +130,10 @@ class MEAPipeline:
             parts = path_str.split(os.sep)
             if len(parts) > 5:
                 meta['relative_pattern'] = os.path.join(*parts[-6:-1])
-                meta['project'] = parts[-5]
-                meta['date'] = parts[-4]
-                meta['chip_id'] = parts[-3]
+                meta['project'] = parts[-6]
+                meta['date'] = parts[-5]
+                meta['chip_id'] = parts[-4]
+                meta['well'] = self.stream_id
         except Exception: pass
 
         # Strategy B: .metadata file (Overrides regex)
@@ -142,7 +154,17 @@ class MEAPipeline:
     def _load_checkpoint(self):
         if self.checkpoint_file.exists() and not self.force_restart:
             with open(self.checkpoint_file, 'r') as f: return json.load(f)
-        return {'stage': ProcessingStage.NOT_STARTED.value}
+        return {'stage': ProcessingStage.NOT_STARTED.value, #last stage completed
+                'failed_stage': None,
+                'last_updated': None,
+                'run_id': self.run_id,
+                'chip_id': self.chip_id,
+                'well': self.well,
+                'project': self.project_name,
+                'date': self.date,
+                'output_dir': str(self.output_dir),
+                'error': None,
+                }
 
     def _save_checkpoint(self, stage, **kwargs):
         self.state['stage'] = stage.value
@@ -173,13 +195,12 @@ class MEAPipeline:
         binary_folder = self.output_dir / "binary"
 
         # 1. Resume Check
-        if self.state['stage'] >= ProcessingStage.PREPROCESSING_COMPLETE.value:
-            if binary_folder.exists():
-                self.logger.info("Resuming: Loading preprocessed data from binary cache.")
-                try: self.recording = si.load(binary_folder)
-                except: self.recording = si.load_extractor(binary_folder)
-                return 
-
+        if self.state['stage'] >= ProcessingStage.PREPROCESSING_COMPLETE.value and binary_folder.exists():
+            self.logger.info("Resuming: Loading preprocessed data from binary cache.")
+            try: self.recording = si.load(binary_folder)
+            except: self.recording = si.load_extractor(binary_folder)
+            return 
+        self._save_checkpoint(ProcessingStage.PREPROCESSING)
         self.logger.info("--- [Phase 1] Preprocessing ---")
         
         # 2. Universal Loading
@@ -189,23 +210,20 @@ class MEAPipeline:
         fs = rec.get_sampling_frequency()
         self.metadata['fs'] = fs
         total_frames = rec.get_num_frames()
-        end_frame = total_frames - int(1.0 * fs)
+        # Calculate new end frame flooring to nearest integer second
+        end_frame = floor(total_frames)
+        #end_frame = total_frames - int(1.0 * fs)
         if end_frame > 0:
             self.logger.info(f"Trimming recording: {total_frames} -> {end_frame} frames (removed last 1s).")
             rec = rec.frame_slice(start_frame=0, end_frame=end_frame)
 
-        # 4. Preprocessing Chain
-        # A. Phase Shift (Hardware correction)
-   
-
-        # B. Unsigned to Signed conversion
         if rec.get_dtype().kind == 'u':
             rec = spre.unsigned_to_signed(rec)
 
-        # D. Highpass Filter (Remove DC drift)
+
         rec = spre.highpass_filter(rec, freq_min=300)
 
-        # E. Local Common Median Reference (Preserves Network Bursts)
+        # Local Common Median Reference (Preserves Network Bursts)
         try:
             rec = spre.common_reference(rec, reference='local', operator='median', local_radius=(250, 250))
         except:
@@ -241,16 +259,15 @@ class MEAPipeline:
 
     # --- Phase 2: Sorting ---
     def run_sorting(self):
+        sorter_folder = self.output_dir / "sorter_output"
         if self.state['stage'] >= ProcessingStage.SORTING_COMPLETE.value:
             self.logger.info("Resuming: Loading existing sorting.")
-            sorter_folder = self.output_dir / "sorter_output"
             try: self.sorting = si.read_sorter_folder(sorter_folder)
             except: self.sorting = si.read_kilosort(sorter_folder)
             return
-
+        self._save_checkpoint(ProcessingStage.SORTING)
         self.logger.info(f"--- [Phase 2] Spike Sorting ({self.sorter}) ---")
-        sorter_folder = self.output_dir / "sorter_output"
-
+        
         import torch
         if torch.cuda.is_available():
             total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3) # Convert to GB
@@ -306,11 +323,18 @@ class MEAPipeline:
 
             #self.logger.info("Running Redundancy Removal...")
             #self.sorting = si.remove_redundant_units(self.sorting, duplicate_threshold=0.9)
-            self._save_checkpoint(ProcessingStage.SORTING_COMPLETE)
+            self._save_checkpoint(ProcessingStage.SORTING_COMPLETE, failed_stage=None, error=None)
         except Exception as e:
-            self.logger.error(f"Sorting failed: {e}")
-            self._save_checkpoint(ProcessingStage.FAILED)
-            raise e
+            err = {
+                "failed_stage": ProcessingStage.SORTING.name,
+                "exception": type(e).__name__,
+                "message": str(e),
+                "traceback": traceback.format_exc(),
+                "time": str(datetime.now())
+            }
+            self.logger.error(err["traceback"])
+            self._save_checkpoint(ProcessingStage.PREPROCESSING_COMPLETE, error=err)
+            raise
 
     def _spike_detection_only(self):
         """Detects spikes (threshold crossings) without sorting."""
@@ -354,78 +378,102 @@ class MEAPipeline:
     # --- Phase 3: Analyzer ---
     def run_analyzer(self):
         analyzer_folder = self.output_dir / "analyzer_output"
-        if self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value:
-            if analyzer_folder.exists():
-                self.logger.info("Resuming: Loading Sorting Analyzer.")
-                self.analyzer = si.load_sorting_analyzer(analyzer_folder)
-                return
+        if self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value and  analyzer_folder.exists():
+            self.logger.info("Resuming: Loading Sorting Analyzer.")
+            self.analyzer = si.load_sorting_analyzer(analyzer_folder)
+            return
         
+        self._save_checkpoint(ProcessingStage.ANALYZER)
         self.logger.info("--- [Phase 3] Computing Sorting Analyzer ---")
-        if analyzer_folder.exists(): shutil.rmtree(analyzer_folder)
+        try:
+            if analyzer_folder.exists(): shutil.rmtree(analyzer_folder)
 
-        sparsity = si.estimate_sparsity(
-            self.sorting, self.recording, 
-            method="radius", radius_um=50, peak_sign='neg'
-        )
+            sparsity = si.estimate_sparsity(
+                self.sorting, self.recording, 
+                method="radius", radius_um=50, peak_sign='neg'
+            )
 
-        self.analyzer = si.create_sorting_analyzer(
-            self.sorting, self.recording, format="binary_folder", 
-            folder=analyzer_folder, sparsity=sparsity, return_in_uV=True
-        )
+            self.analyzer = si.create_sorting_analyzer(
+                self.sorting, self.recording, format="binary_folder", 
+                folder=analyzer_folder, sparsity=sparsity, return_in_uV=True
+            )
 
-        ext_list = ["random_spikes","spike_amplitudes", "waveforms", "templates", "noise_levels", 
-                    "quality_metrics", "template_metrics", "unit_locations"]
-        
-        ext_params = {
-            "waveforms": {"ms_before": 1.0, "ms_after": 2.0},
-            "unit_locations": {"method": "monopolar_triangulation"}
-        }
-        
-        self.analyzer.compute(ext_list, extension_params=ext_params, verbose=self.verbose)
-        self._save_checkpoint(ProcessingStage.ANALYZER_COMPLETE)
+            ext_list = ["random_spikes","spike_amplitudes", "waveforms", "templates", "noise_levels", 
+                        "quality_metrics", "template_metrics", "unit_locations"]
+            
+            ext_params = {
+                "waveforms": {"ms_before": 1.0, "ms_after": 2.0},
+                "unit_locations": {"method": "monopolar_triangulation"}
+            }
+            
+            self.analyzer.compute(ext_list, extension_params=ext_params, verbose=self.verbose)
+            self._save_checkpoint(ProcessingStage.ANALYZER_COMPLETE,failed_stage=None, error=None)
+        except Exception as e:
+            err = {
+                "failed_stage": ProcessingStage.ANALYZER.name,
+                "exception": type(e).__name__,
+                "message": str(e),
+                "traceback": traceback.format_exc(),
+                "time": str(datetime.now())
+            }
+            self.logger.error(err["traceback"])
+            self._save_checkpoint(ProcessingStage.SORTING_COMPLETE, error=err)
+            raise
 
     # --- Phase 4: Reports & Curation ---
     def generate_reports(self, thresholds=None, no_curation=False, export_phy=False):
         if self.state['stage'] == ProcessingStage.REPORTS_COMPLETE.value: return
 
         self.logger.info("--- [Phase 4] Reports & Curation ---")
-        q_metrics = self.analyzer.get_extension("quality_metrics").get_data()
-        t_metrics = self.analyzer.get_extension("template_metrics").get_data()
-        locations = self.analyzer.get_extension("unit_locations").get_data()
-        
-        q_metrics['loc_x'] = locations[:, 0]
-        q_metrics['loc_y'] = locations[:, 1]
-        
-        q_metrics.to_excel(self.output_dir / "qm_unfiltered.xlsx")
-        t_metrics.to_excel(self.output_dir / "tm_unfiltered.xlsx")
-        self._plot_probe_locations(q_metrics.index.values, locations, "locations_unfiltered.pdf")
+        try:
+            q_metrics = self.analyzer.get_extension("quality_metrics").get_data()
+            t_metrics = self.analyzer.get_extension("template_metrics").get_data()
+            locations = self.analyzer.get_extension("unit_locations").get_data()
+            
+            q_metrics['loc_x'] = locations[:, 0]
+            q_metrics['loc_y'] = locations[:, 1]
+            
+            q_metrics.to_excel(self.output_dir / "qm_unfiltered.xlsx")
+            t_metrics.to_excel(self.output_dir / "tm_unfiltered.xlsx")
+            self._plot_probe_locations(q_metrics.index.values, locations, "locations_unfiltered.pdf")
 
-        if no_curation:
-            self.logger.info("Skipping curation.")
-            clean_units = q_metrics.index.values
-        else:
-            self.logger.info("Applying curation.")
-            clean_metrics, rejection_log = self._apply_curation_logic(q_metrics, thresholds)
-            clean_units = clean_metrics.index.values
-            clean_metrics.to_excel(self.output_dir / "metrics_curated.xlsx")
-            rejection_log.to_excel(self.output_dir / "rejection_log.xlsx")
-            t_metrics.loc[clean_units].to_excel(self.output_dir / "tm_curated.xlsx")
+            if no_curation:
+                self.logger.info("Skipping curation.")
+                clean_units = q_metrics.index.values
+            else:
+                self.logger.info("Applying curation.")
+                clean_metrics, rejection_log = self._apply_curation_logic(q_metrics, thresholds)
+                clean_units = clean_metrics.index.values
+                clean_metrics.to_excel(self.output_dir / "metrics_curated.xlsx")
+                rejection_log.to_excel(self.output_dir / "rejection_log.xlsx")
+                t_metrics.loc[clean_units].to_excel(self.output_dir / "tm_curated.xlsx")
 
-        if len(clean_units) == 0:
-            self.logger.warning("No units passed curation.")
-            self._save_checkpoint(ProcessingStage.REPORTS_COMPLETE, n_units=0)
-            return
+            if len(clean_units) == 0:
+                self.logger.warning("No units passed curation.")
+                self._save_checkpoint(ProcessingStage.REPORTS_COMPLETE, n_units=0)
+                return
 
-        mask = np.isin(self.analyzer.unit_ids, clean_units)
-        self._plot_probe_locations(clean_units, locations[mask], f"locations_{len(clean_units)}_units.pdf")
-        self._plot_waveforms_grid(clean_units)
-        self._run_burst_analysis(clean_units)
+            mask = np.isin(self.analyzer.unit_ids, clean_units)
+            self._plot_probe_locations(clean_units, locations[mask], f"locations_{len(clean_units)}_units.pdf")
+            self._plot_waveforms_grid(clean_units)
+            self._run_burst_analysis(clean_units)
 
-        if export_phy:
-            si.export_to_phy(self.analyzer.select_units(clean_units), 
-                           output_folder=self.output_dir/"phy_output", remove_if_exists=True, copy_binary=False)
+            if export_phy:
+                si.export_to_phy(self.analyzer.select_units(clean_units), 
+                            output_folder=self.output_dir/"phy_output", remove_if_exists=True, copy_binary=False)
 
-        self._save_checkpoint(ProcessingStage.REPORTS_COMPLETE, n_units=len(clean_units))
+            self._save_checkpoint(ProcessingStage.REPORTS_COMPLETE, n_units=len(clean_units),failed_stage=None, error=None)
+        except Exception as e:
+            err = {
+                "failed_stage": ProcessingStage.REPORTS.name,
+                "exception": type(e).__name__,
+                "message": str(e),
+                "traceback": traceback.format_exc(),
+                "time": str(datetime.now())
+            }
+            self.logger.error(err["traceback"])
+            self._save_checkpoint(ProcessingStage.ANALYZER_COMPLETE, error=err)
+            raise
 
     def _apply_curation_logic(self, metrics, user_thresholds):
         defaults = {'presence_ratio': 0.75, 'rp_contamination': 0.15, 'firing_rate': 0.05, 
