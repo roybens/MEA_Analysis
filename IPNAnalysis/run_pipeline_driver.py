@@ -18,17 +18,18 @@ import shlex
 import traceback
 import pandas as pd
 import logging
-
+from datetime import datetime
 BASE_FILE_PATH = str(Path(__file__).resolve().parent)
 
 # ----------------------------------------------------------
 # Logger setup
 # ----------------------------------------------------------
 def setup_driver_logger(log_path=None):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if log_path is None:
-        log_file= os.path.join(BASE_FILE_PATH, "run_pipeline_driver.log")
+        log_file= os.path.join(BASE_FILE_PATH, f"run_pipeline_driver_{timestamp}.log")
     else:
-        log_file = os.path.join(log_path, "run_pipeline_driver.log")
+        log_file = os.path.join(log_path, f"run_pipeline_driver_{timestamp}.log")
     open(log_file, 'w').close()  # Clear log file on each run
 
     logger = logging.getLogger("driver")
