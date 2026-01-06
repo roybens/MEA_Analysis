@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Dash: launch and debug",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/graphing_app.py",   
+      "console": "integratedTerminal",
+      "justMyCode": false,                    
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "FLASK_ENV": "development",           
+        "DASH_DEBUG": "true"                   
+      }
+    
+    }
+  ]
+}
