@@ -2,19 +2,16 @@
 """
 checkpoint_dashboard_full.py
 
-Improved Streamlit dashboard for MEA pipeline checkpoint JSON files.
+Robust Streamlit dashboard for MEA pipeline checkpoint JSON files.
 
-Usage:
-    streamlit run checkpoint_dashboard_full.py -- --checkpoint-dir /path/to/AnalyzedData/checkpoints
+- Fully aligned with ProcessingStage enum (0–8)
+- Defensive against missing / partial fields
+- Never crashes on malformed checkpoints
+- Correct stage, failure, and completeness logic
 
-Features:
- - Loads all JSON checkpoints from a directory
- - Stage-aware summary tiles (completed / failed / in-progress / total)
- - Run-level completeness table (completed wells / total wells)
- - Filters: project, date, chip, run, well, stage, failed-only
- - Color-coded stage badges and unit-count badge
- - JSON inspector with extensions expander
- - Export filtered view to CSV
+Run:
+  streamlit run checkpoint_dashboard_full.py -- \
+    --checkpoint-dir /path/to/checkpoints
 """
 
 import streamlit as st
@@ -22,94 +19,119 @@ import json
 from pathlib import Path
 import pandas as pd
 import argparse
-import sys
-import textwrap
 from datetime import datetime
 
-# -------------------------
-# Helpers
-# -------------------------
+# ============================================================
+# PIPELINE STAGES (AUTHORITATIVE)
+# ============================================================
+
+STAGE_MAP = {
+    0: "NOT_STARTED",
+    1: "PREPROCESSING",
+    2: "PREPROCESSING_COMPLETE",
+    3: "SORTING",
+    4: "SORTING_COMPLETE",
+    5: "ANALYZER",
+    6: "ANALYZER_COMPLETE",
+    7: "REPORTS",
+    8: "REPORTS_COMPLETE",
+}
+
+IN_PROGRESS_STAGES = {
+    "PREPROCESSING",
+    "SORTING",
+    "ANALYZER",
+    "REPORTS",
+}
+
+COMPLETE_STAGES = {
+    "PREPROCESSING_COMPLETE",
+    "SORTING_COMPLETE",
+    "ANALYZER_COMPLETE",
+    "REPORTS_COMPLETE",
+}
+
+# ============================================================
+# SAFE ACCESS
+# ============================================================
+
+def safe_get(d, key, default=None):
+    try:
+        return d.get(key, default)
+    except Exception:
+        return default
+
+# ============================================================
+# ARG PARSING (STREAMLIT-SAFE)
+# ============================================================
+
 def parse_args():
-    """
-    Accepts --checkpoint-dir via argv after -- (streamlit passes the rest)
-    """
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--checkpoint-dir", type=str, required=False,
-                        help="Path to checkpoint directory (default: ./AnalyzedData/checkpoints)")
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=str,
+        required=False,
+        help="Directory containing checkpoint JSON files",
+    )
     known, _ = parser.parse_known_args()
     return known
 
+# ============================================================
+# LOAD CHECKPOINTS
+# ============================================================
+
 @st.cache_data(ttl=300)
 def load_checkpoints_dataframe(checkpoint_dir: str):
-    """
-    Loads all .json checkpoint files into a DataFrame.
-    Returns (df, load_errors_list)
-    """
-    checkpoint_path = Path(checkpoint_dir)
     rows = []
     errors = []
 
+    checkpoint_path = Path(checkpoint_dir)
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint dir does not exist: {checkpoint_path}")
 
-    files = sorted(checkpoint_path.glob("*.json"))
-
-    for f in files:
+    for f in sorted(checkpoint_path.glob("*.json")):
         try:
             raw = json.loads(f.read_text())
         except Exception as e:
             errors.append((str(f), str(e)))
-            # Add a minimal row for visibility
-            rows.append({
-                "file": f.name,
-                "path": str(f.resolve()),
-                "project": None,
-                "date": None,
-                "chip": None,
-                "run": None,
-                "well": None,
-                "rec": None,
-                "stage": "PARSE_ERROR",
-                "stage_num": None,
-                "failed": True,
-                "error": f"parse_error:{e}",
-                "extensions_computed": [],
-                "num_units_filtered": None,
-                "last_updated": None,
-                "_raw": {}
-            })
             continue
 
-        # Defensive extraction with defaults
-        project = raw.get("project_name") or raw.get("project") or None
-        date = raw.get("date")
-        chip = raw.get("chip_id") or raw.get("chip")
-        run = raw.get("run_id")
-        well = raw.get("well_id")
-        rec = raw.get("rec_name")
-        stage_name = raw.get("stage_name") or raw.get("stage") or None
-        # If stage numeric present convert to name mapping if possible
-        stage_num = raw.get("stage") if isinstance(raw.get("stage"), (int, float)) else None
-        failed = raw.get("failed", False) or (stage_name == "FAILED")
-        error = raw.get("error")
-        exts = raw.get("extensions_computed") or raw.get("extensions") or []
-        num_units = raw.get("num_units_filtered") or raw.get("num_units") or None
-        last_updated = raw.get("last_updated")
+        # -------------------------
+        # Canonical + defensive extraction
+        # -------------------------
+        project = safe_get(raw, "project_name") or safe_get(raw, "project")
+        date = safe_get(raw, "date")
+        chip = safe_get(raw, "chip_id") or safe_get(raw, "chip")
+        run = safe_get(raw, "run_id")
+        well = safe_get(raw, "well_id") or safe_get(raw, "well")
+        rec = safe_get(raw, "rec_name")
 
-        # Normalize stage_name string if numeric stage provided
-        if stage_name is None and stage_num is not None:
-            mapping = {
-                -1: "FAILED",
-                0: "NOT_STARTED",
-                1: "SORTING_COMPLETE",
-                2: "ANALYZER_COMPLETE",
-                3: "REPORTS_COMPLETE"
-            }
-            stage_name = mapping.get(int(stage_num), str(stage_num))
+        stage_num = safe_get(raw, "stage")
+        stage_name = STAGE_MAP.get(stage_num, "UNKNOWN")
 
-        # Fallback stage
-        if stage_name is None:
-            stage_name = "UNKNOWN"
+        failed = (
+            bool(safe_get(raw, "failed", False))
+            or safe_get(raw, "failed_stage") is not None
+            or safe_get(raw, "error") is not None
+        )
+
+        failed_stage = safe_get(raw, "failed_stage")
+        if failed_stage is not None:
+            failed_stage_name = STAGE_MAP.get(failed_stage, failed_stage)
+            stage_name = f"FAILED_AT_{failed_stage_name}"
+
+        num_units = (
+            safe_get(raw, "num_units_filtered")
+            or safe_get(raw, "num_units")
+            or safe_get(raw, "n_units")
+        )
+
+        analyzer_folder = (
+            safe_get(raw, "analyzer_folder")
+            or safe_get(raw, "output_dir")
+        )
+
+        last_updated = safe_get(raw, "last_updated")
 
         rows.append({
             "file": f.name,
@@ -122,275 +144,170 @@ def load_checkpoints_dataframe(checkpoint_dir: str):
             "rec": rec,
             "stage": stage_name,
             "stage_num": stage_num,
-            "failed": bool(failed),
-            "error": error,
-            "extensions_computed": exts,
-            "num_units_filtered": num_units,
+            "failed": failed,
+            "failed_stage": failed_stage,
+            "error": safe_get(raw, "error"),
+            "num_units": num_units,
+            "analyzer_folder": analyzer_folder,
             "last_updated": last_updated,
-            "_raw": raw
+            "_raw": raw,
         })
 
     df = pd.DataFrame(rows)
 
-    # Normalize dtypes and fillna
+    # -------------------------
+    # Normalize missing fields
+    # -------------------------
+    for col in ["project", "chip", "run", "well", "rec", "stage"]:
+        if col in df.columns:
+            df[col] = df[col].fillna("—")
+
+    if "num_units" in df.columns:
+        df["num_units"] = pd.to_numeric(df["num_units"], errors="coerce")
+
     if "last_updated" in df.columns:
-        def try_parse(dt):
-            try:
-                return pd.to_datetime(dt)
-            except Exception:
-                return pd.NaT
-        df["last_updated"] = df["last_updated"].apply(try_parse)
+        df["last_updated"] = pd.to_datetime(df["last_updated"], errors="coerce")
 
     return df, errors
 
-def stage_color_html(stage):
-    """
-    Return HTML colored badge for a stage.
-    """
+# ============================================================
+# UI HELPERS
+# ============================================================
+
+def stage_badge(stage):
+    base = stage.replace("FAILED_AT_", "")
     color_map = {
-        "REPORTS_COMPLETE": "#1f9d55",   # green
-        "ANALYZER_COMPLETE": "#ff9f1c",  # orange
-        "SORTING_COMPLETE": "#2874a6",   # blue
-        "NOT_STARTED": "#95a5a6",        # grey
-        "FAILED": "#d90429",             # red
-        "PARSE_ERROR": "#d90429",
-        "UNKNOWN": "#7f8c8d"
+        # completed
+        "REPORTS_COMPLETE": "#1f9d55",
+        "ANALYZER_COMPLETE": "#1f9d55",
+        "SORTING_COMPLETE": "#1f9d55",
+        "PREPROCESSING_COMPLETE": "#1f9d55",
+
+        # in progress
+        "REPORTS": "#ff9f1c",
+        "ANALYZER": "#ff9f1c",
+        "SORTING": "#ff9f1c",
+        "PREPROCESSING": "#ff9f1c",
+
+        # misc
+        "NOT_STARTED": "#95a5a6",
+        "UNKNOWN": "#7f8c8d",
     }
-    color = color_map.get(stage, "#2d2d2d")
-    display = stage.replace("_", " ").title()
-    html = f"""
-    <span style="display:inline-block;padding:6px 10px;
-                 border-radius:6px;background:{color};color:white;
-                 font-weight:600;font-size:0.9em;">
-        {display}
+
+    color = color_map.get(base, "#d90429" if stage.startswith("FAILED") else "#2d2d2d")
+    label = stage.replace("_", " ")
+
+    return f"""
+    <span style="padding:5px 10px;border-radius:6px;
+                 background:{color};color:white;font-weight:600;">
+        {label}
     </span>
     """
-    return html
 
-def small_badge(text, bg="#e0e0e0"):
-    return f"""<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:{bg};font-size:0.85em">{text}</span>"""
+def badge(text, bg):
+    return f"<span style='padding:3px 8px;border-radius:6px;background:{bg}'>{text}</span>"
 
-def safe_str(x):
-    return "" if x is None else str(x)
+# ============================================================
+# STREAMLIT APP
+# ============================================================
 
-# -------------------------
-# Streamlit UI
-# -------------------------
 def run_app(checkpoint_dir):
-    st.set_page_config(page_title="MEA Checkpoint Dashboard", layout="wide")
-    st.title("📊 MEA Pipeline Checkpoint Dashboard — Full")
+    st.set_page_config(layout="wide", page_title="MEA Checkpoint Dashboard")
+    st.title("📊 MEA Pipeline Checkpoint Dashboard")
 
-    # Load data
-    try:
-        df, errors = load_checkpoints_dataframe(checkpoint_dir)
-    except FileNotFoundError as e:
-        st.error(str(e))
-        st.stop()
+    df, errors = load_checkpoints_dataframe(checkpoint_dir)
 
-    # Top summary tiles
+    # -------------------------
+    # Summary tiles
+    # -------------------------
     total = len(df)
-    completed = int((df["stage"] == "REPORTS_COMPLETE").sum())
-    failed = int(df["failed"].sum())
-    in_progress = int(((df["stage"] != "REPORTS_COMPLETE") & (~df["failed"])).sum())
-    unknown = int((df["stage"] == "UNKNOWN").sum())
+    completed = (df["stage"] == "REPORTS_COMPLETE").sum()
+    failed = df["failed"].sum()
+    in_progress = df["stage"].isin(IN_PROGRESS_STAGES).sum()
 
-    col1, col2, col3, col4, col5 = st.columns([1,1,1,1,1])
-    col1.metric("Total checkpoints", total)
-    col2.metric("Completed (reports)", completed)
-    col3.metric("Failed", failed)
-    col4.metric("In progress", in_progress)
-    col5.metric("Unknown", unknown)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total", total)
+    c2.metric("Completed", completed)
+    c3.metric("In progress", in_progress)
+    c4.metric("Failed", failed)
 
-    st.markdown("---")
+    # -------------------------
+    # Filters
+    # -------------------------
+    st.sidebar.header("Filters")
 
-    # Sidebar filters
-    st.sidebar.header("Filters / Query")
-    st.sidebar.write("Narrow down which checkpoints to show")
+    for col in ["project", "chip", "run", "well", "stage"]:
+        if col not in df.columns:
+            continue
+        options = sorted(df[col].dropna().unique())
+        sel = st.sidebar.multiselect(col, options)
+        if sel:
+            df = df[df[col].isin(sel)]
 
-    projects = sorted(df["project"].dropna().unique().tolist())
-    chips = sorted(df["chip"].dropna().unique().tolist())
-    runs = sorted([int(x) for x in df["run"].dropna().unique().tolist()]) if not df["run"].dropna().empty else []
-    wells = sorted(df["well"].dropna().unique().tolist())
-    stages = sorted(df["stage"].dropna().unique().tolist())
+    if st.sidebar.checkbox("Failures only"):
+        df = df[df["failed"]]
 
-    sel_projects = st.sidebar.multiselect("Project", options=projects)
-    sel_chips = st.sidebar.multiselect("Chip ID", options=chips)
-    sel_runs = st.sidebar.multiselect("Run ID", options=runs)
-    sel_wells = st.sidebar.multiselect("Well", options=wells)
-    sel_stages = st.sidebar.multiselect("Stage", options=stages)
-    failed_only = st.sidebar.checkbox("Show only failures", value=False)
-    min_units = st.sidebar.number_input("Min units filtered (leave 0)", min_value=0, value=0, step=1)
+    # -------------------------
+    # Table
+    # -------------------------
+    st.subheader("Checkpoints")
 
-    # Apply filters
-    view_df = df.copy()
-    if sel_projects:
-        view_df = view_df[view_df["project"].isin(sel_projects)]
-    if sel_chips:
-        view_df = view_df[view_df["chip"].isin(sel_chips)]
-    if sel_runs:
-        # our runs might be ints or strings; normalize both sides to int if possible
-        def to_int_safe(x):
-            try:
-                return int(x)
-            except:
-                return None
-        sel_runs_int = [int(x) for x in sel_runs]
-        view_df = view_df[view_df["run"].apply(lambda x: (to_int_safe(x) in sel_runs_int))]
-    if sel_wells:
-        view_df = view_df[view_df["well"].isin(sel_wells)]
-    if sel_stages:
-        view_df = view_df[view_df["stage"].isin(sel_stages)]
-    if failed_only:
-        view_df = view_df[view_df["failed"] == True]
-    if min_units > 0:
-        view_df = view_df[view_df["num_units_filtered"].apply(lambda x: (x is not None) and (x >= min_units))]
+    html = ["<table width='100%' style='border-collapse:collapse'>"]
+    html.append("<tr>")
+    for c in ["file", "project", "chip", "run", "well", "stage", "num_units", "last_updated"]:
+        html.append(f"<th align='left' style='border-bottom:1px solid #ddd'>{c}</th>")
+    html.append("</tr>")
 
-    st.write(f"Showing **{len(view_df)}** checkpoints (filtered).")
+    for _, r in df.iterrows():
+        ts = r["last_updated"]
+        ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(ts) else "—"
 
-    # Export filtered CSV
-    csv_btn_col1, csv_btn_col2 = st.columns([1,3])
-    if csv_btn_col1.button("Export CSV"):
-        tmp_csv = "checkpoint_filtered_export.csv"
-        view_df_out = view_df.drop(columns=["_raw", "extensions_computed"])
-        view_df_out.to_csv(tmp_csv, index=False)
-        st.success(f"Saved CSV -> {tmp_csv}")
-        st.download_button("Download CSV", data=open(tmp_csv, "rb"), file_name=tmp_csv)
+        units_html = badge(int(r["num_units"]), "#f0ad4e") if pd.notna(r["num_units"]) else ""
 
-    # Run-level completeness
-    st.subheader("Run-level completeness")
-    if "run" in view_df.columns and not view_df["run"].dropna().empty:
-        run_group = view_df.groupby("run").agg(
-            wells_total=("well", "count"),
-            wells_completed=("stage", lambda s: (s == "REPORTS_COMPLETE").sum())
-        )
-        run_group["complete_fraction"] = (run_group["wells_completed"] / run_group["wells_total"]).map("{:.2f}".format)
-        st.dataframe(run_group.reset_index(), use_container_width=True)
-    else:
-        st.info("No run-level data available in the filtered selection.")
+        html.append("<tr>")
+        html.append(f"<td>{r['file']}</td>")
+        html.append(f"<td>{r['project']}</td>")
+        html.append(f"<td>{r['chip']}</td>")
+        html.append(f"<td>{r['run']}</td>")
+        html.append(f"<td>{r['well']}</td>")
+        html.append(f"<td>{stage_badge(r['stage'])}</td>")
+        html.append(f"<td>{units_html}</td>")
+        html.append(f"<td>{ts_str}</td>")
+        html.append("</tr>")
 
-    st.markdown("---")
-    st.subheader("Checkpoint Table")
+    html.append("</table>")
+    st.markdown("".join(html), unsafe_allow_html=True)
 
-    # Build display table: customize columns and small badges
-    display_cols = ["file", "project", "date", "chip", "run", "well", "rec", "stage", "failed", "num_units_filtered", "last_updated"]
-    display_df = view_df[display_cols].copy()
-    # Format date
-    display_df["last_updated"] = display_df["last_updated"].apply(lambda x: x.strftime("%Y-%m-%d %H:%M:%S") if not pd.isna(x) else "")
-    # Render with colored stage badges using markdown in dataframe is not directly supported; we'll render custom rows
-    # Use an expander with a table and a per-row 'Inspect' action
+    # -------------------------
+    # Inspector
+    # -------------------------
+    st.subheader("Inspect checkpoint")
 
-    max_rows = st.number_input("Max rows to show (table)", min_value=5, max_value=500, value=200, step=5)
-    show_df = display_df.head(max_rows)
+    if len(df) == 0:
+        st.info("No checkpoints to inspect.")
+        return
 
-    # Render as an interactive table using st.table but we want colored badges so we'll create an HTML table
-    def render_html_table(df_to_render):
-        header_cols = df_to_render.columns.tolist()
-        html = ['<table style="width:100%; border-collapse:collapse;">']
-        # header
-        html.append("<thead><tr>")
-        for c in header_cols:
-            html.append(f'<th style="text-align:left;padding:6px;border-bottom:1px solid #ddd">{c}</th>')
-        html.append("</tr></thead>")
-        # rows
-        html.append("<tbody>")
-        for _, row in df_to_render.iterrows():
-            html.append("<tr>")
-            for c in header_cols:
-                val = row[c]
-                if c == "stage":
-                    val_html = stage_color_html(val)
-                elif c == "failed":
-                    val_html = small_badge("failed", "#d90429") if val else small_badge("ok", "#1f9d55")
-                elif c == "num_units_filtered":
-                    if pd.isna(val) or val is None:
-                        val_html = ""
-                    else:
-                        val_html = small_badge(str(val), "#f0ad4e")
-                else:
-                    val_html = f"<div style='font-size:0.95em'>{safe_str(val)}</div>"
-                html.append(f'<td style="padding:6px;border-bottom:1px solid #f0f0f0;vertical-align:top">{val_html}</td>')
-            html.append("</tr>")
-        html.append("</tbody></table>")
-        return "".join(html)
+    sel_file = st.selectbox("Select file", df["file"].tolist())
+    row = df[df["file"] == sel_file].iloc[0]
 
-    st.markdown(render_html_table(show_df), unsafe_allow_html=True)
+    if row["analyzer_folder"] not in (None, "—"):
+        st.text_input("Analyzer / Output folder", row["analyzer_folder"])
 
-    st.markdown("---")
-    st.subheader("Inspect a single checkpoint")
+    st.json(row["_raw"])
 
-    # selection widget for single-checkpoint inspection
-    all_files = view_df["file"].tolist()
-    if not all_files:
-        st.info("No checkpoints to inspect (after filters).")
-        st.stop()
-
-    sel_file = st.selectbox("Select checkpoint file", all_files, index=0)
-    selected_row = view_df[view_df["file"] == sel_file].iloc[0]
-
-    colA, colB = st.columns([3,2])
-    with colA:
-        st.markdown("**Metadata**")
-        meta_display = {
-            "file": selected_row["file"],
-            "project": selected_row["project"],
-            "date": selected_row["date"],
-            "chip": selected_row["chip"],
-            "run": selected_row["run"],
-            "well": selected_row["well"],
-            "rec": selected_row["rec"],
-            "stage": selected_row["stage"],
-            "failed": selected_row["failed"],
-            "num_units_filtered": selected_row["num_units_filtered"],
-            "last_updated": selected_row["last_updated"].strftime("%Y-%m-%d %H:%M:%S") if not pd.isna(selected_row["last_updated"]) else ""
-        }
-        st.json(meta_display)
-
-        st.markdown("**Analyzer folder (click to copy)**")
-        analyzer_folder = selected_row["_raw"].get("analyzer_folder") if isinstance(selected_row["_raw"], dict) else None
-        if analyzer_folder:
-            st.text_input("Analyzer folder", value=analyzer_folder, key="an_path")
-            if st.button("Show in file browser (open externally)", key="open_fs"):
-                st.info("Streamlit cannot open external file browsers. Copy the path above and paste into your file manager.")
-
-        else:
-            st.caption("No analyzer_folder field in JSON.")
-
-    with colB:
-        st.markdown("**Extensions computed**")
-        exts = selected_row["_raw"].get("extensions_computed") if isinstance(selected_row["_raw"], dict) else []
-        if exts:
-            st.markdown(f"Computed extensions: **{len(exts)}**")
-            # show simple bullet list
-            for e in exts:
-                st.write(f"- {e}")
-        else:
-            st.write("No extensions recorded.")
-
-        st.markdown("**Error / Failure info**")
-        if selected_row["failed"]:
-            st.error(safe_str(selected_row["error"]))
-            st.write(f"Failed flag: {selected_row['failed']}")
-        else:
-            st.success("No error recorded")
-
-    st.markdown("**Full raw JSON**")
-    st.expander("Raw JSON (expand)")  # small separator
-    st.json(selected_row["_raw"])
-
-    # Show parse/load errors if any
+    # -------------------------
+    # Parse errors
+    # -------------------------
     if errors:
-        st.markdown("---")
-        st.error("Some checkpoint files failed to parse (see details below)")
-        for fn, err in errors:
-            st.write(f"- {fn}: {err}")
+        st.error("Some checkpoint files failed to parse")
+        for f, e in errors:
+            st.write(f"{f}: {e}")
 
-    st.markdown("---")
-    st.caption("Tip: Use sidebar filters to narrow runs/wells. Use Export CSV to snapshot the current filtered view.")
+# ============================================================
+# ENTRYPOINT
+# ============================================================
 
-# -------------------------
-# Entrypoint
-# -------------------------
 if __name__ == "__main__":
     args = parse_args()
-    cp_dir = args.checkpoint_dir if args.checkpoint_dir else str(Path(__file__).resolve().parent / "../AnalyzedData/checkpoints")
-    run_app(cp_dir)
+    checkpoint_dir = args.checkpoint_dir or "./AnalyzedData/checkpoints"
+    run_app(checkpoint_dir)
