@@ -23,6 +23,8 @@ matplotlib.use('Agg') # Non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf as pdf
 
+from spikeinterface.sortingcomponents.peak_detection import detect_peaks
+
 # Scientific Libraries
 import spikeinterface.full as si
 import spikeinterface.preprocessing as spre
@@ -76,6 +78,7 @@ class MEAPipeline:
         self.well = self.metadata.get('well', 'UnknownWell')
         self.chip_id = self.metadata.get('chip_id', 'UnknownChip')
         self.date = self.metadata.get('date', 'UnknownDate')
+
         
         # Define Directory Structure: Output / Pattern / Well
         self.relative_pattern = self.metadata.get('relative_pattern', 'UnknownPattern')
@@ -341,10 +344,11 @@ class MEAPipeline:
         self.logger.info("--- [Phase 2-Alt] Spike Detection (No Sorting) ---")
         job_kwargs = {'n_jobs': 16, 'chunk_duration': '1s', 'progress_bar': self.verbose}
         
-        peaks = si.detect_peaks(
-            self.recording, method='by_channel', peak_sign='neg', 
-            detect_threshold=5, exclude_sweep_ms=0.1, **job_kwargs
+        peaks = detect_peaks(
+            self.recording, method='by_channel', 
+            detect_threshold=5, peak_sign='neg', exclude_sweep_ms=0.1, **job_kwargs
         )
+
         
         self.logger.info(f"Detected {len(peaks)} total spikes.")
         fs = self.recording.get_sampling_frequency()
