@@ -1,10 +1,8 @@
 import numpy as np
-import math
 import json
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
-from scipy.ndimage import gaussian_filter1d, percentile_filter, median_filter
-from collections import defaultdict
+from scipy.ndimage import gaussian_filter1d, percentile_filter
 
 def compute_network_bursts(
     ax_raster,
@@ -12,512 +10,408 @@ def compute_network_bursts(
     SpikeTimes,
     # ---------------- core detection params ----------------
     isi_threshold=0.1,             # seconds for unit burst detection
-    bin_ms=10,                     # bin width for participation histogram (ms)
-    gamma=2.0,                     # exponent for weighted participation
-    smoothing_min_ms=20,           # min smoothing (ms)
-    baseline_pct=20.0,             # rolling baseline percentile
-    local_baseline_win_s=5.0,      # rolling baseline window (s)
-    delta_thresh=0.30,             # ΔP/P threshold to start active candidate
-    peak_top_percent=5.0,          # for dyn estimate
-    noise_k=4.0,                   # noise floor multiplier for dyn/prom
-    prom_frac=0.15,                # fraction of dyn used for prominence
-    max_back_ms=500.0,             # backtracking window for onset (ms)
-    slope_k=2.0,                   # slope multiplier for slope-threshold
-    min_burstlet_duration_ms=40,   # minimum burstlet duration (ms)
+    bin_ms=10,                     # bin width (hardcoded to 10ms for biophysics)
+    gamma=2.0,                     # Contrast amplifier (Signal^2)
+    
+    # ---------------- adaptive smoothing params ----------------
+    smoothing_min_ms=20,           # absolute minimum smoothing
+    
+    # ---------------- thresholding params ----------------
+    baseline_pct=50.0,             # Median baseline (handles active cultures)
+    local_baseline_win_s=5.0,      # Rolling baseline window
+    delta_thresh=0.25,             # Relative threshold (25% above baseline)
+    
+    # ---------------- peak / noise params ----------------
+    max_back_ms=500.0,             # Backtracking window
+    slope_k=2.0,
+    min_burstlet_duration_ms=20,   # CHANGED: 20ms (2 bins) to catch sharp spikes
+    
     # ---------------- merging params ----------------
-    burstlet_merge_gap_s=0.05,     # small-gap to merge burstlets -> network bursts (s)
-    network_merge_gap_s=0.1,       # long-gap to merge network bursts -> superbursts (s)
-    superburst_min_duration_s=5.0, # minimum duration for a superburst (s)
+    burstlet_merge_gap_s=0.1,      # CHANGED: 0.1s to separate fast stuttering
+    network_merge_gap_s=1.0,       # 1.0s to group superbursts
+    superburst_min_duration_s=5.0, 
+    
     # ---------------- plotting / verbosity ----------------
     plot=True,
     verbose=False
 ):
     """
-    Full 4-level burst pipeline:
-      - unit_bursts: per-unit ISI-bursts
-      - burstlets: ΔP/P active windows validated by micro-peaks (with backtracking onset)
-      - network_bursts: merge burstlets closer than burstlet_merge_gap_s
-      - superbursts: merge network_bursts closer than network_merge_gap_s and keep those longer than superburst_min_duration_s
-
-    Returns:
-      results (dict, JSON-serializable) and also draws onto ax_raster and ax_macro if provided.
+    Final Robust Burst Detection Pipeline.
+    Integrates Adaptive Smoothing, Anchored Squelch, Fast-Rescue, and Literature Metrics.
     """
 
     # ---------------------------
-    # Sanity checks / quick returns
+    # 0) Sanity Checks & Setup
     # ---------------------------
     units = list(SpikeTimes.keys())
     if len(units) == 0:
         return {"error": "no_units"}, None
 
-    # Concatenate and sort all spikes (for recording bounds)
-    all_spikes = np.sort(np.concatenate([np.asarray(SpikeTimes[u]) for u in units]))
-    if all_spikes.size == 0:
+    # Flatten spikes for global stats
+    all_spikes_flat = np.sort(np.concatenate([np.asarray(SpikeTimes[u]) for u in units]))
+    if all_spikes_flat.size == 0:
         return {"error": "no_spikes"}, None
 
-    rec_start, rec_end = float(all_spikes[0]), float(all_spikes[-1])
+    rec_start, rec_end = float(all_spikes_flat[0]), float(all_spikes_flat[-1])
+    total_rec_duration = rec_end - rec_start
+    
     if verbose:
-        print(f"Recording: {rec_start:.3f} → {rec_end:.3f} s, Units: {len(units)}, Total spikes: {len(all_spikes)}")
+        print(f"Recording: {rec_start:.2f} -> {rec_end:.2f} s | Units: {len(units)}")
 
     # ---------------------------
-    # 1) Unit-level ISI bursts
+    # Phase 1: Unit-level ISI Bursts (Biological Calibration)
     # ---------------------------
-    def detect_unit_bursts(spike_times_dict, isi_thresh):
+    def detect_unit_bursts_logic(spike_times_dict, thresh):
         out = {}
-        for unit, times in spike_times_dict.items():
+        for u, times in spike_times_dict.items():
             times = np.asarray(times)
             if times.size < 2:
-                out[unit] = {
-                    "bursts": [],
-                    "isis_within": [],
-                    "isis_outside": [],
-                    "isis_all": []
-                }
+                out[u] = {"bursts": [], "isis_all": []}
                 continue
+            
             isis = np.diff(times)
-            mask = isis < isi_thresh
+            mask = isis < thresh
+            
+            # Find runs of short ISIs
             starts = np.where(np.diff(np.insert(mask.astype(int), 0, 0)) == 1)[0]
             ends   = np.where(np.diff(np.append(mask.astype(int), 0)) == -1)[0]
+            
             bursts = [list(times[s:e+1]) for s,e in zip(starts, ends)]
-            isis_within = np.concatenate([isis[s:e] for s,e in zip(starts, ends)]) if len(starts)>0 else np.array([])
-            isis_outside = isis[~mask] if isis.size>0 else np.array([])
-            out[unit] = {
+            out[u] = {
                 "bursts": bursts,
-                "isis_within": isis_within.tolist(),
-                "isis_outside": isis_outside.tolist(),
-                "isis_all": isis.tolist()
+                "isis_all": isis.tolist() 
             }
         return out
 
-    unit_bursts = detect_unit_bursts(SpikeTimes, isi_threshold)
+    unit_bursts = detect_unit_bursts_logic(SpikeTimes, isi_threshold)
 
     # ---------------------------
-    # 2) Participation histogram / weighted participation
+    # Phase 2: Construct "Network Synchrony" Signal
     # ---------------------------
     bin_size = float(bin_ms) / 1000.0
     bins = np.arange(rec_start, rec_end + bin_size, bin_size)
     t_centers = (bins[:-1] + bins[1:]) / 2.0
 
+    # Calculate Population Firing Rate (Participation)
     P = np.zeros(len(t_centers), dtype=float)
     for u in units:
         counts, _ = np.histogram(SpikeTimes[u], bins=bins)
-        P += (counts > 0).astype(float)
+        P += (counts > 0).astype(float) # Binary participation per unit per bin
 
+    # Contrast Enhancement (Synchrony Amplifier)
     W = (P ** gamma) if gamma != 1.0 else P.copy()
 
     # ---------------------------
-    # 3) Two-stream smoothing (fast for onsets, slow for peaks) - recommended
+    # Phase 3: Adaptive Dual-Stream Smoothing
     # ---------------------------
-    # convert smoothing minima
+    
+    # A. Calculate "Biological ISI" (Tempo of the culture)
+    all_unit_isis = []
+    for u_data in unit_bursts.values():
+        all_unit_isis.extend(u_data['isis_all'])
+    
+    biological_isi_s = np.median(all_unit_isis) if len(all_unit_isis) > 0 else 0.1
+    
+    # B. Define Kernels
+    target_sigma_s = 5.0 * biological_isi_s
     sigma_min_bins = max(1.0, smoothing_min_ms / bin_ms)
+    target_sigma_bins = float(target_sigma_s / bin_size)
+    
+    sigma_slow_bins = max(sigma_min_bins, target_sigma_bins)       # The "Integrator"
+    sigma_fast_bins = max(1.0, sigma_slow_bins / 5.0)              # The "Detector"
+    sigma_fast_bins = min(5.0, sigma_fast_bins)                    # Cap fast stream for sharpness
 
-    # adapt sigma using median ISI if available
-    diffs = np.diff(all_spikes)
-    diffs = diffs[diffs > 0]
-    median_isi = np.median(diffs) if len(diffs) > 0 else 0.001
-    target_sigma_s = 5.0 * median_isi
-    # convert to bins
-    target_sigma_bins = float(np.clip(target_sigma_s / bin_size, 1.0, 30.0))
+    if verbose:
+        print(f"Adaptive Smoothing | Bio ISI: {biological_isi_s*1000:.1f}ms -> Sigma Slow: {sigma_slow_bins*bin_ms:.1f}ms")
 
-    # choose fast and slow sigmas (fast for onset, slow for peak)
-    sigma_fast_bins = max(1.0, min(5.0, sigma_min_bins))         # small smoothing for onset
-    sigma_slow_bins = max(sigma_min_bins, target_sigma_bins)     # slower for peak detection
-
-    W_smooth_fast = gaussian_filter1d(W, sigma=sigma_fast_bins)
-    W_smooth_slow = gaussian_filter1d(W, sigma=sigma_slow_bins)
-
-    # default ws for different steps
-    ws_onset = W_smooth_fast   # used for delta, onset timing, slope
-    ws_peak  = W_smooth_slow   # used for peak detection and dyn/prom
+    # C. Apply Filters
+    ws_onset = gaussian_filter1d(W, sigma=sigma_fast_bins) # Fast Stream (Orange)
+    ws_peak  = gaussian_filter1d(W, sigma=sigma_slow_bins) # Slow Stream (Blue)
 
     # ---------------------------
-    # 4) Micro-peaks on slow trace & dyn/prom
+    # Phase 4: Anchored Squelch & Detection
     # ---------------------------
-    ws_p = ws_peak
-    n_top = max(1, int(len(ws_p) * (peak_top_percent / 100.0)))
-    peak_mean = float(np.mean(np.sort(ws_p)[-n_top:]))
-    baseline_global = float(np.percentile(ws_onset, baseline_pct))
+    
+    # A. Calculate Squelch (Noise Floor)
+    # Anchor to 5th percentile to find true silence even in active cultures
+    noise_anchor = np.percentile(ws_peak, 5.0)
+    below_median = ws_peak[ws_peak < np.median(ws_peak)]
+    noise_mad = np.median(np.abs(below_median - noise_anchor)) if len(below_median) > 0 else 1.0
+    
+    squelch_threshold = noise_anchor + (5.0 * noise_mad)
+    
+    # Safety: Ensure squelch is at least 5% of max peak (prevents 0-threshold in silent files)
+    min_safety = np.max(ws_peak) * 0.05
+    squelch_threshold = max(squelch_threshold, min_safety)
 
-    dws_peak = np.abs(np.diff(ws_p))
-    noise_est = float(1.4826 * np.median(dws_peak)) if len(dws_peak) > 0 else 0.0
+    if verbose:
+        print(f"Squelch: {squelch_threshold:.2f} (Anchor: {noise_anchor:.2f})")
 
-    dyn = max(peak_mean - baseline_global, noise_k * noise_est, 1e-9)
-    prom = max(prom_frac * dyn, noise_k * noise_est, 1e-9)
-
-    peaks_idx, peak_props = find_peaks(ws_p, prominence=prom)
-    # ensure numpy ints -> python ints for json
-    peaks_idx = peaks_idx.astype(int).tolist()
-
-    # ---------------------------
-    # 5) Rolling baseline (fast trace) and ΔP/P
-    # ---------------------------
+    # B. Find Candidates (Relative Thresholding)
     win_bins = max(3, int(round(local_baseline_win_s / bin_size)))
-    try:
-        baseline_local = percentile_filter(ws_onset.astype(float), percentile=baseline_pct, size=win_bins, mode='reflect')
-    except Exception:
-        baseline_local = np.full_like(ws_onset, baseline_global)
-
+    baseline_local = percentile_filter(ws_onset, percentile=baseline_pct, size=win_bins, mode='reflect')
     eps = 1e-9
     delta = (ws_onset - baseline_local) / (baseline_local + eps)
-
-    # ---------------------------
-    # 6) Active candidate windows using ΔP/P
-    # ---------------------------
+    
     above = delta > delta_thresh
     actives_idx = []
     i = 0
-    n = len(above)
-    while i < n:
+    while i < len(above):
         if above[i]:
             s = i
-            while i < n and above[i]:
-                i += 1
-            e = i - 1
-            actives_idx.append((s, e))
+            while i < len(above) and above[i]: i += 1
+            actives_idx.append((s, i-1))
         else:
             i += 1
 
-    # ---------------------------
-    # 7) Validate active windows -> burstlets (micro-bursts)
-    #     require micropeak inside, backtrack to onset (local min on ws_onset),
-    #     apply slope check, enforce min duration
-    # ---------------------------
-    burstlets = []   # list of dicts
-    max_back_bins = max(1, int(round((max_back_ms / 1000.0) / bin_size)))
-    slope_noise = 1.4826 * np.median(np.abs(np.diff(ws_onset))) if len(ws_onset) > 1 else 0.0
-    slope_thresh = slope_k * slope_noise
+    # C. Validate Candidates (Dual-Gate Logic)
+    peaks_idx, _ = find_peaks(ws_peak, prominence=(0.1 * np.max(ws_peak)))
+    peaks_idx = set(peaks_idx)
+
+    burstlets = []
+    max_back_bins = int(max_back_ms / bin_ms)
+    slope_noise = 1.4826 * np.median(np.abs(np.diff(ws_onset))) if len(ws_onset)>1 else 0
 
     for (s_idx, e_idx) in actives_idx:
-        s_t = float(t_centers[s_idx]); e_t = float(t_centers[e_idx])
-        dur_ms = (e_t - s_t) * 1000.0
-        if dur_ms < min_burstlet_duration_ms:
-            # too short -> skip
-            continue
+        # Define Rescue Threshold (2x Squelch for sharp events)
+        fast_rescue_thresh = squelch_threshold * 2.0
 
-        # find peaks in slow trace that fall inside candidate
-        p_inside = [p for p in peaks_idx if (p >= s_idx and p <= e_idx)]
-        if len(p_inside) == 0:
-            continue
+        # Check 1: Slow Stream Peak (Standard)
+        p_inside = [p for p in peaks_idx if s_idx <= p <= e_idx]
+        
+        # Check 2: Fast Stream Peak (Rescue)
+        segment_fast = ws_onset[s_idx:e_idx+1]
+        fast_peak_val = np.max(segment_fast) if len(segment_fast) > 0 else 0
+        
+        pk_idx = None
+        pk_val = 0.0
+        is_rescued = False
 
-        # pick primary peak (max amplitude on ws_p)
-        p_vals = [ws_p[p] for p in p_inside]
-        pk_idx = int(p_inside[int(np.argmax(p_vals))])
-        pk_t = float(t_centers[pk_idx])
-
-        # backtrack onset: local minimum before pk within max_back_bins
-        start_search = max(0, pk_idx - max_back_bins)
-        seg = ws_onset[start_search:pk_idx+1]
-        if seg.size == 0:
-            onset_idx = s_idx
+        if p_inside:
+            # Path A: Found slow peak
+            pk_idx = max(p_inside, key=lambda p: ws_peak[p])
+            pk_val = float(ws_peak[pk_idx])
+            
+            # If slow peak is too weak, try fast rescue
+            if pk_val < squelch_threshold:
+                if fast_peak_val > fast_rescue_thresh:
+                    pk_idx = s_idx + np.argmax(segment_fast) 
+                    is_rescued = True
+                else:
+                    continue # Reject
         else:
-            rel_min = int(np.argmin(seg))
-            onset_idx = start_search + rel_min
+            # Path B: No slow peak, try fast rescue immediately
+            if fast_peak_val > fast_rescue_thresh:
+                pk_idx = s_idx + np.argmax(segment_fast)
+                pk_val = float(ws_peak[pk_idx]) 
+                is_rescued = True
+            else:
+                continue # Reject
 
-        # slope check on ws_onset near onset
-        post_idx = min(len(ws_onset)-1, onset_idx + 3)
-        denom = ((post_idx - onset_idx + 1) * bin_size)
-        avg_slope = (ws_onset[post_idx] - ws_onset[onset_idx]) / denom if denom > 0 else 0.0
-        if slope_k > 0 and avg_slope < slope_thresh:
-            # try to find earliest index with sufficient slope between onset_idx and pk_idx
-            found = False
-            for kk in range(onset_idx, pk_idx):
-                pw_end = min(len(ws_onset)-1, kk + 3)
-                denom2 = ((pw_end - kk + 1) * bin_size)
-                avg_s = (ws_onset[pw_end] - ws_onset[kk]) / denom2 if denom2 > 0 else 0.0
-                if avg_s >= slope_thresh:
-                    onset_idx = kk
-                    found = True
-                    break
-            if not found:
-                # treat as valid if the peak is very prominent relative to baseline (defensive)
-                if (ws_p[pk_idx] - baseline_global) < 0.5 * dyn:
-                    continue
+        # ---------------------------------------------------------
+        # D. Refine Boundaries
+        # ---------------------------------------------------------
+        # Backtrack to Onset (Valley finding)
+        search_start = max(0, pk_idx - max_back_bins)
+        segment = ws_onset[search_start:pk_idx+1]
+        onset_idx = search_start + np.argmin(segment)
+        
+        # Slope Check
+        if slope_k > 0:
+            rise_dur = (pk_idx - onset_idx) * bin_size
+            rise_amp = ws_onset[pk_idx] - ws_onset[onset_idx]
+            slope = rise_amp / rise_dur if rise_dur > 0 else 0
+            if slope < (slope_k * slope_noise):
+                continue 
 
         onset_t = float(t_centers[onset_idx])
-        # final duration check (from onset to e_t)
-        final_dur_ms = (e_t - onset_t) * 1000.0
-        if final_dur_ms < min_burstlet_duration_ms:
+        end_t = float(t_centers[e_idx])
+        
+        # Duration Check (20ms)
+        if (end_t - onset_t)*1000 < min_burstlet_duration_ms:
             continue
 
-        # compute spike counts and participating units inside [onset_t, e_t]
+        # E. Calculate Energy (Area under curve)
+        # Sum the Slow Stream (ws_peak) for the duration of the burst
+        # Indices: onset_idx to e_idx
+        burst_energy = np.sum(ws_peak[onset_idx:e_idx+1]) * bin_size
+
+        # F. Collect Stats
         total_spikes = 0
         participating_units = 0
         for u in units:
-            times = np.asarray(SpikeTimes[u])
-            if times.size == 0:
-                continue
-            mask = (times >= onset_t) & (times <= e_t)
-            cnt = int(np.sum(mask))
-            total_spikes += cnt
-            if cnt > 0:
-                participating_units += 1
-
-        # peak rate and energy inside
-        mask_bins = (t_centers >= onset_t) & (t_centers <= e_t)
-        peak_rate_inside = float(np.max(ws_p[mask_bins])) if np.any(mask_bins) else None
-        energy = float(np.sum(ws_p[mask_bins]) * bin_size) if np.any(mask_bins) else 0.0
+            ts = np.asarray(SpikeTimes[u])
+            c = np.sum((ts >= onset_t) & (ts <= end_t))
+            total_spikes += c
+            if c > 0: participating_units += 1
 
         burstlets.append({
-            "start": onset_t,
-            "end": e_t,
-            "duration_s": float((e_t - onset_t)),
+            "start": onset_t, "end": end_t,
+            "duration_s": end_t - onset_t,
             "total_spikes": int(total_spikes),
             "participating_units": int(participating_units),
-            "primary_peak_index": int(pk_idx),
-            "primary_peak_time": pk_t,
-            "primary_peak_amplitude": float(ws_p[pk_idx]),
-            "peak_rate_inside": peak_rate_inside,
-            "burst_energy": energy
+            "peak_synchrony": pk_val,       # Renamed from peak_amp
+            "synchrony_energy": burst_energy, # Calculated Area
+            "rescued": is_rescued
         })
 
-    # sort burstlets by start
-    burstlets = sorted(burstlets, key=lambda x: x["start"])
+    burstlets.sort(key=lambda x: x["start"])
 
     # ---------------------------
-    # 8) Merge burstlets -> network_bursts (short-gap merging)
+    # Phase 5: Hierarchical Merging
     # ---------------------------
-    def merge_windows(windows, gap_s, min_duration_s=0.0, return_fragments=False):
-        """
-        windows: list of (start, end) or dicts with "start","end"
-        gap_s: maximum gap to merge
-        returns list of dicts with start,end,duration,inner_windows
-        """
-        if len(windows) == 0:
-            return []
-
-        # canonicalize to (s,e)
-        se = [(w["start"], w["end"]) if isinstance(w, dict) else (float(w[0]), float(w[1])) for w in windows]
-        se_sorted = sorted(se, key=lambda x: x[0])
-
+    def merge_events(events, gap_s, min_dur_s=0):
+        if not events: return []
         merged = []
-        cs, ce = se_sorted[0]
-        fragments = [(cs, ce)]
-        for (s, e) in se_sorted[1:]:
-            if s - ce <= gap_s:
-                ce = max(ce, e)
-                fragments.append((s, e))
+        curr = events[0]
+        c_start, c_end = curr["start"], curr["end"]
+        sub_events = [curr]
+        
+        for nxt in events[1:]:
+            if (nxt["start"] - c_end) < gap_s:
+                # Merge
+                c_end = max(c_end, nxt["end"])
+                sub_events.append(nxt)
             else:
-                if (ce - cs) >= min_duration_s:
-                    merged.append({"start": float(cs), "end": float(ce), "duration_s": float(ce - cs), "fragments": list(fragments)})
-                cs, ce = s, e
-                fragments = [(s, e)]
-        # last
-        if (ce - cs) >= min_duration_s:
-            merged.append({"start": float(cs), "end": float(ce), "duration_s": float(ce - cs), "fragments": list(fragments)})
+                # Finalize
+                dur = c_end - c_start
+                if dur >= min_dur_s:
+                    # Sum energies and spikes from sub-events
+                    total_energy = sum(e["synchrony_energy"] for e in sub_events)
+                    total_s = sum(e["total_spikes"] for e in sub_events)
+                    peak_s = max(e["peak_synchrony"] for e in sub_events)
+                    
+                    merged.append({
+                        "start": c_start, "end": c_end, 
+                        "duration_s": dur, 
+                        "total_spikes": total_s,
+                        "peak_synchrony": peak_s,
+                        "synchrony_energy": total_energy,
+                        "fragment_count": len(sub_events)
+                    })
+                # Start new
+                c_start, c_end = nxt["start"], nxt["end"]
+                sub_events = [nxt]
+        
+        # Finalize last
+        if (c_end - c_start) >= min_dur_s:
+            total_energy = sum(e["synchrony_energy"] for e in sub_events)
+            total_s = sum(e["total_spikes"] for e in sub_events)
+            peak_s = max(e["peak_synchrony"] for e in sub_events)
+            merged.append({
+                "start": c_start, "end": c_end, 
+                "duration_s": c_end - c_start, 
+                "total_spikes": total_s,
+                "peak_synchrony": peak_s,
+                "synchrony_energy": total_energy,
+                "fragment_count": len(sub_events)
+            })
         return merged
 
-    # prepare list-of-(s,e) for merging
-    burstlet_windows = [(b["start"], b["end"]) for b in burstlets]
-    network_bursts = merge_windows(burstlet_windows, gap_s=burstlet_merge_gap_s, min_duration_s=0.0)
-
-    # enrich network bursts with stats (counts, IBIs inside, peak rate, energy, fragment count)
-    enriched_network_bursts = []
-    for nb in network_bursts:
-        ms, me = nb["start"], nb["end"]
-        # inner burstlets
-        inner = [b for b in burstlets if (b["start"] >= ms and b["end"] <= me)]
-        frag_count = len(inner)
-        total_spikes = sum(int(b["total_spikes"]) for b in inner)
-        participating_units = len(set([u for b in inner for u in units if np.any((np.asarray(SpikeTimes[u]) >= b["start"]) & (np.asarray(SpikeTimes[u]) <= b["end"]))]))
-        # IBIs between burstlet starts
-        if frag_count > 1:
-            starts = np.array([b["start"] for b in inner])
-            IBIs = np.diff(starts)
-            mean_IBI_inside = float(np.mean(IBIs))
-        else:
-            mean_IBI_inside = None
-        mask_bins = (t_centers >= ms) & (t_centers <= me)
-        peak_inside = float(np.max(ws_p[mask_bins])) if np.any(mask_bins) else None
-        energy = float(np.sum(ws_p[mask_bins]) * bin_size) if np.any(mask_bins) else 0.0
-
-        enriched_network_bursts.append({
-            "start": ms,
-            "end": me,
-            "duration_s": me - ms,
-            "fragment_count": frag_count,
-            "total_spikes": int(total_spikes),
-            "participating_units": int(participating_units),
-            "mean_IBI_inside": mean_IBI_inside,
-            "peak_rate_inside": peak_inside,
-            "burst_energy": energy,
-            "inner_burstlets": inner
-        })
+    network_bursts = merge_events(burstlets, gap_s=burstlet_merge_gap_s)
+    superbursts = merge_events(network_bursts, gap_s=network_merge_gap_s, min_dur_s=superburst_min_duration_s)
 
     # ---------------------------
-    # 9) Merge network_bursts -> superbursts (long-gap merging)
+    # Phase 6: Plotting
     # ---------------------------
-    net_windows = [(nb["start"], nb["end"]) for nb in enriched_network_bursts]
-    superbursts_raw = merge_windows(net_windows, gap_s=network_merge_gap_s, min_duration_s=superburst_min_duration_s)
-    enriched_superbursts = []
-    for sb in superbursts_raw:
-        ms, me = sb["start"], sb["end"]
-        inner_nbs = [nb for nb in enriched_network_bursts if (nb["start"] >= ms and nb["end"] <= me)]
-        frag_count = len(inner_nbs)
-        total_spikes = sum(nb["total_spikes"] for nb in inner_nbs)
-        participating_units = len(set([u for nb in inner_nbs for u in units if np.any((np.asarray(SpikeTimes[u]) >= nb["start"]) & (np.asarray(SpikeTimes[u]) <= nb["end"]))]))
-        if frag_count > 1:
-            starts = np.array([nb["start"] for nb in inner_nbs])
-            IBIs = np.diff(starts)
-            mean_IBI_inside = float(np.mean(IBIs))
-        else:
-            mean_IBI_inside = None
-        mask_bins = (t_centers >= ms) & (t_centers <= me)
-        peak_inside = float(np.max(ws_p[mask_bins])) if np.any(mask_bins) else None
-        energy = float(np.sum(ws_p[mask_bins]) * bin_size) if np.any(mask_bins) else 0.0
+    if plot and ax_macro is not None:
+        # Plot Signal Traces
+        ax_macro.plot(t_centers, ws_peak, color='tab:blue', lw=1.5, label='Synchrony Envelope (Slow)')
+        ax_macro.plot(t_centers, ws_onset, color='tab:orange', lw=1, alpha=0.6, label='Instantaneous Synchrony (Fast)')
+        ax_macro.plot(t_centers, baseline_local, ':', color='tab:red', label='Baseline')
+        
+        # Visualize Squelch
+        ax_macro.axhline(squelch_threshold, color='green', linestyle='--', alpha=0.5, label='Squelch (Noise Floor)')
+        
+        # Visualize Network Bursts (Blue Shading)
+        for nb in network_bursts:
+            ax_macro.axvspan(nb["start"], nb["end"], color='tab:blue', alpha=0.15)
+        
+        # Visualize Superbursts (Black Bar)
+        for sb in superbursts:
+            ax_macro.hlines(y=np.max(ws_peak)*1.05, xmin=sb["start"], xmax=sb["end"], color='k', lw=3)
 
-        enriched_superbursts.append({
-            "start": ms,
-            "end": me,
-            "duration_s": me - ms,
-            "fragment_count": frag_count,
-            "total_spikes": int(total_spikes),
-            "participating_units": int(participating_units),
-            "mean_IBI_inside": mean_IBI_inside,
-            "peak_rate_inside": peak_inside,
-            "burst_energy": energy,
-            "inner_network_bursts": inner_nbs
-        })
+        # Labels
+        ax_macro.set_ylabel('Network Synchrony (a.u.)')
+        ax_macro.set_xlabel('Time (s)')
+        ax_macro.legend(loc='upper right', fontsize='small')
+        #ax_macro.set_title(f"Network Bursts: {len(network_bursts)} | Superbursts: {len(superbursts)}")
+        #have it as a annotation at right instead of title
+        #ax_macro.an
+        ax_macro.annotate(f"Network Bursts: {len(network_bursts)} | Superbursts: {len(superbursts)}", xy=(0.5, 1.05), xycoords='axes fraction', ha='center', fontsize='medium')
 
     # ---------------------------
-    # 10) Aggregate statistics at each level
+    # Phase 7: Calculate Literature Metrics (The Final Data)
     # ---------------------------
-    def summarize_events(events, duration_key="duration_s"):
-        if len(events) == 0:
-            return {
-                "count": 0,
-                "mean_duration": None,
-                "median_duration": None,
-                "std_duration": None,
-                "mean_participating_units": None,
-                "mean_total_spikes": None
-            }
-        durations = np.array([e[duration_key] for e in events if e[duration_key] is not None])
-        participating = np.array([e.get("participating_units", np.nan) or np.nan for e in events])
-        spikes = np.array([e.get("total_spikes", np.nan) or np.nan for e in events])
+    def calculate_lit_metrics(nbs, total_dur):
+        if not nbs:
+            return {"count": 0, "rate_hz": 0.0, "duration": {}, "ibi": {}, "intensity": {}}
+        
+        # 1. Sort
+        nbs.sort(key=lambda x: x["start"])
+        
+        # 2. Calculate IBI (Inter-Burst Interval)
+        #    IBI = Time from End of Previous to Start of Current
+        ibis = []
+        for i in range(1, len(nbs)):
+            ibi_val = nbs[i]["start"] - nbs[i-1]["end"]
+            ibis.append(ibi_val)
+            nbs[i]["ibi_pre_s"] = float(ibi_val)
+        if len(nbs) > 0: nbs[0]["ibi_pre_s"] = None
+
+        # 3. Aggregators
+        def get_stats(data):
+            arr = np.array(data)
+            if len(arr) < 2: return {"mean": float(np.mean(arr)) if len(arr)==1 else 0, "std": 0, "cv": 0}
+            mean = float(np.mean(arr))
+            std = float(np.std(arr))
+            return {"mean": mean, "std": std, "cv": std/mean if mean > 0 else 0}
+
+        # 4. Global Stats
+        stats_dur = get_stats([n["duration_s"] for n in nbs])
+        stats_ibi = get_stats(ibis)
+        stats_energy = get_stats([n["synchrony_energy"] for n in nbs])
+        stats_spikes = get_stats([n["total_spikes"] for n in nbs])
+        
+        burst_spikes = sum(n["total_spikes"] for n in nbs)
+        total_spikes = len(all_spikes_flat)
+        psib = (burst_spikes / total_spikes * 100.0) if total_spikes > 0 else 0
+
         return {
-            "count": int(len(events)),
-            "mean_duration": float(np.nanmean(durations)) if durations.size>0 else None,
-            "median_duration": float(np.nanmedian(durations)) if durations.size>0 else None,
-            "std_duration": float(np.nanstd(durations)) if durations.size>0 else None,
-            "mean_participating_units": float(np.nanmean(participating)) if participating.size>0 else None,
-            "mean_total_spikes": float(np.nanmean(spikes)) if spikes.size>0 else None
+            "count": len(nbs),
+            "rate_hz": len(nbs) / total_dur,
+            "rate_bpm": (len(nbs) / total_dur) * 60.0,
+            "duration": stats_dur,
+            "inter_burst_interval": stats_ibi,
+            "intensity": {
+                "energy": stats_energy,
+                "spikes": stats_spikes,
+                "psib": psib
+            }
         }
 
-    agg_unit = {"count": len(unit_bursts)}
-    agg_burstlets = summarize_events(burstlets, duration_key="duration_s")
-    agg_network = summarize_events(enriched_network_bursts, duration_key="duration_s")
-    agg_super = summarize_events(enriched_superbursts, duration_key="duration_s")
+    lit_metrics = calculate_lit_metrics(network_bursts, total_rec_duration)
 
     # ---------------------------
-    # 11) Plotting
+    # Phase 8: Clean Output
     # ---------------------------
-    if plot and ax_raster is not None:
-        # raster sorted by spike count (low -> high)
-        spike_counts = {u: len(SpikeTimes[u]) for u in units}
-        sorted_units = sorted(spike_counts, key=spike_counts.get)
-        y = 0
-        for unit in sorted_units:
-            times = np.asarray(SpikeTimes[unit])
-            ax_raster.plot(times, np.ones_like(times) + y, '|', color='royalblue', markersize=1)
-            # highlight unit bursts
-            for ub in unit_bursts[unit]["bursts"]:
-                ax_raster.plot(ub, np.ones_like(ub) + y, '|', color='black', markersize=1)
-            y += 1
-        ax_raster.set_ylabel('Units')
-        ax_raster.set_title('Raster with Unit Bursts (black)')
-
-    if plot and ax_macro is not None:
-        # plot slow participation trace and decorations
-        ax_macro.plot(t_centers, ws_peak, lw=1.2, label='W_smooth (peak stream)')
-        ax_macro.plot(t_centers, ws_onset, lw=1.0, alpha=0.6, label='W_smooth (onset stream)')
-        # micro-peaks
-        ax_macro.plot([t_centers[int(p)] for p in peaks_idx], [float(ws_p[int(p)]) for p in peaks_idx], 'x', label='micro-peaks')
-        # local baseline
-        ax_macro.plot(t_centers, baseline_local, ls=':', lw=1.0, label=f'baseline_local (p{baseline_pct})')
-        # # burstlets
-        # for b in burstlets:
-        #     ax_macro.axvspan(b["start"], b["end"], color='C1', alpha=0.25)
-        #     ax_macro.plot([b["start"]], [b["primary_peak_amplitude"]], 'o', markersize=3, color='C1')
-        # network bursts (merge of burstlets)
-        for nb in enriched_network_bursts:
-            ax_macro.axvspan(nb["start"], nb["end"], color='C0', alpha=0.2)
-        # superbursts
-        for sb in enriched_superbursts:
-            #ax_macro.axvspan(sb["start"], sb["end"], color='gray', alpha=0.25)
-            ax_macro.hlines(np.max(ws_p) * 1.04, sb["start"], sb["end"], colors='k', linewidth=2)
-        ax_macro.set_xlabel('Time (s)')
-        ax_macro.set_ylabel('Weighted participation')
-        ax_macro.set_title(f'Network bursts: {len(enriched_network_bursts)} | Superbursts: {len(enriched_superbursts)}')
-        ax_macro.legend(fontsize='small')
-
-    # ---------------------------
-    # 12) Package JSON-serializable results
-    # ---------------------------
-    def safe_numpy(obj):
-        if isinstance(obj, np.generic):
-            return obj.item()
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
+    def clean(obj):
+        if isinstance(obj, dict): return {k: clean(v) for k,v in obj.items()}
+        if isinstance(obj, list): return [clean(v) for v in obj]
+        if isinstance(obj, np.integer): return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.ndarray): return obj.tolist()
         return obj
 
-    results = {
-        "recording_start": float(rec_start),
-        "recording_end": float(rec_end),
-        "params": {
-            "isi_threshold": isi_threshold,
-            "bin_ms": bin_ms,
-            "gamma": gamma,
-            "smoothing_min_ms": smoothing_min_ms,
-            "baseline_pct": baseline_pct,
-            "local_baseline_win_s": local_baseline_win_s,
-            "delta_thresh": delta_thresh,
-            "peak_top_percent": peak_top_percent,
-            "noise_k": noise_k,
-            "prom_frac": prom_frac,
-            "max_back_ms": max_back_ms,
-            "min_burstlet_duration_ms": min_burstlet_duration_ms,
-            "burstlet_merge_gap_s": burstlet_merge_gap_s,
-            "network_merge_gap_s": network_merge_gap_s,
-            "superburst_min_duration_s": superburst_min_duration_s
-        },
-        "diagnostics": {
-            "time_centers": t_centers.tolist(),
-            "participation": P.tolist(),
-            "weighted": W.tolist(),
-            "W_smooth_onset": ws_onset.tolist(),
-            "W_smooth_peak": ws_peak.tolist(),
-            "baseline_local": baseline_local.tolist(),
-            "delta": delta.tolist(),
-            "micro_peaks_idx": [int(x) for x in peaks_idx]
-        },
+    return clean({
         "unit_bursts": unit_bursts,
         "burstlets": burstlets,
-        "network_bursts": enriched_network_bursts,
-        "superbursts": enriched_superbursts,
-        "aggregates": {
-            "unit_level": {"n_units": len(units)},
-            "burstlet_level": agg_burstlets,
-            "network_level": agg_network,
-            "superburst_level": agg_super
+        "network_bursts": network_bursts,
+        "superbursts": superbursts,
+        "network_stats": lit_metrics,  # <--- New Standardized Metrics
+        "diagnostics": {
+            "sigma_slow_ms": sigma_slow_bins * bin_ms,
+            "biological_isi_ms": biological_isi_s * 1000,
+            "squelch_threshold": squelch_threshold
         }
-    }
-
-    # convert any numpy types inside nested dicts to Python natives where necessary
-    # The structure above uses only native types and lists, but ensure safety by json.dumps roundtrip
-    try:
-        _ = json.dumps(results)  # validate serializability (will raise if not)
-    except TypeError:
-        # fallback: do lightweight conversion
-        def convert(o):
-            if isinstance(o, dict):
-                return {str(k): convert(v) for k, v in o.items()}
-            if isinstance(o, (list, tuple)):
-                return [convert(v) for v in o]
-            if isinstance(o, np.ndarray):
-                return o.tolist()
-            if isinstance(o, np.generic):
-                return o.item()
-            return o
-        results = convert(results)
-
-    return results
+    })
