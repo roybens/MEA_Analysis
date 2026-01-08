@@ -1,12 +1,12 @@
 #!/bin/bash -l
 #SBATCH -N 1
-#SBATCH --ntasks=4               # 4 Tasks = 1 Task per GPU
-#SBATCH --time=01:30:00          # 1.5 Hours is usually enough for 4-well parallel
-#SBATCH -J mea_fast_run
-#SBATCH -q regular
-#SBATCH --gpus-per-node=4        # Request full node (all 4 GPUs)
-#SBATCH -C gpu
-#SBATCH -A m2043_g
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8               
+#SBATCH --time=00:30:00          # 1.5 Hours is usually enough for 4-well parallel
+#SBATCH -J mea_rcalc_bursts
+#SBATCH -q shared
+#SBATCH -C cpu
+#SBATCH -A m2043
 #SBATCH --image=mandarmp/benshalomlab_spikesorter:latest
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
@@ -39,18 +39,17 @@ echo "Target Run: $H5_FILE"
 # This function runs a SINGLE well. GNU Parallel will spawn 4 of these at once.
 process_well() {
     local well_id=$1
-    echo "[$(date)] Starting $well_id on a GPU..."
+    echo "[$(date)] Starting $well_id on a CPU..."
     
     # --gpus-per-task=1 ensures each Python process gets its OWN unique GPU
-    srun --exact --gpus-per-task=1 -n 1 --cpus-per-task=8 shifter python3 "$WORKER_SCRIPT" \
+    srun --exact -n 1 --cpus-per-task=8 shifter python3 "$WORKER_SCRIPT" \
         "$H5_FILE" \
         --well "$well_id" \
         --output-dir "$OUTPUT_ROOT" \
         --checkpoint-dir "$OUTPUT_ROOT/checkpoints" \
         --sorter "kilosort4" \
         --clean-up \
-        --export-to-phy \
-        --force-restart
+        --reanalyze-bursts
 
     echo "[$(date)] Finished $well_id"
 }

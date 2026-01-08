@@ -37,6 +37,13 @@ try:
 except ImportError:
     print("Warning: Custom helper modules not found. Analysis steps may fail.")
 
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer): return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.ndarray): return obj.tolist()
+        return super(NpEncoder, self).default(obj)
+    
 # --- Enums for Checkpointing ---
 class ProcessingStage(Enum):
     NOT_STARTED = 0
@@ -568,54 +575,94 @@ class MEAPipeline:
                 plt.close(fig)
 
     def _run_burst_analysis(self, ids_list=None):
-        self.logger.info("Running Network Burst Analysis...")
-      
-        
-        spike_times = {}
-        
-        if self.sorting:
-            fs = self.recording.get_sampling_frequency()
-            if ids_list is None: ids_list = self.analyzer.unit_ids
-            for uid in ids_list:
-                spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
-            np.save(self.output_dir / "spike_times.npy", spike_times)
-        else:
-            try: spike_times = np.load(self.output_dir / "spike_times.npy", allow_pickle=True).item()
-            except: return
+            self.logger.info("Running Network Burst Analysis...")
+            
+            spike_times = {}
+            
+            # 1. Load Spike Times
+            if self.sorting:
+                fs = self.recording.get_sampling_frequency()
+                if ids_list is None: ids_list = self.analyzer.unit_ids
+                for uid in ids_list:
+                    spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
+                np.save(self.output_dir / "spike_times.npy", spike_times)
+            else:
+                npy_spike_file = self.output_dir / "spike_times.npy"
+                if npy_spike_file.exists():
+                    spike_times = np.load(npy_spike_file, allow_pickle=True).item()
+                else:
+                    self.logger.error("No spike times found for burst analysis.")
+                    return
 
-        if not spike_times: return
+            if not spike_times: return
 
-        try:
-            burst_stats = helper.detect_bursts_statistics(spike_times, isi_threshold=0.1)
-            bursts = [x['bursts'] for x in burst_stats.values()]
-            
-            fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-            title_suffix = "(Sorted Units)" if self.sorting else "(Channel MUA)"
-            helper.plot_raster_with_bursts(axs[0], spike_times, bursts, title_suffix=title_suffix)
-            
-            network_data = compute_network_bursts(ax_raster=None, ax_macro=axs[1], SpikeTimes=spike_times, plot=True)
-            network_data['file'] = str(self.relative_pattern)
-            network_data['well'] = self.stream_id
-            
-            plt.tight_layout()
-            plt.savefig(self.output_dir / "raster_burst_plot.svg")
-            #also save a 30s zoom
-            axs[0].set_xlim(0,30)
-            axs[1].set_xlim(0,30)
-            plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
-            plt.close(fig)
-            
-            with open(self.output_dir / "network_results.json", 'w') as f:
-                class NpEncoder(json.JSONEncoder):
-                    def default(self, obj):
-                        if isinstance(obj, np.integer): return int(obj)
-                        if isinstance(obj, np.floating): return float(obj)
-                        if isinstance(obj, np.ndarray): return obj.tolist()
-                        return super(NpEncoder, self).default(obj)
-                json.dump(network_data, f, cls=NpEncoder, indent=2)
-        except Exception as e:
-            self.logger.error(f"Burst analysis error: {e}")
+            # 2. Main Analysis Block
+            try:
+                # A. Statistics & Raster Plot
+                burst_stats = helper.detect_bursts_statistics(spike_times, isi_threshold=0.1)
+                bursts = [x['bursts'] for x in burst_stats.values()]
+                
+                fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+                #title_suffix = "(Sorted Units)" if self.sorting else "(Channel MUA)"
+                title_suffix = f" "
+                helper.plot_raster_with_bursts(axs[0], spike_times, bursts, title_suffix=title_suffix)
+                
+                # B. Network Burst Calculation
+                network_data = compute_network_bursts(ax_raster=None, ax_macro=axs[1], SpikeTimes=spike_times, plot=True)
+                network_data['file'] = str(self.relative_pattern)
+                network_data['well'] = self.stream_id
+                
+                plt.tight_layout()
+                plt.subplots_adjust(hspace=0.05)
+                plt.savefig(self.output_dir / "raster_burst_plot.svg")
+                # Save 30s zoom
+                axs[0].set_xlim(0, 30)
+                axs[1].set_xlim(0, 30)
+                plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
+                plt.close(fig)
+                
+                # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
+                def recursive_clean(obj):
+                    """Recursively converts numpy types and keys to Python standard types."""
+                    if isinstance(obj, dict):
+                        new_dict = {}
+                        for k, v in obj.items():
+                            # Force keys to string (JSON requirement)
+                            clean_k = str(k)
+                            new_dict[clean_k] = recursive_clean(v)
+                        return new_dict
+                    if isinstance(obj, list):
+                        return [recursive_clean(v) for v in obj]
+                    if isinstance(obj, (np.integer, int)):
+                        return int(obj)
+                    if isinstance(obj, (np.floating, float)):
+                        return float(obj)
+                    if isinstance(obj, np.ndarray):
+                        return recursive_clean(obj.tolist())
+                    return obj
 
+                self.logger.info(f"Sanitizing JSON data for {len(network_data.get('unit_bursts', []))} units...")
+                
+                # Clean data in memory
+                network_data_clean = recursive_clean(network_data)
+
+                # Atomic Write (Temp -> Rename) to prevent corruption
+                temp_file = self.output_dir / "network_results.tmp.json"
+                final_file = self.output_dir / "network_results.json"
+
+                with open(temp_file, 'w') as f:
+                    json.dump(network_data_clean, f, indent=2)
+                
+                if temp_file.exists():
+                    os.replace(temp_file, final_file)
+                    self.logger.info(f"Successfully saved: {final_file}")
+
+            except Exception as e:
+                self.logger.error(f"Burst analysis error: {e}")
+                traceback.print_exc()
+                raise e
+
+    # --- Cleanup ---
     def cleanup(self):
         if self.cleanup_flag:
             self.logger.info("Cleaning up temp files...")
@@ -664,6 +711,8 @@ def main():
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
             pipeline._run_burst_analysis()
+            current_stage = ProcessingStage(pipeline.state['stage'])
+            pipeline._save_checkpoint(current_stage, note="Burst Re-analysis Performed",last_updated=str(datetime.now()))
             print("Burst Re-analysis Complete.")
             sys.exit(0)
 
