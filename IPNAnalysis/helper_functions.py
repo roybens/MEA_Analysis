@@ -242,9 +242,9 @@ def plot_raster_with_bursts(ax, spike_times, bursts, sorted_units=None, title_su
         
         y_offset += 1
     
-    ax.set_xlabel('Time (s)')
+    #ax.set_xlabel('Time (s)')
     ax.set_ylabel('Unit Index')
-    ax.set_yticks([]) 
+    ax.set_yticks([1, y_offset//2, y_offset-1]) 
     ax.set_title(f'Raster Plot {title_suffix}')
     
     print(f"[HELPER] Raster plot complete. Plotted {y_offset} units.")
@@ -299,7 +299,7 @@ def plot_network_activity(ax, SpikeTimes, min_peak_distance=1.0, binSize=0.1, ga
     # Plot
     ax.plot(time_vector, firing_rate_smooth, color='royalblue')
     ax.set_ylabel('Avg Firing Rate [Hz]')
-    ax.set_xlabel('Time [s]')
+    #ax.set_xlabel('Time [s]')
     ax.set_title('Population Firing Rate')
     ax.set_xlim([start_time, end_time])
 
