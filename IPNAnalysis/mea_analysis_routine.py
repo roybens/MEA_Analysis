@@ -10,6 +10,7 @@ import traceback
 import logging
 import argparse
 import configparser
+import importlib
 from pathlib import Path
 from datetime import datetime
 from timeit import default_timer as timer
@@ -65,9 +66,22 @@ class MEAPipeline:
     Encapsulates Preprocessing, Sorting, Analysis, and Curation.
     """
 
-    def __init__(self, file_path, stream_id='well000', recording_num='rec0000', output_root=None, checkpoint_root=None, 
-                 sorter='kilosort4', docker_image=None, verbose=True, 
-                 cleanup=False, force_restart=False):
+    def __init__(
+        self,
+        file_path,
+        stream_id='well000',
+        recording_num='rec0000',
+        output_root=None,
+        checkpoint_root=None,
+        sorter='kilosort4',
+        docker_image=None,
+        verbose=True,
+        cleanup=False,
+        force_restart=False,
+        n_jobs: int = 16,
+        chunk_duration: str = '1s',
+        scratch_root=None,
+    ):
         
         self.file_path = Path(file_path).resolve()
         self.stream_id = stream_id
@@ -77,6 +91,11 @@ class MEAPipeline:
         self.verbose = verbose
         self.cleanup_flag = cleanup
         self.force_restart = force_restart
+
+        self.n_jobs = int(n_jobs)
+        self.chunk_duration = str(chunk_duration)
+
+        self.scratch_root = Path(scratch_root).resolve() if scratch_root else None
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -92,6 +111,13 @@ class MEAPipeline:
         self.output_dir = Path(output_root) / self.relative_pattern / self.stream_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Work dir for heavy intermediates (binary/sorter/analyzer)
+        if self.scratch_root:
+            self.work_dir = self.scratch_root / self.relative_pattern / self.stream_id
+            self.work_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.work_dir = self.output_dir
+
         # 2. Logger Setup
         log_file = self.output_dir / f"{self.run_id}_{self.stream_id}_pipeline.log"
         self.logger = self._setup_logger(log_file)
@@ -106,6 +132,46 @@ class MEAPipeline:
         self.recording = None
         self.sorting = None
         self.analyzer = None
+
+    def _resolve_stage_folder(self, folder_name: str) -> Path:
+        """Prefer work_dir for intermediates, but fall back to output_dir if staged back."""
+        work_path = self.work_dir / folder_name
+        if work_path.exists():
+            return work_path
+        return self.output_dir / folder_name
+
+    def stage_back(self, stage_back: str = "sorter", mode: str = "copy"):
+        """Stage intermediates from scratch work_dir into output_dir (copy or move)."""
+        if not self.scratch_root:
+            return
+        if stage_back == "none":
+            return
+
+        if mode not in {"copy", "move"}:
+            raise ValueError(f"Invalid stage-back mode: {mode}")
+
+        to_stage = ["sorter_output"]
+        if stage_back == "all":
+            to_stage = ["binary", "sorter_output", "analyzer_output"]
+
+        for folder_name in to_stage:
+            src = self.work_dir / folder_name
+            if not src.exists():
+                continue
+            dst = self.output_dir / folder_name
+
+            # If destination already exists, don't clobber; assume prior staging.
+            if dst.exists():
+                continue
+
+            if mode == "move":
+                shutil.move(str(src), str(dst))
+            else:
+                try:
+                    shutil.copytree(src, dst, dirs_exist_ok=False)
+                except TypeError:
+                    # Python <3.8 fallback (shouldn't happen here, but keep robust)
+                    shutil.copytree(src, dst)
 
     # --- Setup Methods ---
     def _setup_logger(self, log_file):
@@ -202,7 +268,7 @@ class MEAPipeline:
 
     # --- Phase 1: Preprocessing ---
     def run_preprocessing(self):
-        binary_folder = self.output_dir / "binary"
+        binary_folder = self.work_dir / "binary"
 
         # 1. Resume Check
         if self.state['stage'] >= ProcessingStage.PREPROCESSING_COMPLETE.value and binary_folder.exists():
@@ -258,8 +324,8 @@ class MEAPipeline:
             folder=binary_folder, 
             format='binary', 
             overwrite=True, 
-            n_jobs=16, 
-            chunk_duration='1s', 
+            n_jobs=self.n_jobs, 
+            chunk_duration=self.chunk_duration, 
             progress_bar=self.verbose
         )
         
@@ -269,18 +335,33 @@ class MEAPipeline:
 
     # --- Phase 2: Sorting ---
     def run_sorting(self):
-        sorter_folder = self.output_dir / "sorter_output"
+        sorter_folder = self.work_dir / "sorter_output"
         if self.state['stage'] >= ProcessingStage.SORTING_COMPLETE.value:
             self.logger.info("Resuming: Loading existing sorting.")
-            try: self.sorting = si.read_sorter_folder(sorter_folder)
-            except: self.sorting = si.read_kilosort(sorter_folder)
+            existing_folder = self._resolve_stage_folder("sorter_output")
+            try: self.sorting = si.read_sorter_folder(existing_folder)
+            except: self.sorting = si.read_kilosort(existing_folder)
             return
         self._save_checkpoint(ProcessingStage.SORTING)
         self.logger.info(f"--- [Phase 2] Spike Sorting ({self.sorter}) ---")
-        
-        import torch
-        if torch.cuda.is_available():
-            total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3) # Convert to GB
+
+        torch = None
+        try:
+            torch = importlib.import_module("torch")
+        except Exception as e:
+            # If sorting is delegated to a container, we can proceed without local torch.
+            if self.docker_image:
+                self.logger.warning(
+                    f"PyTorch not importable (skipping GPU detection because --docker is set): {type(e).__name__}: {e}"
+                )
+            else:
+                self.logger.warning(
+                    f"PyTorch not importable (cannot detect GPU): {type(e).__name__}: {e}. "
+                    "If you intend GPU-node execution, ensure torch is available; otherwise use --docker."
+                )
+
+        if torch is not None and torch.cuda.is_available():
+            total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
             self.logger.info(f"GPU Detected: {torch.cuda.get_device_name(0)} with {total_vram:.2f} GB VRAM")
         else:
             self.logger.warning("No GPU detected! Kilosort4 will likely fail or run extremely slowly on CPU.")
@@ -318,7 +399,8 @@ class MEAPipeline:
         start = timer()
         try:
             self.logger.info(f"Running Kilosort4 with parameters: {ks_params}")
-            torch.cuda.empty_cache()
+            if torch is not None and torch.cuda.is_available():
+                torch.cuda.empty_cache()
             self.sorting = si.run_sorter(
                 sorter_name=self.sorter,
                 recording=self.recording,
@@ -349,7 +431,7 @@ class MEAPipeline:
     def _spike_detection_only(self):
         """Detects spikes (threshold crossings) without sorting."""
         self.logger.info("--- [Phase 2-Alt] Spike Detection (No Sorting) ---")
-        job_kwargs = {'n_jobs': 16, 'chunk_duration': '1s', 'progress_bar': self.verbose}
+        job_kwargs = {'n_jobs': self.n_jobs, 'chunk_duration': self.chunk_duration, 'progress_bar': self.verbose}
         
         peaks = detect_peaks(
             self.recording, method='by_channel', 
@@ -388,16 +470,18 @@ class MEAPipeline:
 
     # --- Phase 3: Analyzer ---
     def run_analyzer(self):
-        analyzer_folder = self.output_dir / "analyzer_output"
-        if self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value and  analyzer_folder.exists():
+        analyzer_folder = self.work_dir / "analyzer_output"
+        existing_folder = self._resolve_stage_folder("analyzer_output")
+        if self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value and existing_folder.exists():
             self.logger.info("Resuming: Loading Sorting Analyzer.")
-            self.analyzer = si.load_sorting_analyzer(analyzer_folder)
+            self.analyzer = si.load_sorting_analyzer(existing_folder)
             return
         
         self._save_checkpoint(ProcessingStage.ANALYZER)
         self.logger.info("--- [Phase 3] Computing Sorting Analyzer ---")
         try:
-            if analyzer_folder.exists(): shutil.rmtree(analyzer_folder)
+            if analyzer_folder.exists():
+                shutil.rmtree(analyzer_folder)
 
             sparsity = si.estimate_sparsity(
                 self.sorting, self.recording, 
@@ -692,7 +776,78 @@ def main():
     parser.add_argument('--skip-spikesorting', action='store_true')
     parser.add_argument("--reanalyze-bursts", action="store_true", help="Only re-run burst analysis on existing spike times.")
 
+    # -------------------------------------------------------------------
+    # HPC/Slurm-friendly job controls (opt-in)
+    # -------------------------------------------------------------------
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers for SpikeInterface jobs (default: 16, or SLURM_CPUS_PER_TASK if set).",
+    )
+    parser.add_argument(
+        "--chunk-duration",
+        type=str,
+        default=None,
+        help="Chunk duration for SpikeInterface jobs (e.g. '1s', '500ms').",
+    )
+
+    parser.add_argument(
+        "--scratch-dir",
+        type=str,
+        default=None,
+        help="Optional fast scratch base directory (e.g. $SLURM_TMPDIR) for intermediates.",
+    )
+    parser.add_argument(
+        "--stage-back",
+        choices=["none", "sorter", "all"],
+        default="sorter",
+        help=(
+            "When using --scratch-dir, controls what is copied back into --output-dir at end. "
+            "'sorter' (default) stages back sorter_output only; 'all' stages binary/sorter/analyzer."
+        ),
+    )
+    parser.add_argument(
+        "--stage-back-mode",
+        choices=["copy", "move"],
+        default="copy",
+        help="When using --scratch-dir, choose whether stage-back copies or moves outputs back.",
+    )
+
+    # -------------------------------------------------------------------
+    # GPU-node carveouts (opt-in)
+    # -------------------------------------------------------------------
+    parser.add_argument(
+        "--cuda-visible-devices",
+        type=str,
+        default=None,
+        help="Set CUDA_VISIBLE_DEVICES before sorting (e.g. '0' or '0,1').",
+    )
+    parser.add_argument(
+        "--require-gpu",
+        action="store_true",
+        help="If --docker is not used, fail fast when no CUDA GPU is visible.",
+    )
+
     args = parser.parse_args()
+
+    # Apply GPU pinning early (before run_sorting imports torch)
+    if args.cuda_visible_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.cuda_visible_devices)
+
+    # Slurm-aware defaults for n_jobs
+    if args.n_jobs is None:
+        slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
+        if slurm_cpus:
+            try:
+                args.n_jobs = int(slurm_cpus)
+            except ValueError:
+                args.n_jobs = 16
+        else:
+            args.n_jobs = 16
+
+    if args.chunk_duration is None:
+        args.chunk_duration = '1s'
     
     thresholds = None
     if args.params:
@@ -700,12 +855,31 @@ def main():
             with open(args.params) as f: thresholds = json.load(f)
         else: thresholds = json.loads(args.params)
 
+    # Opt-in guardrail for GPU-node runs.
+    # If spike sorting happens inside docker, we cannot reliably validate GPU visibility here.
+    if args.require_gpu and not args.docker and not args.skip_spikesorting:
+        try:
+            torch = importlib.import_module("torch")
+            if not torch.cuda.is_available():
+                raise RuntimeError(
+                    "--require-gpu was set but torch.cuda.is_available() is False. "
+                    "Run on a GPU node (or set CUDA_VISIBLE_DEVICES appropriately), "
+                    "or use --docker if you intend containerized sorting."
+                )
+        except Exception as e:
+            raise RuntimeError(
+                "--require-gpu was set but PyTorch is not importable/usable in this environment. "
+                "Run inside the lab GPU container / shifter image, or install torch."
+            ) from e
+
     try:
         pipeline = MEAPipeline(
             file_path=args.file_path, stream_id=args.well, recording_num=args.rec,
             output_root=args.output_dir, checkpoint_root=args.checkpoint_dir,
             sorter=args.sorter, docker_image=args.docker, verbose=args.debug,
-            cleanup=args.clean_up, force_restart=args.force_restart
+            cleanup=args.clean_up, force_restart=args.force_restart,
+            n_jobs=args.n_jobs, chunk_duration=args.chunk_duration,
+            scratch_root=args.scratch_dir,
         )
 
         if args.reanalyze_bursts:
@@ -722,9 +896,21 @@ def main():
         pipeline.run_preprocessing()
 
         if not args.skip_spikesorting:
-            pipeline.run_sorting()
-            pipeline.run_analyzer()
-            pipeline.generate_reports(thresholds, args.no_curation, args.export_to_phy)
+            try:
+                pipeline.run_sorting()
+                pipeline.run_analyzer()
+                pipeline.generate_reports(thresholds, args.no_curation, args.export_to_phy)
+            finally:
+                # Stage back heavy outputs from scratch into final output dir (opt-in).
+                # Run this even if analyzer/reporting fails so sorter_output is preserved.
+                stage_exc_type, _, _ = sys.exc_info()
+                try:
+                    pipeline.stage_back(args.stage_back, mode=args.stage_back_mode)
+                except Exception as e:
+                    print(f"WARNING: stage-back failed for {args.well}: {type(e).__name__}: {e}")
+                    # Don't mask the underlying pipeline failure.
+                    if stage_exc_type is None:
+                        raise
         else:
             ids = pipeline._spike_detection_only()
             pipeline._run_burst_analysis(ids)
