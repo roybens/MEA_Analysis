@@ -38,6 +38,17 @@ try:
 except ImportError:
     print("Warning: Custom helper modules not found. Analysis steps may fail.")
 
+try:
+    # Script-mode: this works when running `python IPNAnalysis/mea_analysis_routine.py`
+    # because the script directory is on sys.path.
+    import path_contract
+except Exception:
+    try:
+        # Editable-installed package mode: `pip install -e .` provides IPNAnalysis.*
+        from IPNAnalysis import path_contract  # type: ignore
+    except Exception:
+        path_contract = None
+
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer): return int(obj)
@@ -193,8 +204,12 @@ class MEAPipeline:
     def _parse_metadata(self):
     
         meta = {
-            'run_id': None, 'chip_id': None, 'project': None, 
-            'relative_pattern': f"{self.file_path.parent.parent.name}/{self.file_path.parent.name}/{self.file_path.name}",
+            'run_id': None, 'chip_id': None, 'project': None,
+            'relative_pattern': (
+                path_contract.compute_relative_pattern(self.file_path)
+                if path_contract is not None
+                else f"{self.file_path.parent.parent.name}/{self.file_path.parent.name}/{self.file_path.name}"
+            ),
             'date': None, 'well': None
         }
         
@@ -205,7 +220,7 @@ class MEAPipeline:
             if match: meta['run_id'] = match.group(1)
             parts = path_str.split(os.sep)
             if len(parts) > 5:
-                meta['relative_pattern'] = os.path.join(*parts[-6:-1])
+                # Keep the existing metadata extraction behavior.
                 meta['project'] = parts[-6]
                 meta['date'] = parts[-5]
                 meta['chip_id'] = parts[-4]
