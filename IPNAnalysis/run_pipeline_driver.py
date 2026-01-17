@@ -90,6 +90,65 @@ def main():
     parser.add_argument("--no-curation", action="store_true", help="Skip automatic curation")
     parser.add_argument("--output-dir", type=str, help="Output directory for results")
 
+    # -------------------------------------------------------------------
+    # HPC/Slurm-friendly knobs (opt-in)
+    # -------------------------------------------------------------------
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers used inside each well subprocess (defaults to 16, or SLURM_CPUS_PER_TASK if set).",
+    )
+    parser.add_argument(
+        "--chunk-duration",
+        type=str,
+        default=None,
+        help="Chunk duration for SpikeInterface jobs (e.g. '1s', '500ms').",
+    )
+
+    parser.add_argument(
+        "--scratch-dir",
+        type=str,
+        default=None,
+        help=(
+            "Optional fast local scratch base directory (e.g. $SLURM_TMPDIR). "
+            "If set, heavy intermediate folders (binary/sorter/analyzer) are written there per well."
+        ),
+    )
+    parser.add_argument(
+        "--stage-back",
+        choices=["none", "sorter", "all"],
+        default="sorter",
+        help=(
+            "When using --scratch-dir, controls what is copied back into --output-dir at the end. "
+            "'sorter' stages back sorter_output only (default). 'all' stages binary, sorter_output, analyzer_output."
+        ),
+    )
+    parser.add_argument(
+        "--stage-back-mode",
+        choices=["copy", "move"],
+        default="copy",
+        help=(
+            "When using --scratch-dir and stage-back is enabled, choose whether to copy or move results back. "
+            "'move' reclaims scratch space but removes the staged folders from scratch."
+        ),
+    )
+
+    # -------------------------------------------------------------------
+    # GPU-node carveouts (opt-in)
+    # -------------------------------------------------------------------
+    parser.add_argument(
+        "--cuda-visible-devices",
+        type=str,
+        default=None,
+        help="Value to set CUDA_VISIBLE_DEVICES for each well subprocess (e.g. '0' or '0,1').",
+    )
+    parser.add_argument(
+        "--require-gpu",
+        action="store_true",
+        help="Fail fast if --docker is not used and no CUDA GPU is visible.",
+    )
+
     args = parser.parse_args()
 
     logger = None
@@ -98,34 +157,36 @@ def main():
     # Normalize output + checkpoint directory before logging setup
     # -------------------------------------------------------------------
 
-    if args.output_dir:
-        # Make absolute normalized path
-        args.output_dir = os.path.normpath(os.path.abspath(args.output_dir))
-        os.makedirs(args.output_dir, exist_ok=True)
+    # If output-dir is missing, pick a sensible default.
+    # This avoids failing later because mea_analysis_routine.py requires --output-dir.
+    if not args.output_dir:
+        env_out = os.environ.get("MEA_ANALYSIS_OUTPUT_DIR")
+        slurm_submit = os.environ.get("SLURM_SUBMIT_DIR")
+        slurm_job = os.environ.get("SLURM_JOB_ID")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Default checkpoint is inside output
-        if args.checkpoint_dir:
-            # Respect user-provided checkpoint dir (normalize)
-            args.checkpoint_dir = os.path.normpath(os.path.abspath(args.checkpoint_dir))
+        if env_out:
+            args.output_dir = env_out
+        elif slurm_submit:
+            job_tag = slurm_job if slurm_job else f"manual_{timestamp}"
+            args.output_dir = os.path.join(slurm_submit, "mea_analysis_outputs", job_tag)
         else:
-            # Set checkpoint inside output directory
-            args.checkpoint_dir = os.path.join(args.output_dir, "checkpoints")
+            args.output_dir = os.path.join(os.getcwd(), "mea_analysis_outputs", f"manual_{timestamp}")
 
+    # Normalize output + checkpoint dir
+    args.output_dir = os.path.normpath(os.path.abspath(args.output_dir))
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    if args.checkpoint_dir:
+        args.checkpoint_dir = os.path.normpath(os.path.abspath(args.checkpoint_dir))
     else:
-        # No output dir ⇒ keep legacy behavior
-        if args.checkpoint_dir:
-            args.checkpoint_dir = os.path.normpath(os.path.abspath(args.checkpoint_dir))
-        else:
-            args.checkpoint_dir = None  # handled later
+        args.checkpoint_dir = os.path.join(args.output_dir, "checkpoints")
 
     # -------------------------------------------------------------------
     # Logger setup (driver)
     # -------------------------------------------------------------------
 
-    if args.output_dir:
-        logger = setup_driver_logger(log_path=args.output_dir)
-    else:
-        logger = setup_driver_logger()
+    logger = setup_driver_logger(log_path=args.output_dir)
 
     logger.info(f"Starting pipeline driver on path: {args.path}")
     logger.debug(f"Parsed arguments:\n{args}")
@@ -152,6 +213,25 @@ def main():
     if args.no_curation: extra_args.append("--no-curation")
     if args.skip_spikesorting: extra_args.append("--skip-spikesorting")
     if args.output_dir: extra_args.append(f"--output-dir '{args.output_dir}'")
+
+    # HPC knobs
+    if args.n_jobs is not None: extra_args.append(f"--n-jobs {int(args.n_jobs)}")
+    if args.chunk_duration is not None: extra_args.append(f"--chunk-duration '{args.chunk_duration}'")
+
+    # GPU-node carveouts
+    if args.cuda_visible_devices is not None:
+        extra_args.append(f"--cuda-visible-devices '{args.cuda_visible_devices}'")
+    if args.require_gpu:
+        extra_args.append("--require-gpu")
+
+    # Scratch carveouts
+    if args.scratch_dir is not None:
+        extra_args.append(f"--scratch-dir '{args.scratch_dir}'")
+        if args.stage_back:
+            extra_args.append(f"--stage-back {args.stage_back}")
+        if args.stage_back_mode:
+            extra_args.append(f"--stage-back-mode {args.stage_back_mode}")
+
     extra_arg_string = " ".join(extra_args)
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
     #ticker
