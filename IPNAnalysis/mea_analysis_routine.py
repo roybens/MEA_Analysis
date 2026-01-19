@@ -28,14 +28,36 @@ from spikeinterface.sortingcomponents.peak_detection import detect_peaks
 # Scientific Libraries
 import spikeinterface.full as si
 import spikeinterface.preprocessing as spre
+import spikeinterface.curation as sic
+
+# This ensures Python looks in the same folder as this script for modules
+script_dir = Path(__file__).resolve().parent
+if str(script_dir) not in sys.path:
+    sys.path.append(str(script_dir))
+
+# Add the parent directory of MEA_Analysis to path so absolute imports work
+# Assuming structure: /.../MEA_Analysis/IPNAnalysis/mea_analysis_routine.py
+# We need to add /.../ to path to import MEA_Analysis.IPNAnalysis...
+root_dir = script_dir.parent.parent 
+if str(root_dir) not in sys.path:
+    sys.path.append(str(root_dir))
+# --- FIX END ---
 
 # Import your custom modules
 try:
-    from parameter_free_burst_detector import compute_network_bursts
+    # Use simple imports if the files are in the same directory
+    # OR keep your package structure if path is fixed above
+    from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
     import helper_functions as helper
     from scalebury import add_scalebar
-except ImportError:
-    print("Warning: Custom helper modules not found. Analysis steps may fail.")
+except ImportError as e:
+    # CRITICAL CHANGE: Do not silence this error. 
+    # If helpers are missing, the analysis CANNOT proceed. Crash immediately.
+    print(f"CRITICAL ERROR: Could not import helper modules. {e}")
+    print(f"Current sys.path: {sys.path}")
+    sys.exit(1)
+
+
 
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -331,8 +353,11 @@ class MEAPipeline:
             )
             self.logger.info(f"Sorting finished in {timer()-start:.2f}s")
 
-            #self.logger.info("Running Redundancy Removal...")
-            #self.sorting = si.remove_redundant_units(self.sorting, duplicate_threshold=0.9)
+            # [FIX] CRITICAL: Remove spikes that extend beyond the recording length
+            # This prevents the IndexError during Analyzer computation
+            self.logger.info("Cleaning sorting (removing excess spikes)...")
+            self.sorting = si.remove_excess_spikes(self.sorting, self.recording)
+            self.sorting = self.sorting.remove_empty_units()
             self._save_checkpoint(ProcessingStage.SORTING_COMPLETE, failed_stage=None, error=None)
         except Exception as e:
             err = {
@@ -615,10 +640,15 @@ class MEAPipeline:
                 plt.tight_layout()
                 plt.subplots_adjust(hspace=0.05)
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
+                #save 60s zoom
+                axs[0].set_xlim(0, 60)
+                axs[1].set_xlim(0, 60)
+                plt.savefig(self.output_dir / "raster_burst_plot_60s.svg")
                 # Save 30s zoom
                 axs[0].set_xlim(0, 30)
                 axs[1].set_xlim(0, 30)
                 plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
+                plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
                 plt.close(fig)
                 
                 # C. Robust JSON Saving (Handles numpy types AND dictionary keys)

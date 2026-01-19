@@ -89,6 +89,7 @@ def main():
     parser.add_argument("--checkpoint-dir", type=str, default=None, help="Checkpoint directory")
     parser.add_argument("--no-curation", action="store_true", help="Skip automatic curation")
     parser.add_argument("--output-dir", type=str, help="Output directory for results")
+    parser.add_argument("--reanalyze-bursts", action="store_true", help="Re-analyze bursts even if present")
 
     args = parser.parse_args()
 
@@ -152,6 +153,7 @@ def main():
     if args.no_curation: extra_args.append("--no-curation")
     if args.skip_spikesorting: extra_args.append("--skip-spikesorting")
     if args.output_dir: extra_args.append(f"--output-dir '{args.output_dir}'")
+    if args.reanalyze_bursts: extra_args.append("--reanalyze-bursts")
     extra_arg_string = " ".join(extra_args)
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
     #ticker
