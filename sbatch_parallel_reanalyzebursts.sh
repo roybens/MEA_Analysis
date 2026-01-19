@@ -18,7 +18,7 @@
 export OMP_NUM_THREADS=8         # 32 cores / 4 tasks = 8 threads per task
 export HDF5_PLUGIN_PATH='/pscratch/sd/m/mpatil1/hdf5_plugin'
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-
+export PYTHONPATH="$PYTHONPATH:/pscratch/sd/m/mpatil1/MEA_Analysis/IPNAnalysis/"
 # --- 3. Inputs (Pass these as arguments) ---
 # Usage: sbatch submit_per_run.slurm /path/to/recording_folder
 RUN_DIR="$1"
