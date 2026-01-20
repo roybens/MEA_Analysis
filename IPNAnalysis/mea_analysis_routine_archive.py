@@ -8,7 +8,7 @@ matplotlib.use('Agg')  # Use a non-interactive backend
 import matplotlib.pyplot as plt
 from tsmoothie.smoother import GaussianSmoother
 import spikeinterface.full as si
-from parameter_free_burst_detector import compute_network_bursts
+from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector_copy2 import compute_network_bursts
 import helper_functions as helper
 from pathlib import Path
 from timeit import default_timer as timer
