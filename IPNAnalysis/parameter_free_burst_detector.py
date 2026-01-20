@@ -20,9 +20,7 @@ def compute_network_bursts(
     min_burstlet_participation=0.20,
     min_absolute_rate_Hz=0.5,    
     min_burst_density_Hz=1.0,    
-    
-    # [IGNORED]
-    min_burstlet_duration_ms=20, 
+    min_relative_height=0.25,
 
     # ---------------- merging ----------------
     burstlet_merge_gap_s=0.1,
@@ -85,7 +83,11 @@ def compute_network_bursts(
     # ---------------------------------------------------------
     # 4. Burstlets via Peak Finding (NEW)
     # ---------------------------------------------------------
-    
+    # Calculate Threshold
+    #global_max_height = np.percentile(ws_onset, 99) if len(ws_onset) > 0 else 0
+    global_max_height = np.max(ws_onset) if len(ws_onset) > 0 else 0
+    relative_threshold_val = global_max_height * min_relative_height
+
     # 1. Find Peaks (The "Summits")
     # We use a tiny height threshold just to avoid finding peaks in absolute zero noise
     # The real filtering happens in the GATES below.
@@ -94,7 +96,7 @@ def compute_network_bursts(
     
     # 2. Find Boundaries (The "Base" of the mountain)
     # rel_height=0.95 means "Measure width at 95% down from the peak" (near the bottom)
-    results_width = peak_widths(ws_onset, peaks, rel_height=0.95)
+    results_width = peak_widths(ws_onset, peaks, rel_height=0.80)
     
     # These indices are interpolated (floats), so we convert to int
     starts_idx = np.floor(results_width[2]).astype(int)
@@ -150,6 +152,11 @@ def compute_network_bursts(
         }
 
         # --- Gates ---
+        if peak_fast < relative_threshold_val:
+            candidate_info["status"] = f"REJECT_HEIGHT ({peak_fast:.2f} < {relative_threshold_val:.2f})"
+            candidate_log.append(candidate_info)
+            continue
+
         if participation_frac < min_burstlet_participation:
             candidate_info["status"] = f"REJECT_PARTICIPATION ({participation_frac:.2f} < {min_burstlet_participation})"
             candidate_log.append(candidate_info)
