@@ -54,11 +54,11 @@ def setup_driver_logger(log_path=None):
 # ----------------------------------------------------------
 # Subprocess launcher
 # ----------------------------------------------------------
-def launch_sorting_subprocess(file_path, stream_id, extra_args=""):
+def launch_sorting_subprocess(file_path, rec_name, stream_id, extra_args=""):
     
     # Calculate rec_name for 24-well MaxTwo plates
     well_id = int(stream_id[-3:])
-    rec_name = 'rec000' + str(well_id // 6) # each rec contain 6 wells (1 row on 24-well plate)
+    #rec_name = 'rec000' + str(well_id // 6) # each rec contain 6 wells (1 row on 24-well plate)
 
     command = f"python3 {BASE_FILE_PATH}/mea_analysis_routine.py '{file_path}' --rec {rec_name} --well {stream_id} {extra_args}"
     logger = logging.getLogger("driver")
@@ -212,17 +212,20 @@ def main():
                     logger.warning(f"⚠️ Could not extract run ID from {file_path}: {e}")
 
                 try:
-                    with h5py.File(file_path, "r") as h5f:
-                        wells = list(h5f["wells"].keys())
+                    with h5py.File(path, "r") as h5f:
+                        #wells = list(h5f["wells"].keys())
+                        recordings =list(h5f["recordings"].keys())
                 except Exception as e:
-                    logger.error(f"Failed to open HDF5: {e}")
-                    continue
-
-                for well in wells:
-                    if args.dry:
-                        logger.info(f"[DRY-RUN] Would process {file_path} / {well}")
-                    else:
-                        launch_sorting_subprocess(file_path, well, extra_arg_string)
+                    logger.error(f"Could not open file: {e}")
+                    sys.exit(1)
+            
+                for recording in recordings:
+                    wells_recorded = list(h5f[recording]["wells"].keys())
+                    for well in wells_recorded:
+                        if args.dry:
+                            logger.info(f"[DRY-RUN] Would process {path} / {well}")
+                        else:
+                            launch_sorting_subprocess(str(path),recording, well, extra_arg_string)
 
             elif suffix == ".nwb":
                 logger.info(f"[PLACEHOLDER] NWB file support not implemented yet: {file_path}")
@@ -243,16 +246,19 @@ def main():
         if path.suffix == ".h5":
             try:
                 with h5py.File(path, "r") as h5f:
-                    wells = list(h5f["wells"].keys())
+                    #wells = list(h5f["wells"].keys())
+                    recordings =list(h5f["recordings"].keys())
             except Exception as e:
                 logger.error(f"Could not open file: {e}")
                 sys.exit(1)
-
-            for well in wells:
-                if args.dry:
-                    logger.info(f"[DRY-RUN] Would process {path} / {well}")
-                else:
-                    launch_sorting_subprocess(str(path), well, extra_arg_string)
+            
+            for recording in recordings:
+                wells_recorded = list(h5f[recording]["wells"].keys())
+                for well in wells_recorded:
+                    if args.dry:
+                        logger.info(f"[DRY-RUN] Would process {path} / {well}")
+                    else:
+                        launch_sorting_subprocess(str(path),recording, well, extra_arg_string)
 
         elif path.suffix == ".nwb":
             logger.info(f"[PLACEHOLDER] NWB file support not implemented yet: {path}")
