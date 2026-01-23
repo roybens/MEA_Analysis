@@ -99,6 +99,7 @@ for f = 1 : length(theFiles)
     % extract dir information
     fileDirParts = strsplit(pathFileNetwork, filesep); % split dir into elements
     runID = str2double(fileDirParts{end-1}); % extract runID
+    chipID=fileDirParts{end-3};
     if ismember(runID,asssy_runIDs)
         fprintf(1, 'Now reading %s\n', pathFileNetwork);
         idx = T.Run_ == runID;
@@ -248,9 +249,9 @@ for f = 1 : length(theFiles)
         %%peaks, Spikes within bursts, # of Bursts etc.)
             
         %chipID =  str2num( regexprep( pathFileNetwork, {'\D*([\d\.]+\d)[^\d]*', '[^\d\.]*'}, {'$1 ', ' '} ) )
-        extractChipIDWellID = regexp(pathFileNetwork,'\d{5}\.?','match');
+        %extractChipIDWellID = regexp(pathFileNetwork,'\d{5}\.?','match');
         %chipID = regexp(pathFileNetwork,'\d{5}\.?\d*','match')
-        chipID = extractChipIDWellID(:,2);
+        %chipID = extractChipIDWellID(:,2);
         
         
         chipAverages = [];
