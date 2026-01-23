@@ -1,6 +1,149 @@
 # MEA Data Processing Pipeline
 
-This script is designed to process neuronal data recorded from MEA (Microelectrode Arrays) systems. The main functionality includes data preprocessing, spike sorting using Kilosort, waveform extraction, and various post-processing steps to analyze the neuronal signals.
+This is a production-grade **MEA (Microelectrode Array) processing pipeline** for neuronal spike sorting, analysis, and burst detection. It processes neuronal data recorded from Maxwell Biosystems MEA systems with comprehensive preprocessing, spike sorting using Kilosort, waveform extraction, and neuronal network burst analysis.
+
+## Architecture Overview
+
+### Two-Tier Design
+
+**1. run_pipeline_driver.py — Orchestrator**
+- Scans directories or processes single HDF5 files
+- Discovers all recordings and wells in each data file
+- Maps recordings to their associated wells using `recording_map` dictionary
+- Launches subprocesses for each recording-well combination via `mea_analysis_routine.py`
+- Handles reference filtering, dry-runs, and logging
+- Supports batch processing with checkpoint-based resumption
+
+**2. mea_analysis_routine.py — Core Pipeline (`MEAPipeline` class)**
+- Per-well worker executing the full processing pipeline
+- Stages: Preprocessing → Sorting → Analysis → Reports
+- Checkpoint-based resumption (resume on crash, skip completed stages)
+- Metadata parsing and intelligent output directory structuring
+
+## HDF5 File Structure
+
+The pipeline expects HDF5 files with the following hierarchical structure:
+
+```
+file.h5
+├── recordings/
+│   ├── rec0001/
+│   │   ├── well000
+│   │   ├── well001
+│   │   └── ...
+│   ├── rec0002/
+│   │   ├── well000
+│   │   └── ...
+│   └── ...
+└── wells/ (legacy support)
+```
+
+The pipeline uses a `recording_map` to efficiently map all recordings to their corresponding wells without keeping the entire file open.
+
+## Processing Pipeline Stages
+
+| Stage | Method | Purpose |
+|-------|--------|---------|
+| **Preprocessing** | `run_preprocessing()` | Bandpass filter (300–6000 Hz), common average reference, optional Zarr compression |
+| **Spike Sorting** | `run_sorting()` | Kilosort4 (default), SpikeInterface integration, Docker support for reproducibility |
+| **Analyzer** | `run_analyzer()` | Template computation, quality metrics (firing rate, SNR, ISI violations) |
+| **Reports** | `generate_reports()` | Waveform visualizations, probe locations, burst analysis, automatic curation |
+
+## Key Features
+
+✅ **Multi-Recording Support** — Handle multiple recordings per HDF5 file  
+✅ **Checkpointing** — Resume from failures; state saved as JSON  
+✅ **Logging** — Per-well logs + driver-level logs with timestamps  
+✅ **Quality Curation** — Automatic unit filtering via configurable thresholds (ISI violations, SNR, firing rate)  
+✅ **Containerization** — Docker image support for Kilosort reproducibility  
+✅ **Flexible I/O** — HDF5 (primary), placeholders for NWB and raw binary formats  
+✅ **Burst Detection** — Parameter-free adaptive network burst detection  
+✅ **Visualization** — Waveforms, probe maps, rasters, metrics  
+
+## Supporting Modules
+
+- **helper_functions.py** — Peak detection, file discovery, directory management utilities
+- **parameter_free_burst_detector.py** — Adaptive network burst detection with:
+  - Per-unit ISI bursts (biological calibration)
+  - Population firing rate signal computation
+  - Adaptive thresholding + squelch logic
+  - Network synchrony metrics
+- **spikeMatrix.py** — Spike raster representation and matrix operations
+- **gaussianNetworkBursts.py** — Gaussian-based burst modeling
+
+## Directory Structure & Metadata
+
+The pipeline infers project structure from file paths:
+```
+<project>/<date>/<chip>/<run_id>/Network/data.raw.h5
+```
+
+Output organized as:
+```
+AnalyzedData/<project>/<date>/<chip>/<run_id>/well000/
+  ├── kilosort4__rec0000/        (sorter outputs)
+  ├── waveforms__rec0000/        (extracted waveforms)
+  ├── reports/                   (plots, metrics)
+  └── checkpoints/               (resume state)
+```
+
+## Typical Workflow
+
+### Process Entire Directory Tree with Docker
+```bash
+python IPNAnalysis/run_pipeline_driver.py /data/experiment \
+  --docker si-98-ks4-maxwell \
+  --sorter kilosort4 \
+  --output-dir /results
+```
+
+### Resume on Failure (Automatic via Checkpoint)
+```bash
+python IPNAnalysis/run_pipeline_driver.py /data/experiment \
+  --docker si-98-ks4-maxwell \
+  --force-restart
+```
+
+### Single File Processing
+```bash
+python IPNAnalysis/mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5 \
+  --rec rec0001 \
+  --well well000 \
+  --debug
+```
+
+### Dry Run (Preview Processing Steps)
+```bash
+python IPNAnalysis/run_pipeline_driver.py /data/experiment --dry
+```
+
+### Re-analyze Bursts Only
+```bash
+python IPNAnalysis/run_pipeline_driver.py /data/experiment \
+  --skip-spikesorting \
+  --reanalyze-bursts
+```
+
+## Command-Line Arguments Reference
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `path` | str | File or directory path containing MEA data |
+| `--reference` | str | Excel file to filter runs by assay type |
+| `--type` | list | Assay types to include (default: ['network today', 'network today/best']) |
+| `--params` | str | JSON file or string with quality thresholds |
+| `--docker` | str | Docker image name for containerized sorting |
+| `--skip-spikesorting` | flag | Skip spike sorting stage |
+| `--force-restart` | flag | Restart even if checkpoint complete |
+| `--sorter` | str | Sorter algorithm to use (default: kilosort4) |
+| `--debug` | flag | Debug mode with verbose logging |
+| `--dry` | flag | Dry run only (preview without processing) |
+| `--clean-up` | flag | Clear sorter outputs etc. |
+| `--export-to-phy` | flag | Export results to Phy format |
+| `--checkpoint-dir` | str | Checkpoint directory (default: output-dir/checkpoints) |
+| `--no-curation` | flag | Skip automatic curation |
+| `--output-dir` | str | Output directory for results |
+| `--reanalyze-bursts` | flag | Re-analyze bursts even if present |
 
 ## Class Descriptions and Key Functions
 
