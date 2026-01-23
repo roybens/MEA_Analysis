@@ -3,12 +3,12 @@ import numpy as np
 import math
 import os
 import fnmatch
-import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import convolve, find_peaks
 from scipy.stats import norm
 from scipy.interpolate import interp1d
 
+# --- Utility Functions ---
 
 def detect_peaks(trace, peak_sign, abs_threshold):
     peaks_sample_inds = []
@@ -25,8 +25,6 @@ def detect_peaks(trace, peak_sign, abs_threshold):
         peaks_chan_inds.extend([0] * len(peaks))
 
     return np.array(peaks_sample_inds), np.array(peaks_chan_inds)
-    
-
 
 def get_surrounding_coordinates(x, y, number):
     surrounding_coordinates = []
@@ -39,9 +37,6 @@ def get_surrounding_coordinates(x, y, number):
 
 
 def convert_int64_keys_to_ints(d):
-    """
-    Recursively convert all numpy.int64 keys in a dictionary to integers.
-    """
     new_dict = {}
     for k, v in d.items():
         if isinstance(k, np.int64):
@@ -51,41 +46,12 @@ def convert_int64_keys_to_ints(d):
         new_dict[k] = v
     return new_dict
 
+
 def load_json(filename):
     d = {}
     with open(filename,'rb') as f:
         d = json.load(f)
     return d
-
-def dumpdicttofile(data,filename):
-    data = convert_int64_keys_to_ints(data)
-    json_data = json.dumps(data,indent=4)
-
-    with open(filename,'w') as fileptr:
-        fileptr.write(json_data)
-
-def get_key_by_value(d, value):
-    """
-    Useful to get the templates associated with a extreme electrode
-    """
-    keys = [k for k, v in d.items() if v == value]
-    return keys if keys else None
-
-
-
-def inarrxnotinarry(arr1,arr2):
-    print(f" in array1 not in array2 :{[x for x in arr1 if x not in arr2]} ")
-    print(f" in array2 not in array1 :{[x for x in arr2 if x not in arr1]} ")
-
-
-def flatten(lst):
-    flat_list = []
-    for item in lst:
-        if isinstance(item, list):
-            flat_list.extend(flatten(item))
-        else:
-            flat_list.append(item)
-    return flat_list
 
 def get_templates_with_same_channels(electrode_file):
 
@@ -103,7 +69,6 @@ def get_templates_with_same_channels(electrode_file):
     same_channel_templates = [templates for channel, templates in templates_with_channel.items() if len(templates) > 1]
 
     return same_channel_templates
-
 
 def empty_directory(directory_path):
     if os.path.exists(directory_path) and os.path.isdir(directory_path):
@@ -145,221 +110,218 @@ def isexists_folder_not_empty(folder_path):
     # If the folder is not empty, return True
     return len(items) > 0
 
+def dumpdicttofile(data,filename):
+    data = convert_int64_keys_to_ints(data)
+    json_data = json.dumps(data,indent=4)
+
+    with open(filename,'w') as fileptr:
+        fileptr.write(json_data)
+
+def save_json(file_path, data):
+    def default_converter(o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, np.integer):
+            return int(o)
+        if isinstance(o, np.floating):
+            return float(o)
+        raise TypeError(f'Object of type {o.__class__.__name__} is not JSON serializable')
+
+    print(f"[HELPER] Saving JSON to {file_path}...")
+    with open(file_path, 'w') as f:
+        json.dump(data, f, indent=4, default=default_converter)
+
+# --- Burst Detection & Statistics ---
+
 def detect_bursts_statistics(spike_times, isi_threshold):
     """
-    Detect bursts in a spike train and calculate burst statistics.
-
-    Parameters  
-    ----------
-    spike_times : dict  
-        A dictionary of spike times for each unit.
-    isi_threshold : float
-        The threshold for detecting bursts (in seconds).
-
-    Returns
-
-    -------
-    bursts : dict   
-        A dictionary of burst times for each unit.
-    
+    Detect bursts and calculate stats with DEBUG prints and SAFE covariance.
     """
-# Dictionary to store results
+    print(f"[HELPER] Detecting bursts for {len(spike_times)} units (ISI thresh={isi_threshold}s)...")
     results = {}
 
     for unit, times in spike_times.items():
-        
-        # Step 1: Calculate the ISIs
+        # Handle empty spike trains
+        if len(times) < 2:
+            print(f"[HELPER WARNING] Unit {unit} has < 2 spikes. Skipping stats.")
+            results[unit] = {
+                "bursts": [], "mean_isi_within": np.nan, "cov_isi_within": np.nan,
+                "mean_isi_outside": np.nan, "cov_isi_outside": np.nan,
+                "mean_isi_all": np.nan, "cov_isi_all": np.nan,
+                "isis_within_bursts": [], "isis_outside_bursts": [], "isis_all": []
+            }
+            continue
+
+        # Step 1: Calculate ISIs
         isis = np.diff(times)
         
-        # Step 2: Identify where ISIs are below the threshold
+        # Step 2: Identify bursts
         burst_mask = isis < isi_threshold
         
-        # Step 3: Find the start and end indices of bursts using diff and boolean indexing
-        burst_starts = np.where(np.diff(np.insert(burst_mask, 0, False).astype(int)) == 1)[0]
-        burst_ends = np.where(np.diff(np.append(burst_mask, False).astype(int)) == -1)[0]
+        # Step 3: Find indices
+        # Pad with False to handle edge cases
+        padded_mask = np.hstack(([False], burst_mask, [False]))
+        diffs = np.diff(padded_mask.astype(int))
+        burst_starts = np.where(diffs == 1)[0]
+        burst_ends = np.where(diffs == -1)[0]
         
-        # Step 4: Group spikes into bursts
+        # Step 4: Group spikes
         bursts = [times[start:end + 1] for start, end in zip(burst_starts, burst_ends)]
         
-        # Extract ISIs within bursts using list comprehension and vectorized operations
-        isis_within_bursts = np.concatenate([isis[start:end] for start, end in zip(burst_starts, burst_ends)]) if len(burst_starts) > 0 else np.array([])
+        # Extract ISIs
+        if len(burst_starts) > 0:
+            isis_within_bursts = np.concatenate([isis[start:end] for start, end in zip(burst_starts, burst_ends)])
+        else:
+            isis_within_bursts = np.array([])
+            
         isis_outside_bursts = isis[~burst_mask]
 
-        # Calculate statistics using vectorized numpy operations
-        mean_isi_within = np.mean(isis_within_bursts) if isis_within_bursts.size > 0 else np.nan
-        cov_isi_within = np.cov(isis_within_bursts) if isis_within_bursts.size > 0 else np.nan
-        
-        mean_isi_outside = np.mean(isis_outside_bursts) if isis_outside_bursts.size > 0 else np.nan
-        cov_isi_outside = np.cov(isis_outside_bursts) if isis_outside_bursts.size > 0 else np.nan
-        
-        mean_isi_all = np.mean(isis) if isis.size > 0 else np.nan
-        cov_isi_all = np.cov(isis) if isis.size > 0 else np.nan
+        # --- SAFE STATISTICS (Fixes RuntimeWarning) ---
+        def safe_mean(arr):
+            return np.mean(arr) if arr.size > 0 else np.nan
+
+        def safe_cov(arr):
+            # Covariance requires at least 2 data points to be valid
+            # If size is 0 or 1, return NaN to avoid 'Degrees of freedom <= 0' warning
+            return np.cov(arr) if arr.size > 1 else np.nan
 
         results[unit] = {
             "bursts": bursts,
-            "mean_isi_within": mean_isi_within,
-            "cov_isi_within": cov_isi_within,
-            "mean_isi_outside": mean_isi_outside,
-            "cov_isi_outside": cov_isi_outside,
-            "mean_isi_all": mean_isi_all,
-            "cov_isi_all": cov_isi_all,
+            "mean_isi_within": safe_mean(isis_within_bursts),
+            "cov_isi_within": safe_cov(isis_within_bursts),
+            "mean_isi_outside": safe_mean(isis_outside_bursts),
+            "cov_isi_outside": safe_cov(isis_outside_bursts),
+            "mean_isi_all": safe_mean(isis),
+            "cov_isi_all": safe_cov(isis),
             "isis_within_bursts": isis_within_bursts,
             "isis_outside_bursts": isis_outside_bursts,
             "isis_all": isis
         }
 
     return results
-    
 
-
-
-
-
-
-# Plot raster plot with bursts highlighted for all units
 def plot_raster_with_bursts(ax, spike_times, bursts, sorted_units=None, title_suffix=""):
+    """
+    Plots raster with extensive debug checks for type mismatches.
+    """
+    print(f"[HELPER] Plotting raster. SpikeTimes keys: {len(spike_times)}. Bursts type: {type(bursts)}")
+    
+    # Debug: Check structure of 'bursts'
+    if isinstance(bursts, list):
+        print(f"[HELPER WARNING] 'bursts' passed as LIST (len={len(bursts)}). Converting to DICT based on spike_times keys.")
+        # Attempt to map list back to keys if lengths match
+        keys = list(spike_times.keys())
+        if len(keys) == len(bursts):
+            bursts = dict(zip(keys, bursts))
+        else:
+            print("[HELPER ERROR] Cannot map bursts list to units. Length mismatch!")
+            return ax
+
     y_offset = 0
-    units_to_plot = sorted_units if sorted_units else list(spike_times.keys())
+    units_to_plot = sorted_units if sorted_units else sorted(list(spike_times.keys()))
     
     for unit in units_to_plot:
+        # Check integrity
+        if unit not in spike_times:
+            print(f"[HELPER SKIP] Unit {unit} missing from spike_times")
+            continue
+        if unit not in bursts:
+            print(f"[HELPER SKIP] Unit {unit} missing from bursts dict")
+            continue
+
         times = spike_times[unit]
         unit_bursts = bursts[unit]
         
-        # Plot all spike times for this unit
-        ax.plot(times, np.ones_like(times) + y_offset, '|', color='royalblue', markersize=1, rasterized=True)
+        # Plot spikes
+        ax.plot(times, np.ones_like(times) * y_offset, '|', color='royalblue', markersize=3, rasterized=True)
         
-        # Highlight bursts for this unit
-        for burst in unit_bursts:
-            ax.plot(burst, np.ones_like(burst) + y_offset, '|', color='black', markersize=1, rasterized=True)
+        # Plot bursts
+        for i, burst in enumerate(unit_bursts):
+            if len(burst) > 0:
+                ax.plot(burst, np.ones_like(burst) * y_offset, '|', color='black', markersize=3, rasterized=True)
         
-        y_offset += 1  # Move to the next unit
+        y_offset += 1
     
-    ax.set_xlabel('Time (s)')
-    num_units = len(units_to_plot)
-    yticks = [1, num_units//3, 2*num_units//3, num_units]
-    ax.set_yticks(yticks)
-    ax.set_yticklabels(yticks)
-    ax.set_ylabel('Units')
-    ax.set_title(f'Raster Plot with Bursts Highlighted {title_suffix}')
-
+    #ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Unit Index')
+    ax.set_yticks([1, y_offset//2, y_offset-1]) 
+    ax.set_title(f'Raster Plot {title_suffix}')
+    
+    print(f"[HELPER] Raster plot complete. Plotted {y_offset} units.")
     return ax
 
-def plot_network_activity(ax,SpikeTimes, min_peak_distance=1.0, binSize=0.1, gaussianSigma=0.16, thresholdBurst=1.2, figSize=(10, 6)):
-    relativeSpikeTimes = []
-    units = 0
-    for unit_id, spike_times in SpikeTimes.items():
-        relativeSpikeTimes.extend(spike_times) 
-        units += 1 # Set the first spike time to 0
+def plot_network_activity(ax, SpikeTimes, min_peak_distance=1.0, binSize=0.1, gaussianSigma=0.16, thresholdBurst=1.2):
+    print("[HELPER] Calculating Network Activity...")
     
-    relativeSpikeTimes = np.array(relativeSpikeTimes)
-    relativeSpikeTimes.sort() # Convert to NumPy array
-
-    # Step 1: Bin all spike times into small time windows
-    timeVector = np.arange(min(relativeSpikeTimes), max(relativeSpikeTimes), binSize)  # Time vector for binning
-    binnedTimes, _ = np.histogram(relativeSpikeTimes, bins=timeVector)  # Bin spike times
-    binnedTimes = np.append(binnedTimes, 0)  # Append 0 to match MATLAB's binnedTimes length
-
-    # Step 2: Smooth the binned spike times with a Gaussian kernel
-    kernelRange = np.arange(-3*gaussianSigma, 3*gaussianSigma + binSize, binSize)  # Range for Gaussian kernel
-    kernel = norm.pdf(kernelRange, 0, gaussianSigma)  # Gaussian kernel
-    kernel *= binSize  # Normalize kernel by bin size
-    firingRate = convolve(binnedTimes, kernel, mode='same') / binSize  # Convolve and normalize by bin size
-    firingRate = firingRate / units  # Convert to Hz
-
-    # Create a new figure with a specified size (width, height)
-    #fig, ax = plt.subplots(figsize=figSize)
-
-    # Plot the smoothed network activity
-    ax.plot(timeVector, firingRate, color='royalblue')
-    # Restrict the plot to the first and last 100 ms
-    ax.set_xlim([min(relativeSpikeTimes), max(relativeSpikeTimes)])
-    ax.set_ylim([min(firingRate)*0.8, max(firingRate)*1.2])  # Set y-axis limits to min and max of firingRate
-    ax.set_ylabel('Firing Rate [Hz]')
-    ax.set_xlabel('Time [ms]')
-    ax.set_title('Network Activity', fontsize=11)
-
-    # Step 3: Peak detection on the smoothed firing rate curve
-    rmsFiringRate = np.sqrt(np.mean(firingRate**2))  # Calculate RMS of the firing rate
-
-    peaks, properties = find_peaks(firingRate, prominence=1, distance=min_peak_distance)  # Find peaks above the threshold
-    print(properties.keys())
-    burstPeakTimes = timeVector[peaks]  # Convert peak indices to times
-    #burstPeakValues = properties['prominences']  # Get the peak values
-    burstPeakValues = firingRate[peaks]  # Get the peak values
-    # Step 4: Interpolate for finer resolution
-    interp_func = interp1d(timeVector, firingRate, kind='cubic')
-    fine_time_vector = np.linspace(timeVector[0], timeVector[-1], len(timeVector) * 10)
-    fine_firing_rate = interp_func(fine_time_vector)
-
-    # Step 5: Calculate zero crossings
-    fine_derivative = np.diff(fine_firing_rate)
-    fine_derivative = np.append(fine_derivative, 0)
-    fine_zero_crossings = np.where(np.diff(np.sign(fine_derivative)))[0]
-
-    # Step 6: Calculate widths for each peak
-    fine_widths = []
-    for peak in peaks:
-        peak_idx = np.argmin(np.abs(fine_time_vector - timeVector[peak]))
-        left_zeros = fine_zero_crossings[fine_zero_crossings < peak_idx]
-        right_zeros = fine_zero_crossings[fine_zero_crossings > peak_idx]
-
-        if len(left_zeros) > 0 and len(right_zeros) > 0:
-            left_zero = left_zeros[-1]
-            right_zero = right_zeros[0]
-            width = fine_time_vector[right_zero] - fine_time_vector[left_zero]
-            fine_widths.append(width)
-    mean_burst_duration = np.mean(fine_widths) if fine_widths else np.nan
-    #Calculate the ISIs between spiketimes
-    # Calculate the intervals between consecutive peaks
-    intervals = np.diff(burstPeakTimes)
-
-    # Calculate the mean interval between peaks
-    mean_interburstinterval = np.mean(intervals)
+    # Flatten all spikes
+    all_spikes = []
+    for times in SpikeTimes.values():
+        all_spikes.extend(times)
     
-    covariance_interburstinterval = np.cov(intervals)
-    # Count the number of peaks
-    num_peaks = len(peaks)
+    if not all_spikes:
+        print("[HELPER WARNING] No spikes found in any unit. Skipping network plot.")
+        return ax, {}
 
-    # Calculate the mean peak height
-    mean_peak_height = np.mean(burstPeakValues)
-    cov_peak_height = np.cov(burstPeakValues)
+    all_spikes = np.array(all_spikes)
+    all_spikes.sort()
+    
+    start_time = np.floor(all_spikes[0])
+    end_time = np.ceil(all_spikes[-1])
+    
+    if end_time - start_time < binSize:
+        print("[HELPER WARNING] Recording duration too short for binning.")
+        return ax, {}
 
-    # # Print the results
-    # print("Mean Interval between Peaks:", mean_interburstinterval)
-    # print("Number of Peaks:", num_peaks)
-    # print("Mean Peak Height:", mean_peak_height)
+    # Binning
+    bins = np.arange(start_time, end_time + binSize, binSize)
+    binned_counts, _ = np.histogram(all_spikes, bins=bins)
+    
+    # Convert to Firing Rate (Hz)
+    # Rate = Count / BinSize / NumUnits
+    num_units = len(SpikeTimes)
+    firing_rate_raw = binned_counts / binSize / num_units
 
-    # #calculate the mean isi and the variance of the isi
-    # mean_isi =np.mean([SpikeTimes.values()])
+    # Gaussian Smoothing
+    sigma_bins = gaussianSigma / binSize
+    window_size = int(6 * sigma_bins)
+    if window_size % 2 == 0: window_size += 1
+    
+    # Create Gaussian window
+    x = np.linspace(-3*sigma_bins, 3*sigma_bins, window_size)
+    kernel = np.exp(-0.5 * x**2 / sigma_bins**2)
+    kernel /= kernel.sum() # Normalize
+    
+    firing_rate_smooth = convolve(firing_rate_raw, kernel, mode='same')
+    
+    # Time vector for plotting (centers of bins)
+    time_vector = bins[:-1] + binSize/2
 
-    spikecounts= [len(x) for x in SpikeTimes.values()]
-    var_spikecounts = np.var(spikecounts)
-    mean_spikecounts = np.mean(spikecounts)
-    fanofact = var_spikecounts/mean_spikecounts
+    # Plot
+    ax.plot(time_vector, firing_rate_smooth, color='royalblue')
+    ax.set_ylabel('Avg Firing Rate [Hz]')
+    #ax.set_xlabel('Time [s]')
+    ax.set_title('Population Firing Rate')
+    ax.set_xlim([start_time, end_time])
 
-    network_data = {
-        "Number_Bursts": num_peaks,
-        "mean_IBI": mean_interburstinterval,
-        "cov_IBI": covariance_interburstinterval,
-        "mean_Burst_Peak": mean_peak_height,
-        "mean_BurstDuration" : mean_burst_duration,
-        "cov_Burst_Peak": cov_peak_height,
-        "fano_factor": fanofact
-    }   
+    # Peak Detection
+    peaks, _ = find_peaks(firing_rate_smooth, prominence=0.5, distance=int(min_peak_distance/binSize))
+    
+    burst_peaks_t = time_vector[peaks]
+    burst_peaks_val = firing_rate_smooth[peaks]
+    
+    ax.plot(burst_peaks_t, burst_peaks_val, 'or', label='Bursts')
+    if len(peaks) > 0: ax.legend()
 
-
-    # Plot the threshold line and burst peaks
-    #ax.plot(np.arange(timeVector[-1]), thresholdBurst * rmsFiringRate * np.ones(np.ceil(timeVector[-1]).astype(int)), color='gray')
-    ax.plot(burstPeakTimes, burstPeakValues, 'or')  # Plot burst peaks as red circles    
-
-    return ax,network_data
-
-
-def save_json(file_path, data):
-    def default_converter(o):
-        if isinstance(o, np.ndarray):
-            return o.tolist()
-        raise TypeError(f'Object of type {o.__class__.__name__} is not JSON serializable')
-
-    with open(file_path, 'w') as f:
-        json.dump(data, f, indent=4, default=default_converter)
+    # Metrics
+    intervals = np.diff(burst_peaks_t)
+    
+    stats = {
+        "Number_Bursts": len(peaks),
+        "mean_IBI": np.mean(intervals) if len(intervals) > 0 else np.nan,
+        "cov_IBI": np.cov(intervals) if len(intervals) > 1 else np.nan,
+        "mean_Burst_Peak": np.mean(burst_peaks_val) if len(burst_peaks_val) > 0 else np.nan,
+        "cov_Burst_Peak": np.cov(burst_peaks_val) if len(burst_peaks_val) > 1 else np.nan
+    }
+    
+    print(f"[HELPER] Network Activity: Found {len(peaks)} bursts.")
+    return ax, stats
