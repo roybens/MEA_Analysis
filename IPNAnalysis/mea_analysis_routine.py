@@ -47,7 +47,7 @@ if str(root_dir) not in sys.path:
 try:
     # Use simple imports if the files are in the same directory
     # OR keep your package structure if path is fixed above
-    from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
+    from parameter_free_burst_detector import compute_network_bursts
     import helper_functions as helper
     from scalebury import add_scalebar
 except ImportError as e:
@@ -624,57 +624,28 @@ class MEAPipeline:
             # 2. Main Analysis Block
             try:
                 # A. Statistics & Raster Plot
-                burst_stats = helper.detect_bursts_statistics(spike_times, isi_threshold=0.1)
-                bursts = [x['bursts'] for x in burst_stats.values()]
+                #burst_stats = helper.detect_bursts_statistics(spike_times, isi_threshold=0.1)
+                #bursts = [x['bursts'] for x in burst_stats.values()]
                 
-                fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+                #fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
                 #title_suffix = "(Sorted Units)" if self.sorting else "(Channel MUA)"
-                title_suffix = f" "
-                helper.plot_raster_with_bursts(axs[0], spike_times, bursts, title_suffix=title_suffix)
-                
-                # B. Network Burst Calculation
-                network_data = compute_network_bursts(ax_raster=None, ax_macro=axs[1], SpikeTimes=spike_times, plot=True)
-                network_data['file'] = str(self.relative_pattern)
-                network_data['well'] = self.stream_id
-                
-                plt.tight_layout()
-                plt.subplots_adjust(hspace=0.05)
-                plt.savefig(self.output_dir / "raster_burst_plot.svg")
-                #save 60s zoom
-                axs[0].set_xlim(0, 60)
-                axs[1].set_xlim(0, 60)
-                plt.savefig(self.output_dir / "raster_burst_plot_60s.svg")
-                # Save 30s zoom
-                axs[0].set_xlim(0, 30)
-                axs[1].set_xlim(0, 30)
-                plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
-                plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
-                plt.close(fig)
-                
-                # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
-                def recursive_clean(obj):
-                    """Recursively converts numpy types and keys to Python standard types."""
-                    if isinstance(obj, dict):
-                        new_dict = {}
-                        for k, v in obj.items():
-                            # Force keys to string (JSON requirement)
-                            clean_k = str(k)
-                            new_dict[clean_k] = recursive_clean(v)
-                        return new_dict
-                    if isinstance(obj, list):
-                        return [recursive_clean(v) for v in obj]
-                    if isinstance(obj, (np.integer, int)):
-                        return int(obj)
-                    if isinstance(obj, (np.floating, float)):
-                        return float(obj)
-                    if isinstance(obj, np.ndarray):
-                        return recursive_clean(obj.tolist())
-                    return obj
+                #title_suffix = f" "
+                #helper.plot_raster_with_bursts(axs[0], spike_times, bursts, title_suffix=title_suffix)
+                # Raster Plot
+ 
 
-                self.logger.info(f"Sanitizing JSON data for {len(network_data.get('unit_bursts', []))} units...")
-                
+                # B. Network Burst Calculation
+                # network_data = compute_network_bursts(ax_raster=None, ax_macro=axs[1], SpikeTimes=spike_times, plot=True)
+                # network_data['file'] = str(self.relative_pattern)
+                # network_data['well'] = self.stream_id
+                # Network (bottom)
+                network_data = compute_network_bursts(
+                    SpikeTimes=spike_times,
+                    plot=False
+                )
+
                 # Clean data in memory
-                network_data_clean = recursive_clean(network_data)
+                network_data_clean = helper.recursive_clean(network_data)
 
                 # Atomic Write (Temp -> Rename) to prevent corruption
                 temp_file = self.output_dir / "network_results.tmp.json"
@@ -686,6 +657,63 @@ class MEAPipeline:
                 if temp_file.exists():
                     os.replace(temp_file, final_file)
                     self.logger.info(f"Successfully saved: {final_file}")
+
+                plot_Mode = 'merged'
+
+                if plot_Mode == 'separate':
+                    fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+                    ax_raster , ax_network = axs
+                    helper.plot_clean_raster(
+                            ax_raster,
+                            spike_times
+                        )
+                    helper.plot_clean_network(ax_network, **network_data["plot_data"])
+                elif plot_Mode == 'merged':
+                    fig, ax = plt.subplots(figsize=(12, 5))
+                    ax_raster = ax
+                    ax_network = ax.twinx()
+                    # Raster (left axis)
+                    helper.plot_clean_raster(
+                        ax_raster,
+                        spike_times,
+                        color='black',
+                        markersize=5,
+                        alpha=0.5
+                    )
+
+                    # Network (right axis)
+                    helper.plot_clean_network(
+                        ax_network,
+                        **network_data["plot_data"]
+                    )
+                    ax.spines["right"].set_visible(True)
+                else:
+                    self.logger.warning(f"Unknown plot mode: {plot_Mode}")
+                    return
+                plt.tight_layout()
+                plt.subplots_adjust(hspace=0.05)
+
+                plt.savefig(self.output_dir / "raster_burst_plot.svg")
+
+                # 60 s zoom
+                ax_raster.set_xlim(0, 60)
+                ax_network.set_xlim(0, 60)
+                plt.savefig(self.output_dir / "raster_burst_plot_60s.svg")
+
+                # 30 s zoom
+                ax_raster.set_xlim(0, 30)
+                ax_network.set_xlim(0, 30)
+                ax_network.set_xlabel("Time (s)")
+                plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
+
+                plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
+                plt.close(fig)
+                # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
+
+
+                self.logger.info(f"Sanitizing JSON data for {len(network_data.get('unit_bursts', []))} units...")
+                
+
 
             except Exception as e:
                 self.logger.error(f"Burst analysis error: {e}")
