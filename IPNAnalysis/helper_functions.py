@@ -200,6 +200,139 @@ def detect_bursts_statistics(spike_times, isi_threshold):
 
     return results
 
+
+def plot_clean_raster(
+    ax,
+    spike_times,
+    sorted_units=None,
+    color="grey",
+    marker="|",
+    markersize=5,
+    markeredgewidth=0.6,
+    alpha=0.7
+):
+    """
+    Clean raster plot using independent '|' markers (no joined lines).
+    """
+
+    units = sorted_units if sorted_units else sorted(spike_times.keys())
+
+
+    y_offset = 0
+
+    for unit in units:
+        if unit not in spike_times:
+            continue
+
+        times = spike_times[unit]
+        if len(times) == 0:
+            y_offset += 1
+            continue
+
+        ax.plot(
+            times,
+            np.full_like(times, y_offset),
+            linestyle="None",          # IMPORTANT: no connecting
+            marker=marker,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
+            color=color,
+            alpha=alpha,
+            rasterized=True
+        )
+
+        y_offset += 1
+
+    ax.set_ylabel("Unit Index")
+    ax.set_ylim(-1, y_offset)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(direction="out")
+
+def plot_clean_network(
+    ax,
+    t,
+    signal,
+    *,
+    burst_peak_times=None,
+    burst_peak_values=None,
+    baseline=None,
+    threshold=None,
+    ylim=None,
+    color="tab:blue"
+):
+    """
+    Clean network activity plot.
+
+    Parameters
+    ----------
+    ax : matplotlib axis
+    t : array-like
+        Time vector (seconds)
+    signal : array-like
+        Network synchrony signal (ws_onset)
+    burst_peak_times : array-like, optional
+        Time of the largest peak per merged network burst
+    burst_peak_values : array-like, optional
+        Amplitude of the largest peak per merged network burst
+    baseline : float, optional
+        Baseline level (for reference)
+    threshold : float, optional
+        Detection threshold (for reference)
+    """
+
+    # --- main signal ---
+    ax.plot(
+        t,
+        signal,
+        color=color,
+        lw=1.5,
+        zorder=2
+    )
+
+    # --- burst peaks (ONE per network burst) ---
+    if (
+        burst_peak_times is not None
+        and burst_peak_values is not None
+        and len(burst_peak_times) > 0
+    ):
+        ax.plot(
+            burst_peak_times,
+            burst_peak_values,
+            'o',
+            color='red',
+            ms=4,
+            zorder=5
+        )
+
+    # --- reference lines ---
+    if baseline is not None:
+        ax.axhline(
+            baseline,
+            color="#FF6600",
+            ls="--",
+            lw=1,
+            alpha=0.8
+        )
+
+    if threshold is not None:
+        ax.axhline(
+            threshold,
+            color="#C0392B",
+            ls="--",
+            lw=1,
+            alpha=0.8
+        )
+
+    # --- cosmetics ---
+    ax.set_ylabel("Network synchrony")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(direction="out")
+
+    if ylim is not None:
+        ax.set_ylim(ylim)
+
 def plot_raster_with_bursts(ax, spike_times, bursts, sorted_units=None, title_suffix=""):
     """
     Plots raster with extensive debug checks for type mismatches.
@@ -325,3 +458,23 @@ def plot_network_activity(ax, SpikeTimes, min_peak_distance=1.0, binSize=0.1, ga
     
     print(f"[HELPER] Network Activity: Found {len(peaks)} bursts.")
     return ax, stats
+
+
+def recursive_clean(obj):
+    """Recursively converts numpy types and keys to Python standard types."""
+    if isinstance(obj, dict):
+        new_dict = {}
+        for k, v in obj.items():
+            # Force keys to string (JSON requirement)
+            clean_k = str(k)
+            new_dict[clean_k] = recursive_clean(v)
+        return new_dict
+    if isinstance(obj, list):
+        return [recursive_clean(v) for v in obj]
+    if isinstance(obj, (np.integer, int)):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return recursive_clean(obj.tolist())
+    return obj
