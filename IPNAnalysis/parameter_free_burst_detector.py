@@ -2,11 +2,12 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks, peak_widths
 import matplotlib.pyplot as plt
+import helper_functions as helper
 
 def compute_network_bursts(
-    ax_raster,
-    ax_macro,
-    SpikeTimes,
+    ax_raster=None,
+    ax_macro=None,
+    SpikeTimes=None,
 
     # ---------------- core params ----------------
     isi_threshold=0.1,
@@ -27,7 +28,7 @@ def compute_network_bursts(
     network_merge_gap_s=1.0,
     superburst_min_duration_s=2.5,
 
-    plot=True,
+    plot=False,
     verbose=True
 ):
     # ... [Sanity, ISI-N, and Signal Generation stay EXACTLY the same] ...
@@ -93,7 +94,8 @@ def compute_network_bursts(
     # The real filtering happens in the GATES below.
     min_peak_height = np.max(ws_onset) * 0.01 
     peaks, properties = find_peaks(ws_onset, height=min_peak_height)
-    
+    peak_filtered =[]
+    peak_filtered_times =[]
     # 2. Find Boundaries (The "Base" of the mountain)
     # rel_height=0.95 means "Measure width at 95% down from the peak" (near the bottom)
     results_width = peak_widths(ws_onset, peaks, rel_height=0.80)
@@ -138,6 +140,7 @@ def compute_network_bursts(
         peak_rate_hz_per_unit = raw_peak_counts / bin_size / len(units)
         
         peak_fast = np.max(ws_onset[s:e]) if (e > s) else 0
+        peak_fast_time= t_centers[s + np.argmax(ws_onset[s:e])] if (e > s) else 0
         local_slow_baseline = np.max(ws_peak[s:e]) if (e > s) else 0
 
         # --- Diagnostics Log ---
@@ -188,8 +191,14 @@ def compute_network_bursts(
             "peak_synchrony": float(peak_fast),
             "synchrony_energy": float(np.sum(ws_peak[s:e]) * bin_size),
             "participation": participation_frac,
-            "total_spikes": int(total_spikes)
+            "total_spikes": int(total_spikes),
+            "peak_time": float(peak_fast_time)
+
         })
+
+        peak_filtered.append(peak_fast)
+        peak_filtered_times.append(peak_fast_time)
+       
 
     # ---------------------------
     # 5. Merging (Critical for overlaps)
@@ -217,9 +226,14 @@ def compute_network_bursts(
         return merged
 
     def finalize(events, s, e):
+        ev_max = max(events, key=lambda x: x["peak_synchrony"])
+
         return {
-            "start": s, "end": e, "duration_s": e - s,
-            "peak_synchrony": max(ev["peak_synchrony"] for ev in events),
+            "start": s,
+            "end": e,
+            "duration_s": e - s,
+            "peak_synchrony": ev_max["peak_synchrony"],
+            "peak_time": ev_max["peak_time"], 
             "synchrony_energy": sum(ev["synchrony_energy"] for ev in events),
             "fragment_count": len(events),
             "total_spikes": sum(ev["total_spikes"] for ev in events),
@@ -265,5 +279,14 @@ def compute_network_bursts(
         "diagnostics": {
             "adaptive_bin_ms": adaptive_bin_ms,
             #"candidate_event_log": candidate_log
+        },
+        "plot_data": {
+            "t": t_centers,
+            "signal": ws_onset,
+            "burst_peak_times": np.array([b["peak_time"] for b in network_bursts]),
+            "burst_peak_values": np.array([b["peak_synchrony"] for b in network_bursts]),
+            "baseline": np.percentile(ws_onset, 10),
+            "threshold": relative_threshold_val
         }
+
     }
