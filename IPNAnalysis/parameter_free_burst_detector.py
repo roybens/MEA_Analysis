@@ -12,7 +12,7 @@ def compute_network_bursts(
     # ---------------- core params ----------------
     isi_threshold=0.1,
     bin_ms=10,
-    gamma=2.0,
+    gamma=1.2,
 
     # ---------------- smoothing ----------------
     smoothing_min_ms=20,
