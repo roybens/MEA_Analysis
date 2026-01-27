@@ -28,3 +28,18 @@ si_ks4/
 IPNAnalysis/kilosort_output/sorter_output/
 NetworkAnalysis/ActivityQuality/*.csv
 kilosort4_output/
+
+# --- Python packaging / install artifacts ---
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Python caches / tooling ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
