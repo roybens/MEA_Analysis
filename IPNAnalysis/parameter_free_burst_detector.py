@@ -21,7 +21,7 @@ def compute_network_bursts(
     min_burstlet_participation=0.20,
     min_absolute_rate_Hz=0.5,    
     min_burst_density_Hz=1.0,    
-    min_relative_height=0.25,
+    min_relative_height=0.1,
 
     # ---------------- merging ----------------
     burstlet_merge_gap_s=0.1,
@@ -67,7 +67,12 @@ def compute_network_bursts(
         counts, _ = np.histogram(SpikeTimes[u], bins=bins)
         P += (counts > 0).astype(float)
     W = P ** gamma
-
+    # Population firing rate (spikes, not electrodes)
+    PFR = np.zeros(len(t_centers))
+    for u in units:
+        counts, _ = np.histogram(SpikeTimes[u], bins=bins)
+        PFR += counts
+    PFR = PFR / bin_size  # Hz
     # ---------------------------
     # 3. Dual Smoothing
     # ---------------------------
@@ -143,6 +148,8 @@ def compute_network_bursts(
         peak_fast_time= t_centers[s + np.argmax(ws_onset[s:e])] if (e > s) else 0
         local_slow_baseline = np.max(ws_peak[s:e]) if (e > s) else 0
 
+        burst_peak_pfr = np.max(PFR[s:e]) if (e > s) else 0.0
+
         # --- Diagnostics Log ---
         candidate_info = {
             "start_t": round(float(start_t), 3),
@@ -192,7 +199,8 @@ def compute_network_bursts(
             "synchrony_energy": float(np.sum(ws_peak[s:e]) * bin_size),
             "participation": participation_frac,
             "total_spikes": int(total_spikes),
-            "peak_time": float(peak_fast_time)
+            "peak_time": float(peak_fast_time),
+            "burst_peak": float(burst_peak_pfr),
 
         })
 
@@ -237,7 +245,8 @@ def compute_network_bursts(
             "synchrony_energy": sum(ev["synchrony_energy"] for ev in events),
             "fragment_count": len(events),
             "total_spikes": sum(ev["total_spikes"] for ev in events),
-            "participation": float(np.mean([ev["participation"] for ev in events]))
+            "participation": float(np.mean([ev["participation"] for ev in events])),
+            "burst_peak": max(ev["burst_peak"] for ev in events),
         }
 
     network_bursts = merge(burstlets, burstlet_merge_gap_s)
@@ -254,11 +263,12 @@ def compute_network_bursts(
         starts = [e["start"] for e in events]
         return {
             "count": len(events),
-            "rate_bpm": len(events) / total_dur * 60.0,
+            "rate": len(events) / total_dur,
             "duration": stats([e["duration_s"] for e in events]),
             "inter_event_interval": stats(np.diff(starts)) if len(starts) > 1 else stats([]),
             "intensity": stats([e["synchrony_energy"] for e in events]),
-            "participation": stats([e["participation"] for e in events])
+            "participation": stats([e["participation"] for e in events]),
+            "spikes_per_burst": stats([e["total_spikes"] for e in events])
         }
 
     if plot and ax_macro is not None:
