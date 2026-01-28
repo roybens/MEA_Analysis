@@ -663,6 +663,14 @@ class MEAPipeline:
                     os.replace(temp_file, final_file)
                     self.logger.info(f"Successfully saved: {final_file}")
 
+                total_channels = self.recording.get_num_channels()
+                channels_in_raster = len(spike_times)
+
+                self.logger.info(
+                    f"Raster plotting {channels_in_raster}/{total_channels} channels "
+                    f"(including silent channels)"
+                )
+
                 plot_Mode = 'separate'
 
                 if plot_Mode == 'separate':
