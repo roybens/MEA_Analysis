@@ -12,7 +12,7 @@ def compute_network_bursts(
     # ---------------- core params ----------------
     isi_threshold=0.1,
     bin_ms=10,
-    gamma=1.2,
+    gamma=1.0,
 
     # ---------------- smoothing ----------------
     smoothing_min_ms=20,
@@ -66,7 +66,8 @@ def compute_network_bursts(
     for u in units:
         counts, _ = np.histogram(SpikeTimes[u], bins=bins)
         P += (counts > 0).astype(float)
-    W = P ** gamma
+    W_gamma = P ** gamma
+    W = P.astype(float)
     # Population firing rate (spikes, not electrodes)
     PFR = np.zeros(len(t_centers))
     for u in units:
@@ -81,7 +82,7 @@ def compute_network_bursts(
     sigma_fast_bins = np.clip(sigma_slow_bins / 5.0, 1.0, 5.0)
     
     ws_onset = gaussian_filter1d(W, sigma_fast_bins)
-    ws_peak  = gaussian_filter1d(W, sigma_slow_bins)
+    ws_peak  = gaussian_filter1d(W_gamma, sigma_slow_bins)
     
     burstlet_merge_gap_s = 2.0 * biological_isi_s
     network_merge_gap_s  = 5.0 * biological_isi_s
@@ -91,14 +92,22 @@ def compute_network_bursts(
     # ---------------------------------------------------------
     # Calculate Threshold
     #global_max_height = np.percentile(ws_onset, 99) if len(ws_onset) > 0 else 0
-    global_max_height = np.max(ws_onset) if len(ws_onset) > 0 else 0
-    relative_threshold_val = global_max_height * min_relative_height
+    # global_max_height = np.max(ws_onset) if len(ws_onset) > 0 else 0
+    #relative_threshold_val = global_max_height * min_relative_height
+
+    baseline = np.median(ws_onset)
+    spread   = np.median(np.abs(ws_onset - baseline))  # MAD
+
+    relative_threshold_val = baseline + 3 * spread
+
+
 
     # 1. Find Peaks (The "Summits")
     # We use a tiny height threshold just to avoid finding peaks in absolute zero noise
     # The real filtering happens in the GATES below.
-    min_peak_height = np.max(ws_onset) * 0.01 
-    peaks, properties = find_peaks(ws_onset, height=min_peak_height)
+    #min_peak_height = np.max(ws_onset) * 0.01 
+    min_peak_height = baseline + 0.5 * spread
+    peaks, _ = find_peaks(ws_onset, height=min_peak_height)
     peak_filtered =[]
     peak_filtered_times =[]
     # 2. Find Boundaries (The "Base" of the mountain)
