@@ -663,15 +663,16 @@ class MEAPipeline:
                     os.replace(temp_file, final_file)
                     self.logger.info(f"Successfully saved: {final_file}")
 
-                total_channels = self.recording.get_num_channels()
-                channels_in_raster = len(spike_times)
+                #total_channels = self.recording.get_num_channels()
+                #channels_in_raster = len(spike_times)
 
-                self.logger.info(
-                    f"Raster plotting {channels_in_raster}/{total_channels} channels "
-                    f"(including silent channels)"
-                )
+                #self.logger.info(
+                #    f"Raster plotting {channels_in_raster}/{total_channels} channels "
+                #    f"(including silent channels)"
+                #)
 
                 plot_Mode = 'separate'
+                debug_Mode = True
 
                 if plot_Mode == 'separate':
                     fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
@@ -711,6 +712,21 @@ class MEAPipeline:
                 plt.tight_layout()
                 plt.subplots_adjust(hspace=0.05)
 
+                if debug_Mode:
+                    nb_events = network_data["network_bursts"]["events"]
+                    burst_intervals = [
+                        (ev["start"], ev["end"]) for ev in nb_events
+                    ]
+                    sb_events = network_data["superbursts"]["events"]
+                    sb_intervals = [
+                        (ev["start"], ev["end"]) for ev in sb_events
+                    ]
+                    #plotting this on ax_network
+                    for start, end in burst_intervals:
+                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
+                    for start, end in sb_intervals:
+                        ax_network.axvspan(start, end, color='gray', alpha=0.3)
+            
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
 
                 # 60 s zoom
@@ -727,9 +743,6 @@ class MEAPipeline:
                 plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
                 plt.close(fig)
                 # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
-
-
-                self.logger.info(f"Sanitizing JSON data for {len(network_data.get('unit_bursts', []))} units...")
                 
 
 
