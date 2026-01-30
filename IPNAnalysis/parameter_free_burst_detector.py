@@ -112,7 +112,7 @@ def compute_network_bursts(
     peak_filtered_times =[]
     # 2. Find Boundaries (The "Base" of the mountain)
     # rel_height=0.95 means "Measure width at 95% down from the peak" (near the bottom)
-    results_width = peak_widths(ws_onset, peaks, rel_height=0.80)
+    results_width = peak_widths(ws_onset, peaks, rel_height=0.30)
     
     # These indices are interpolated (floats), so we convert to int
     starts_idx = np.floor(results_width[2]).astype(int)
@@ -277,7 +277,9 @@ def compute_network_bursts(
             "inter_event_interval": stats(np.diff(starts)) if len(starts) > 1 else stats([]),
             "intensity": stats([e["synchrony_energy"] for e in events]),
             "participation": stats([e["participation"] for e in events]),
-            "spikes_per_burst": stats([e["total_spikes"] for e in events])
+            "spikes_per_burst": stats([e["total_spikes"] for e in events]),
+            "burst_peak": stats([e["burst_peak"] for e in events]),
+            
         }
 
     if plot and ax_macro is not None:
@@ -297,6 +299,12 @@ def compute_network_bursts(
         "superbursts": {"events": superbursts, "metrics": level_metrics(superbursts)},
         "diagnostics": {
             "adaptive_bin_ms": adaptive_bin_ms,
+            "biological_isi_s": biological_isi_s,
+            "smoothing_sigma_fast_bins": sigma_fast_bins,
+            "smoothing_sigma_slow_bins": sigma_slow_bins,
+            "threshold_value": relative_threshold_val,
+            "burstlet_merge_gap_s": burstlet_merge_gap_s,
+            "network_merge_gap_s": network_merge_gap_s
             #"candidate_event_log": candidate_log
         },
         "plot_data": {
