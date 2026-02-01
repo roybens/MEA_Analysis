@@ -1,0 +1,163 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mea-ks4-m08035-240423
+  namespace: ben-shalomlab
+  labels:
+    app: mea-spikesorter
+    dataset: kcnt1
+    plate: "M08035"
+    date: "240423"
+
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+
+  template:
+    metadata:
+      labels:
+        app: mea-spikesorter
+        plate: "M08035"
+
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+
+      ################################
+      # INIT 1️⃣ : S3 → EPHEMERAL
+      ################################
+      initContainers:
+      - name: s3-sync-input
+        image: amazon/aws-cli:2.15.0
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-creds
+              key: access_key
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-creds
+              key: secret_key
+        - name: AWS_DEFAULT_REGION
+          value: us-west-2
+        - name: AWS_ENDPOINT_URL
+          value: https://s3-west.nrp-nautilus.io
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "SYNC INPUT"
+          echo "S3: s3://benshalom-lab-kcnt1-v5-primary/raw/KCNT1_T5_C1_04132024/240423/M08035/"
+          aws s3 sync s3://benshalom-lab-kcnt1-v5-primary/raw/KCNT1_T5_C1_04132024/240423/M08035/ /mnt/raw \
+            --exact-timestamps --no-progress
+        volumeMounts:
+        - name: work-volume
+          mountPath: /mnt/raw
+
+      ################################
+      # MAIN 2️⃣ : MEA PIPELINE
+      ################################
+      containers:
+
+      - name: mea-pipeline
+        image: mandarmp/benshalomlab_spikesorter:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: "8"
+            memory: "64Gi"
+            nvidia.com/gpu: 1
+          limits:
+            cpu: "16"
+            memory: "96Gi"
+            nvidia.com/gpu: 1
+        env:
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: expandable_segments:True
+        - name: HDF5_PLUGIN_PATH
+          value: /opt/hdf5/plugins
+        command:
+        - bash
+        - -c
+        - |
+          set -e
+          echo "RUNNING PIPELINE FOR M08035"
+
+          python3 /MEA_Analysis/IPNAnalysis/run_pipeline_driver.py \
+            /mnt/raw \
+            --sorter kilosort4 \
+            --resume \
+            --debug \
+            --clean-up \
+            --output-dir /mnt/output \
+            --checkpoint-dir /mnt/output/checkpoints \
+            --export-to-phy
+
+          touch /mnt/output/.PIPELINE_DONE
+        volumeMounts:
+        - name: work-volume
+          mountPath: /mnt/raw
+        - name: work-volume
+          mountPath: /mnt/output
+
+      ################################
+      # SIDECAR 3️⃣ : OUTPUT → S3
+      ################################
+      - name: s3-sync-output
+        image: amazon/aws-cli:2.15.0
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-creds
+              key: access_key
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-creds
+              key: secret_key
+        - name: AWS_DEFAULT_REGION
+          value: us-west-2
+        - name: AWS_ENDPOINT_URL
+          value: https://s3-west.nrp-nautilus.io
+        command:
+        - sh
+        - -c
+        - |
+          echo "WAITING FOR PIPELINE"
+          while [ ! -f /mnt/output/.PIPELINE_DONE ]; do
+            sleep 30
+          done
+
+          echo "SYNC OUTPUT"
+          aws s3 sync /mnt/output {{ S3_OUTPUT_PATH }} \
+            --exact-timestamps --no-progress
+        volumeMounts:
+        - name: work-volume
+          mountPath: /mnt/output
+
+      ################################
+      # SHARED STORAGE
+      ################################
+      volumes:
+      - name: work-volume
+        emptyDir:
+          sizeLimit: 1000Gi
