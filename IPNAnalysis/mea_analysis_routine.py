@@ -390,24 +390,27 @@ class MEAPipeline:
 
         for ch_index, ch_id in enumerate(channel_ids):
             mask = peaks['channel_index'] == ch_index
-            if np.any(mask):
-                spike_times[ch_id] = peaks['sample_index'][mask] / fs
+            spike_times[ch_id] = (
+                peaks['sample_index'][mask] / fs
+                if np.any(mask)
+                else np.array([])
+            )
         
         np.save(self.output_dir / "spike_times.npy", spike_times)
         
-        # Quick raster plot
-        fig, ax = plt.subplots(figsize=(12, 8))
-        sorted_chs = sorted(spike_times.keys())
-        for i, ch in enumerate(sorted_chs):
-            times = spike_times.get(ch, [])
-            if len(times) > 0:
-                ax.plot(times, np.ones_like(times) * i, '|', markersize=1, color='black', alpha=0.5)
-        ax.set_title(f"MUA Raster - {self.stream_id}")
-        plt.savefig(self.output_dir / "mua_channel_raster.svg", dpi=300)
-        #also save a 30s zoom
-        ax.set_xlim(0,30)
-        plt.savefig(self.output_dir / "mua_channel_raster_30s.svg", dpi=300)
-        plt.close(fig)
+        # # Quick raster plot
+        # fig, ax = plt.subplots(figsize=(12, 8))
+        # sorted_chs = sorted(spike_times.keys())
+        # for i, ch in enumerate(sorted_chs):
+        #     times = spike_times.get(ch, [])
+        #     if len(times) > 0:
+        #         ax.plot(times, np.ones_like(times) * i, '|', markersize=1, color='black', alpha=0.5)
+        # ax.set_title(f"MUA Raster - {self.stream_id}")
+        # plt.savefig(self.output_dir / "mua_channel_raster.svg", dpi=300)
+        # #also save a 30s zoom
+        # ax.set_xlim(0,30)
+        # plt.savefig(self.output_dir / "mua_channel_raster_30s.svg", dpi=300)
+        #plt.close(fig)
 
         return list(spike_times.keys())
 
@@ -646,7 +649,9 @@ class MEAPipeline:
 
                 # Clean data in memory
                 network_data_clean = helper.recursive_clean(network_data)
-
+                #add number of units
+                network_data_clean['n_units'] = len(spike_times)
+                
                 # Atomic Write (Temp -> Rename) to prevent corruption
                 temp_file = self.output_dir / "network_results.tmp.json"
                 final_file = self.output_dir / "network_results.json"
@@ -658,14 +663,27 @@ class MEAPipeline:
                     os.replace(temp_file, final_file)
                     self.logger.info(f"Successfully saved: {final_file}")
 
-                plot_Mode = 'merged'
+                #total_channels = self.recording.get_num_channels()
+                #channels_in_raster = len(spike_times)
+
+                #self.logger.info(
+                #    f"Raster plotting {channels_in_raster}/{total_channels} channels "
+                #    f"(including silent channels)"
+                #)
+
+                plot_Mode = 'separate'
+                debug_Mode = True
 
                 if plot_Mode == 'separate':
                     fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
                     ax_raster , ax_network = axs
                     helper.plot_clean_raster(
-                            ax_raster,
-                            spike_times
+                                ax_raster,
+                                spike_times,
+                                color='gray',
+                                markersize=4,
+                                markeredgewidth=0.5,
+                                alpha=1.0
                         )
                     helper.plot_clean_network(ax_network, **network_data["plot_data"])
                 elif plot_Mode == 'merged':
@@ -676,9 +694,10 @@ class MEAPipeline:
                     helper.plot_clean_raster(
                         ax_raster,
                         spike_times,
-                        color='black',
-                        markersize=5,
-                        alpha=0.5
+                        color='gray',
+                        markersize=4,
+                        markeredgewidth=0.5,
+                        alpha=1.0
                     )
 
                     # Network (right axis)
@@ -693,6 +712,21 @@ class MEAPipeline:
                 plt.tight_layout()
                 plt.subplots_adjust(hspace=0.05)
 
+                if debug_Mode:
+                    nb_events = network_data["network_bursts"]["events"]
+                    burst_intervals = [
+                        (ev["start"], ev["end"]) for ev in nb_events
+                    ]
+                    sb_events = network_data["superbursts"]["events"]
+                    sb_intervals = [
+                        (ev["start"], ev["end"]) for ev in sb_events
+                    ]
+                    #plotting this on ax_network
+                    for start, end in burst_intervals:
+                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
+                    for start, end in sb_intervals:
+                        ax_network.axvspan(start, end, color='gray', alpha=0.3)
+            
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
 
                 # 60 s zoom
@@ -709,9 +743,6 @@ class MEAPipeline:
                 plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
                 plt.close(fig)
                 # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
-
-
-                self.logger.info(f"Sanitizing JSON data for {len(network_data.get('unit_bursts', []))} units...")
                 
 
 
