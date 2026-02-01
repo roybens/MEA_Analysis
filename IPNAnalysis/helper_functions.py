@@ -208,7 +208,7 @@ def plot_clean_raster(
     color="grey",
     marker="|",
     markersize=5,
-    markeredgewidth=0.6,
+    markeredgewidth=0.8,
     alpha=0.7
 ):
     """
@@ -254,6 +254,7 @@ def plot_clean_network(
     t,
     signal,
     *,
+    signal_smooth=None,
     burst_peak_times=None,
     burst_peak_values=None,
     baseline=None,
@@ -289,7 +290,14 @@ def plot_clean_network(
         lw=1.5,
         zorder=2
     )
-
+    if signal_smooth is not None:
+        ax.plot(
+            t,
+            signal_smooth,
+            color="tab:orange",
+            lw=1.0,
+            zorder=3
+        )
     # --- burst peaks (ONE per network burst) ---
     if (
         burst_peak_times is not None
