@@ -1,0 +1,7 @@
+{
+    "num_spikes": 300,
+    "presence_ratio": 0.9,
+    "rp_contamination": 1.0,
+    "firing_rate": 0.05,
+    "amplitude_median": -20
+}
