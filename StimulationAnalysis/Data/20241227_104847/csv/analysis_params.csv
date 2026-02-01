@@ -1,0 +1,8 @@
+,analysisType,smoothingWindowSize,burstThreshold,fixedThreshold,minPeakDistance,startStopThreshold
+Instance,Analysis Type,Smoothing Window Size,Burst Detection Threshold,,Minimum Peak Distance,Start-Stop Threshold
+1,FR Burst Detector,0.14,1.2,0,1.0,0.3
+2,FR Burst Detector,0.14,1.2,0,1.0,0.3
+3,FR Burst Detector,0.14,1.2,0,1.0,0.3
+4,FR Burst Detector,0.14,1.2,0,1.0,0.3
+5,FR Burst Detector,0.14,1.2,0,1.0,0.3
+6,FR Burst Detector,0.14,1.2,0,1.0,0.3

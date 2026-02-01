@@ -735,14 +735,18 @@ def benshalom_kilosort2_docker_image(recording, output_folder, sorting_params=No
         shutil.rmtree(output_folder)
 
     logger.info(f"Running Kilosort2 spike sorting using Docker Images: {docker_image}.")
-    sorting = ss.run_sorter(
-        sorter_name="kilosort2",
-        recording=recording,
-        output_folder=output_folder,
-        docker_image=docker_image,
-        verbose=verbose,
-        **sorting_params
-    )
+    try:
+        sorting = ss.run_sorter(
+            sorter_name="kilosort2",
+            recording=recording,
+            output_folder=output_folder,
+            docker_image=docker_image,
+            verbose=verbose,
+            **sorting_params
+        )
+    except Exception as e:
+        logger.error(f"Error running Kilosort2: {e}")
+        return None
 
     return sorting
 
