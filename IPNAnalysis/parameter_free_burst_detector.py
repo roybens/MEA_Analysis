@@ -12,7 +12,7 @@ def compute_network_bursts(
     # ---------------- core params ----------------
     isi_threshold=0.1,
     bin_ms=10,
-    gamma=2.0,
+    gamma=1.0,
 
     # ---------------- smoothing ----------------
     smoothing_min_ms=20,
@@ -21,7 +21,8 @@ def compute_network_bursts(
     min_burstlet_participation=0.20,
     min_absolute_rate_Hz=0.5,    
     min_burst_density_Hz=1.0,    
-    min_relative_height=0.25,
+    min_relative_height=0.1,
+    extent_frac=0.30,
 
     # ---------------- merging ----------------
     burstlet_merge_gap_s=0.1,
@@ -44,17 +45,26 @@ def compute_network_bursts(
 
     # ---------------------------
     # 1. Calibration
-    # ---------------------------
-    all_isis = []
+    all_log_isis = []
     N = 2
+
     for u in units:
         t = np.unique(np.sort(SpikeTimes[u]))
         if len(t) >= N:
             isin = t[N-1:] - t[:-N+1]
             isin = isin[isin > 0]
-            all_isis.extend(isin.tolist())
-    biological_isi_s = np.median(all_isis) if all_isis else 0.1
-    adaptive_bin_ms = np.clip(0.5 * biological_isi_s * 1000.0, 1.0, bin_ms)
+            all_log_isis.extend(np.log10(isin))
+
+    biological_isi_s = (
+        10 ** np.median(all_log_isis)
+        if len(all_log_isis) > 0
+        else 0.1
+    )
+    adaptive_bin_ms = np.clip(
+    biological_isi_s * 1000.0,   # not 0.5 × ISI
+    10.0,
+    30.0
+    )
     bin_size = adaptive_bin_ms / 1000.0
     bins = np.arange(rec_start, rec_end + bin_size, bin_size)
     t_centers = (bins[:-1] + bins[1:]) / 2.0
@@ -66,54 +76,90 @@ def compute_network_bursts(
     for u in units:
         counts, _ = np.histogram(SpikeTimes[u], bins=bins)
         P += (counts > 0).astype(float)
-    W = P ** gamma
-
+    W_gamma = P ** gamma
+    W = P.astype(float)
+    # Population firing rate (spikes, not electrodes)
+    PFR = np.zeros(len(t_centers))
+    for u in units:
+        counts, _ = np.histogram(SpikeTimes[u], bins=bins)
+        PFR += counts
+    PFR = PFR / bin_size  # Hz
     # ---------------------------
     # 3. Dual Smoothing
     # ---------------------------
-    sigma_min_bins = max(1.0, smoothing_min_ms / adaptive_bin_ms)
-    sigma_slow_bins = max(sigma_min_bins, 5.0 * biological_isi_s / bin_size)
-    sigma_fast_bins = np.clip(sigma_slow_bins / 5.0, 1.0, 5.0)
-    
-    ws_onset = gaussian_filter1d(W, sigma_fast_bins)
-    ws_peak  = gaussian_filter1d(W, sigma_slow_bins)
-    
-    burstlet_merge_gap_s = 2.0 * biological_isi_s
-    network_merge_gap_s  = 5.0 * biological_isi_s
+    # assume bin_size already clipped to 10–30 ms
+
+    isi_bins = biological_isi_s / bin_size
+
+    sigma_fast_bins = np.clip(1.0 * isi_bins, 1.0, 2.0)
+    sigma_slow_bins = np.clip(5.0 * isi_bins, 3.0, 8.0)
+
+    ws_sharp = gaussian_filter1d(W, sigma_fast_bins)
+    ws_smooth  = gaussian_filter1d(W_gamma, sigma_slow_bins)
+    burstlet_merge_gap_s = 3 * biological_isi_s
+    network_merge_gap_s  = 10* biological_isi_s
 
     # ---------------------------------------------------------
     # 4. Burstlets via Peak Finding (NEW)
     # ---------------------------------------------------------
     # Calculate Threshold
     #global_max_height = np.percentile(ws_onset, 99) if len(ws_onset) > 0 else 0
-    global_max_height = np.max(ws_onset) if len(ws_onset) > 0 else 0
-    relative_threshold_val = global_max_height * min_relative_height
+    # global_max_height = np.max(ws_onset) if len(ws_onset) > 0 else 0
+    #relative_threshold_val = global_max_height * min_relative_height
+
+    baseline = np.median(ws_sharp)
+    spread   = np.median(np.abs(ws_sharp - baseline))  # MAD
+
+    relative_threshold_val = baseline + 3 * spread
+
+
 
     # 1. Find Peaks (The "Summits")
     # We use a tiny height threshold just to avoid finding peaks in absolute zero noise
     # The real filtering happens in the GATES below.
-    min_peak_height = np.max(ws_onset) * 0.01 
-    peaks, properties = find_peaks(ws_onset, height=min_peak_height)
+    #min_peak_height = np.max(ws_onset) * 0.01 
+    min_peak_height = baseline + 0.5 * spread
+    peaks, _ = find_peaks(ws_sharp, height=min_peak_height)
     peak_filtered =[]
     peak_filtered_times =[]
     # 2. Find Boundaries (The "Base" of the mountain)
     # rel_height=0.95 means "Measure width at 95% down from the peak" (near the bottom)
-    results_width = peak_widths(ws_onset, peaks, rel_height=0.80)
-    
-    # These indices are interpolated (floats), so we convert to int
-    starts_idx = np.floor(results_width[2]).astype(int)
-    ends_idx   = np.ceil(results_width[3]).astype(int)
-    
-    # Clip to array bounds
-    starts_idx = np.clip(starts_idx, 0, len(ws_onset)-1)
-    ends_idx   = np.clip(ends_idx, 0, len(ws_onset)-1)
+    starts_idx = []
+    ends_idx   = []
+
+    valid_peaks = []
+    starts_idx  = []
+    ends_idx    = []
+
+    n = len(ws_sharp)
+
+    for p in peaks:
+
+        # ---- expand LEFT while signal is rising ----
+        s = p
+        while s > 1 and ws_sharp[s - 1] <= ws_sharp[s]:
+            s -= 1
+
+        # ---- expand RIGHT while signal is falling ----
+        e = p
+        while e < n - 2 and ws_sharp[e + 1] <= ws_sharp[e]:
+            e += 1
+
+        if e > s:
+            valid_peaks.append(p)
+            starts_idx.append(s)
+            ends_idx.append(e)
+
+    valid_peaks = np.asarray(valid_peaks, dtype=int)
+    starts_idx  = np.asarray(starts_idx, dtype=int)
+    ends_idx    = np.asarray(ends_idx, dtype=int)
 
     burstlets = []
     candidate_log = []
 
     # Loop through the detected peaks
-    for i in range(len(peaks)):
-        s, e = starts_idx[i], ends_idx[i]
+    for i in range(len(valid_peaks)):
+        p,s, e = valid_peaks[i], starts_idx[i], ends_idx[i]
         
         # If peak is just 1 bin wide, expand it slightly to catch spikes
         if s == e: e += 1
@@ -139,9 +185,11 @@ def compute_network_bursts(
         raw_peak_counts = np.max(P[s:e]) if (e > s) else 0
         peak_rate_hz_per_unit = raw_peak_counts / bin_size / len(units)
         
-        peak_fast = np.max(ws_onset[s:e]) if (e > s) else 0
-        peak_fast_time= t_centers[s + np.argmax(ws_onset[s:e])] if (e > s) else 0
-        local_slow_baseline = np.max(ws_peak[s:e]) if (e > s) else 0
+        peak_fast = ws_sharp[p]
+        peak_fast_time= t_centers[p]
+        local_slow_baseline = np.max(ws_smooth[s:e]) if (e > s) else 0
+
+        burst_peak_pfr = np.max(PFR[s:e]) if (e > s) else 0.0
 
         # --- Diagnostics Log ---
         candidate_info = {
@@ -189,10 +237,11 @@ def compute_network_bursts(
             "end": float(end_t),
             "duration_s": float(duration_s),
             "peak_synchrony": float(peak_fast),
-            "synchrony_energy": float(np.sum(ws_peak[s:e]) * bin_size),
+            "synchrony_energy": float(np.sum(ws_smooth[s:e]) * bin_size),
             "participation": participation_frac,
             "total_spikes": int(total_spikes),
-            "peak_time": float(peak_fast_time)
+            "peak_time": float(peak_fast_time),
+            "burst_peak": float(burst_peak_pfr),
 
         })
 
@@ -237,7 +286,8 @@ def compute_network_bursts(
             "synchrony_energy": sum(ev["synchrony_energy"] for ev in events),
             "fragment_count": len(events),
             "total_spikes": sum(ev["total_spikes"] for ev in events),
-            "participation": float(np.mean([ev["participation"] for ev in events]))
+            "participation": float(np.mean([ev["participation"] for ev in events])),
+            "burst_peak": max(ev["burst_peak"] for ev in events),
         }
 
     network_bursts = merge(burstlets, burstlet_merge_gap_s)
@@ -254,16 +304,19 @@ def compute_network_bursts(
         starts = [e["start"] for e in events]
         return {
             "count": len(events),
-            "rate_bpm": len(events) / total_dur * 60.0,
+            "rate": len(events) / total_dur,
             "duration": stats([e["duration_s"] for e in events]),
             "inter_event_interval": stats(np.diff(starts)) if len(starts) > 1 else stats([]),
             "intensity": stats([e["synchrony_energy"] for e in events]),
-            "participation": stats([e["participation"] for e in events])
+            "participation": stats([e["participation"] for e in events]),
+            "spikes_per_burst": stats([e["total_spikes"] for e in events]),
+            "burst_peak": stats([e["burst_peak"] for e in events]),
+
         }
 
     if plot and ax_macro is not None:
-        ax_macro.plot(t_centers, ws_peak, color="tab:blue", lw=2)
-        ax_macro.plot(t_centers, ws_onset, color="tab:orange", lw=1)
+        ax_macro.plot(t_centers, ws_smooth, color="tab:blue", lw=2)
+        ax_macro.plot(t_centers, ws_sharp, color="tab:orange", lw=1)
         # Highlight peaks found
         #ax_macro.plot(t_centers[peaks], ws_onset[peaks], "x", color="red", label="Peaks")
         
@@ -278,14 +331,21 @@ def compute_network_bursts(
         "superbursts": {"events": superbursts, "metrics": level_metrics(superbursts)},
         "diagnostics": {
             "adaptive_bin_ms": adaptive_bin_ms,
+            "biological_isi_s": biological_isi_s,
+            "smoothing_sigma_fast_bins": sigma_fast_bins,
+            "smoothing_sigma_slow_bins": sigma_slow_bins,
+            "threshold_value": relative_threshold_val,
+            "burstlet_merge_gap_s": burstlet_merge_gap_s,
+            "network_merge_gap_s": network_merge_gap_s
             #"candidate_event_log": candidate_log
         },
         "plot_data": {
             "t": t_centers,
-            "signal": ws_onset,
+            "signal": ws_sharp,
+            "signal_smooth": ws_smooth,
             "burst_peak_times": np.array([b["peak_time"] for b in network_bursts]),
             "burst_peak_values": np.array([b["peak_synchrony"] for b in network_bursts]),
-            "baseline": np.percentile(ws_onset, 10),
+            "baseline": np.percentile(ws_sharp, 10),
             "threshold": relative_threshold_val
         }
 
