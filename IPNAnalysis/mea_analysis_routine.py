@@ -256,6 +256,10 @@ class MEAPipeline:
         rec = spre.highpass_filter(rec, freq_min=300)
 
         # Local Common Median Reference (Preserves Network Bursts)
+        # NOTE: I'm not 100% sure because its a bit annoying to test, but runing this with local_radius (250, 250) may be failing every time.
+        # If our intent is to get all channels within 250um, we should set local_radius=(0, 250). According to my cursory understanding of the docs, (250, 250) would create
+        # an annulus excluding the inner 250um radius. 
+        # -- aw 2026-02-01 20:44:37
         try:
             rec = spre.common_reference(rec, reference='local', operator='median', local_radius=(250, 250))
         except:
