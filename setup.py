@@ -13,11 +13,9 @@ setup(
     packages=[
         "MEA_Analysis",
         "MEA_Analysis.IPNAnalysis",
-        "MEA_Analysis.MEAProcessingLibrary",
     ],
     package_dir={
         "MEA_Analysis": ".",
         "MEA_Analysis.IPNAnalysis": "IPNAnalysis",
-        "MEA_Analysis.MEAProcessingLibrary": "MEAProcessingLibrary",
     },
 )
