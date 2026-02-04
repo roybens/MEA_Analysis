@@ -4,14 +4,17 @@ from scipy.signal import find_peaks, convolve
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
-def plot_network_activity(ax, SpikeTimes, 
+def plot_network_activity(
+                         ax=None,
+                         SpikeTimes=None,
                          binSize=0.01,  # 10 ms bins (improved from 0.1)
                          gaussianSigma=0.1,  # 100 ms sigma (improved from 0.16)
                          thresholdBurst=3.0,  # Multiple of std for adaptive threshold
                          min_peak_distance=1.0,  # seconds
                          min_active_threshold=0.1,  # Hz for active electrode definition
                          onset_offset_threshold_factor=0.3,  # Fraction of peak for burst boundaries
-                         figSize=(10, 6)):
+                         figSize=(10, 6),
+                         do_plot=True):
     """
     Detect and analyze network bursts in MEA data using Gaussian smoothing and adaptive peak detection.
     
@@ -57,6 +60,9 @@ def plot_network_activity(ax, SpikeTimes,
     relativeSpikeTimes = []
     active_units = 0
     
+    if SpikeTimes is None:
+        SpikeTimes = {}
+
     for unit_id, spike_times in SpikeTimes.items():
         if len(spike_times) == 0:
             continue
@@ -133,7 +139,12 @@ def plot_network_activity(ax, SpikeTimes,
             "network_burst_percentage": 0.0,
             "active_electrodes": active_units,
             "baseline_firing_rate": baseline_mean,
-            "baseline_std": baseline_std
+            "baseline_std": baseline_std,
+            "burst_onset_times": np.array([]),
+            "burst_offset_times": np.array([]),
+            "burst_peak_times": np.array([]),
+            "burst_peak_values": np.array([]),
+            "peak_threshold": float(peak_threshold),
         }
         return network_data
     
@@ -209,33 +220,34 @@ def plot_network_activity(ax, SpikeTimes,
     recording_duration = timeVector[-1] - timeVector[0]
     network_burst_rate = len(peaks) / recording_duration  # bursts per second
     
-    # Step 12: Plot the network activity
-    ax.plot(timeVector, firingRate, color='royalblue', linewidth=1.2, label='Network Firing Rate')
-    
-    # Plot detected peaks
-    ax.plot(burstPeakTimes, burstPeakValues, 'r*', markersize=3, 
-            label=f'Detected Bursts (n={len(peaks)})')
-    
-    # Plot threshold line
-    ax.axhline(y=peak_threshold, color='brown', linestyle='--', linewidth=1, 
-               alpha=0.7, label=f'Threshold ({thresholdBurst}×σ)')
-    
-    # Plot baseline
-    ax.axhline(y=baseline_mean, color='green', linestyle=':', linewidth=1, 
-               alpha=0.5, label='Baseline Mean')
-    
-    # Shade burst regions
-    for onset, offset in zip(burst_onset_times, burst_offset_times):
-        ax.axvspan(onset, offset, alpha=0.2, color='gray')
-    
-    # Set axis properties
-    ax.set_xlim([timeVector[0], timeVector[-1]])
-    ax.set_ylim([0, max(firingRate) * 1.1])
-    ax.set_ylabel('Network Firing Rate (Hz)', fontsize=11)
-    ax.set_xlabel('Time (s)', fontsize=11)
-    ax.set_title(f'Network Activity - {len(peaks)} Network Bursts Detected', fontsize=12, fontweight='bold')
-    ax.legend(loc='upper right', fontsize=9)
-    ax.grid(True, alpha=0.3)
+    if do_plot and ax is not None:
+        # Step 12: Plot the network activity
+        ax.plot(timeVector, firingRate, color='royalblue', linewidth=1.2, label='Network Firing Rate')
+
+        # Plot detected peaks
+        ax.plot(burstPeakTimes, burstPeakValues, 'r*', markersize=3,
+                label=f'Detected Bursts (n={len(peaks)})')
+
+        # Plot threshold line
+        ax.axhline(y=peak_threshold, color='brown', linestyle='--', linewidth=1,
+                   alpha=0.7, label=f'Threshold ({thresholdBurst}×σ)')
+
+        # Plot baseline
+        ax.axhline(y=baseline_mean, color='green', linestyle=':', linewidth=1,
+                   alpha=0.5, label='Baseline Mean')
+
+        # Shade burst regions
+        for onset, offset in zip(burst_onset_times, burst_offset_times):
+            ax.axvspan(onset, offset, alpha=0.2, color='gray')
+
+        # Set axis properties
+        ax.set_xlim([timeVector[0], timeVector[-1]])
+        ax.set_ylim([0, max(firingRate) * 1.1])
+        ax.set_ylabel('Network Firing Rate (Hz)', fontsize=11)
+        ax.set_xlabel('Time (s)', fontsize=11)
+        ax.set_title(f'Network Activity - {len(peaks)} Network Bursts Detected', fontsize=12, fontweight='bold')
+        ax.legend(loc='upper right', fontsize=9)
+        ax.grid(True, alpha=0.3)
     
     # Step 13: Compile network metrics
     network_data = {
@@ -251,8 +263,14 @@ def plot_network_activity(ax, SpikeTimes,
         "network_burst_percentage": network_burst_percentage,  # percentage
         "active_electrodes": active_units,
         "baseline_firing_rate": baseline_mean,  # Hz
-        "baseline_std": baseline_std  # Hz
+        "baseline_std": baseline_std,  # Hz
+        "burst_onset_times": burst_onset_times,
+        "burst_offset_times": burst_offset_times,
+        "burst_peak_times": burstPeakTimes,
+        "burst_peak_values": burstPeakValues,
+        "peak_threshold": float(peak_threshold),
     }
-    
-    ax.plot(burstPeakTimes, burstPeakValues, 'or')  # Plot burst peaks as red circles    
+
+    if do_plot and ax is not None:
+        ax.plot(burstPeakTimes, burstPeakValues, 'or')  # Plot burst peaks as red circles
     return network_data
