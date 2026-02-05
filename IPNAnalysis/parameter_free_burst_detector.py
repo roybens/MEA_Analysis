@@ -115,24 +115,39 @@ def compute_network_bursts(
     # 6. Valley-Aware Merging (The "Biological" Fix)
     # ---------------------------
     def merge(events, gap, min_dur=0):
-        if not events: return []
-        events = sorted(events, key=lambda x: x['start'])
-        merged, curr = [], [events[0]]
-        s, e = events[0]["start"], events[0]["end"]
-
-        for nxt in events[1:]:
-            # Valley Check: resets based on baseline
-            mid_start, mid_end = int(e / bin_size), int(nxt["start"] / bin_size)
-            valley_min = np.min(ws_sharp[mid_start:mid_end]) if mid_end > mid_start else baseline
+            if not events: return []
+            events = sorted(events, key=lambda x: x['start'])
             
-            if nxt["start"] <= e + gap and valley_min > (baseline + spread):
-                curr.append(nxt)
-                e = max(e, nxt["end"])
-            else:
-                merged.append(finalize(curr, s, e))
-                curr, s, e = [nxt], nxt["start"], nxt["end"]
-        merged.append(finalize(curr, s, e))
-        return [m for m in merged if m["duration_s"] >= min_dur]
+            merged = []
+            curr = [events[0]]
+            s, e = events[0]["start"], events[0]["end"]
+
+            for nxt in events[1:]:
+                # 1. Temporal Check (Standard)
+                in_gap = (nxt["start"] <= e + gap)
+
+                # 2. Valley Check (Using your calculated relative_threshold_val)
+                # Find the indices between the current end and the next start
+                mid_start_idx = int(e / bin_size)
+                mid_end_idx = int(nxt["start"] / bin_size)
+                
+                # If the peaks are very close, the valley is just the value at the end of the first peak
+                if mid_end_idx > mid_start_idx:
+                    valley_min = np.min(ws_sharp[mid_start_idx:mid_end_idx])
+                else:
+                    valley_min = ws_sharp[mid_start_idx]
+
+                # MERGE CONDITION: 
+                # Within time gap AND the signal never dropped below our adaptive threshold.
+                if in_gap and valley_min >= relative_threshold_val:
+                    curr.append(nxt)
+                    e = max(e, nxt["end"])
+                else:
+                    merged.append(finalize(curr, s, e))
+                    curr, s, e = [nxt], nxt["start"], nxt["end"]
+            
+            merged.append(finalize(curr, s, e))
+            return [m for m in merged if m["duration_s"] >= min_dur]
 
     def finalize(evs, s, e):
         best = max(evs, key=lambda x: x["peak_synchrony"])
