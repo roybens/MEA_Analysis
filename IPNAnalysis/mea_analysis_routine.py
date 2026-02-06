@@ -723,9 +723,9 @@ class MEAPipeline:
                     ]
                     #plotting this on ax_network
                     for start, end in burst_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
+                        ax_network.axvspan(start, end, color='gray', alpha=0.1)
                     for start, end in sb_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.3)
+                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
             
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
 
