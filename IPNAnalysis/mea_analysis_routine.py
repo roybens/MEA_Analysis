@@ -101,7 +101,9 @@ class MEAPipeline:
 
     def __init__(self, file_path, stream_id='well000', recording_num='rec0000', output_root=None, checkpoint_root=None, 
                  sorter='kilosort4', docker_image=None, verbose=True, 
-                 cleanup=False, force_restart=False):
+                 cleanup=False, force_restart=False,
+                 n_jobs: int | None = None,
+                 chunk_duration: str | None = None):
         
         self.file_path = Path(file_path).resolve()
         self.stream_id = stream_id
@@ -111,6 +113,10 @@ class MEAPipeline:
         self.verbose = verbose
         self.cleanup_flag = cleanup
         self.force_restart = force_restart
+
+        # Optional resource hints (used by some SpikeInterface steps).
+        self.n_jobs = n_jobs
+        self.chunk_duration = chunk_duration
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -390,7 +396,11 @@ class MEAPipeline:
     def _spike_detection_only(self):
         """Detects spikes (threshold crossings) without sorting."""
         self.logger.info("--- [Phase 2-Alt] Spike Detection (No Sorting) ---")
-        job_kwargs = {'n_jobs': 16, 'chunk_duration': '1s', 'progress_bar': self.verbose}
+        job_kwargs = {
+            'n_jobs': (int(self.n_jobs) if self.n_jobs is not None else 16),
+            'chunk_duration': (str(self.chunk_duration) if self.chunk_duration is not None else '1s'),
+            'progress_bar': self.verbose,
+        }
         
         peaks = detect_peaks(
             self.recording, method='by_channel', 
@@ -461,7 +471,10 @@ class MEAPipeline:
                 "unit_locations": {"method": "monopolar_triangulation"}
             }
             
-            self.analyzer.compute(ext_list, extension_params=ext_params, verbose=self.verbose)
+            compute_kwargs = {'verbose': self.verbose}
+            if self.n_jobs is not None:
+                compute_kwargs['n_jobs'] = int(self.n_jobs)
+            self.analyzer.compute(ext_list, extension_params=ext_params, **compute_kwargs)
             self._save_checkpoint(ProcessingStage.ANALYZER_COMPLETE,failed_stage=None, error=None)
         except Exception as e:
             err = {
