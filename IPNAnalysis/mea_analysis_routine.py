@@ -30,32 +30,44 @@ import spikeinterface.full as si
 import spikeinterface.preprocessing as spre
 import spikeinterface.curation as sic
 
-# This ensures Python looks in the same folder as this script for modules
-script_dir = Path(__file__).resolve().parent
-if str(script_dir) not in sys.path:
-    sys.path.append(str(script_dir))
+# If this file is executed as a *script* (not imported as a package module),
+# allow local imports by adding the script folder and repo root to sys.path.
+# When imported as `MEA_Analysis.IPNAnalysis.mea_analysis_routine`, we avoid
+# mutating sys.path and rely on proper package-relative imports.
+if not __package__:
+    script_dir = Path(__file__).resolve().parent
+    if str(script_dir) not in sys.path:
+        sys.path.append(str(script_dir))
 
-# Add the parent directory of MEA_Analysis to path so absolute imports work
-# Assuming structure: /.../MEA_Analysis/IPNAnalysis/mea_analysis_routine.py
-# We need to add /.../ to path to import MEA_Analysis.IPNAnalysis...
-root_dir = script_dir.parent.parent 
-if str(root_dir) not in sys.path:
-    sys.path.append(str(root_dir))
-# --- FIX END ---
+    root_dir = script_dir.parent.parent
+    if str(root_dir) not in sys.path:
+        sys.path.append(str(root_dir))
 
-# Import your custom modules
+
+# Import helper modules.
+# - When imported as a package module, prefer relative imports.
+# - When executed as a script, prefer local (same-folder) imports.
 try:
-    # Use simple imports if the files are in the same directory
-    # OR keep your package structure if path is fixed above
-    from parameter_free_burst_detector import compute_network_bursts
-    import helper_functions as helper
-    from scalebury import add_scalebar
-except ImportError as e:
-    # CRITICAL CHANGE: Do not silence this error. 
-    # If helpers are missing, the analysis CANNOT proceed. Crash immediately.
-    print(f"CRITICAL ERROR: Could not import helper modules. {e}")
-    print(f"Current sys.path: {sys.path}")
-    sys.exit(1)
+    if __package__:
+        from .parameter_free_burst_detector import compute_network_bursts
+        from . import helper_functions as helper
+        from .scalebury import add_scalebar
+    else:
+        from parameter_free_burst_detector import compute_network_bursts
+        import helper_functions as helper
+        from scalebury import add_scalebar
+except ImportError:
+    try:
+        from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
+        from MEA_Analysis.IPNAnalysis import helper_functions as helper
+        from MEA_Analysis.IPNAnalysis.scalebury import add_scalebar
+    except ImportError as e:
+        raise ImportError(
+            "Could not import MEA_Analysis.IPNAnalysis helper modules "
+            "(parameter_free_burst_detector/helper_functions/scalebury). "
+            "If you are running this file directly, prefer: "
+            "`python -m MEA_Analysis.IPNAnalysis.mea_analysis_routine ...`"
+        ) from e
 
 
 
