@@ -103,7 +103,8 @@ class MEAPipeline:
                  sorter='kilosort4', docker_image=None, verbose=True, 
                  cleanup=False, force_restart=False,
                  n_jobs: int | None = None,
-                 chunk_duration: str | None = None):
+                 chunk_duration: str | None = None,
+                 sorter_kwargs: dict | None = None):
         
         self.file_path = Path(file_path).resolve()
         self.stream_id = stream_id
@@ -117,6 +118,9 @@ class MEAPipeline:
         # Optional resource hints (used by some SpikeInterface steps).
         self.n_jobs = n_jobs
         self.chunk_duration = chunk_duration
+
+        # Optional sorter kwargs override (e.g. Kilosort4 batch_size tuning).
+        self.sorter_kwargs = sorter_kwargs
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -358,6 +362,15 @@ class MEAPipeline:
             ks_params = ks_params_high_vram
         else:
             ks_params = ks_params_low_vram
+
+        # Optional override from caller (e.g. debug harness). This lets us tune
+        # Kilosort parameters (like batch_size) without forking MEA_Analysis.
+        if getattr(self, "sorter_kwargs", None):
+            try:
+                ks_params = dict(ks_params)
+                ks_params.update(dict(self.sorter_kwargs))
+            except Exception:
+                pass
 
         start = timer()
         try:
