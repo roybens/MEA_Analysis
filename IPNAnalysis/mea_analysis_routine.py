@@ -104,7 +104,11 @@ class MEAPipeline:
                  cleanup=False, force_restart=False,
                  n_jobs: int | None = None,
                  chunk_duration: str | None = None,
-                 sorter_kwargs: dict | None = None):
+                 sorter_kwargs: dict | None = None,
+                 auto_merge_units: bool = False,
+                 auto_merge_presets: list[str] | None = None,
+                 auto_merge_steps_params: list[dict] | None = None,
+                 force_rerun_analyzer: bool = False):
         
         self.file_path = Path(file_path).resolve()
         self.stream_id = stream_id
@@ -121,6 +125,14 @@ class MEAPipeline:
 
         # Optional sorter kwargs override (e.g. Kilosort4 batch_size tuning).
         self.sorter_kwargs = sorter_kwargs
+
+        # Optional post-sorting unit merge (default-off).
+        self.auto_merge_units = bool(auto_merge_units)
+        self.auto_merge_presets = auto_merge_presets
+        self.auto_merge_steps_params = auto_merge_steps_params
+
+        # Allow re-running analyzer without re-running spikesorting.
+        self.force_rerun_analyzer = bool(force_rerun_analyzer)
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -456,7 +468,11 @@ class MEAPipeline:
     # --- Phase 3: Analyzer ---
     def run_analyzer(self):
         analyzer_folder = self.output_dir / "analyzer_output"
-        if self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value and  analyzer_folder.exists():
+        if (
+            (not self.force_rerun_analyzer)
+            and self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value
+            and analyzer_folder.exists()
+        ):
             self.logger.info("Resuming: Loading Sorting Analyzer.")
             self.analyzer = si.load_sorting_analyzer(analyzer_folder)
             return
@@ -464,17 +480,98 @@ class MEAPipeline:
         self._save_checkpoint(ProcessingStage.ANALYZER)
         self.logger.info("--- [Phase 3] Computing Sorting Analyzer ---")
         try:
-            if analyzer_folder.exists(): shutil.rmtree(analyzer_folder)
+            if analyzer_folder.exists():
+                shutil.rmtree(analyzer_folder)
 
             sparsity = si.estimate_sparsity(
                 self.sorting, self.recording, 
                 method="radius", radius_um=50, peak_sign='neg'
             )
 
+            # Build an analyzer on the current sorting.
             self.analyzer = si.create_sorting_analyzer(
-                self.sorting, self.recording, format="binary_folder", 
-                folder=analyzer_folder, sparsity=sparsity, return_in_uV=True
+                self.sorting,
+                self.recording,
+                format="binary_folder",
+                folder=analyzer_folder,
+                sparsity=sparsity,
+                return_in_uV=True,
             )
+
+            # Optional post-sorting unit merge (default off).
+            # We compute a minimal set of extensions required to support merging,
+            # run the merge, then rebuild the analyzer on the merged sorting so
+            # disk outputs correspond to the merged units.
+            if self.auto_merge_units:
+                try:
+                    presets = self.auto_merge_presets
+                    steps_params = self.auto_merge_steps_params
+
+                    if presets is None or steps_params is None:
+                        template_diff_thresh = [0.05, 0.15, 0.25]
+                        presets = ["x_contaminations"] * len(template_diff_thresh)
+                        steps_params = [
+                            {"template_similarity": {"template_diff_thresh": float(t)}}
+                            for t in template_diff_thresh
+                        ]
+
+                    # Compute what auto_merge_units typically needs.
+                    merge_exts = ["random_spikes", "templates", "template_similarity", "correlograms"]
+                    merge_kwargs = {'verbose': self.verbose}
+                    if self.n_jobs is not None:
+                        merge_kwargs['n_jobs'] = int(self.n_jobs)
+                    self.analyzer.compute(merge_exts, **merge_kwargs)
+
+                    n_before = int(self.analyzer.sorting.get_num_units())
+                    try:
+                        merged = sic.auto_merge_units(
+                            self.analyzer,
+                            presets=presets,
+                            steps_params=steps_params,
+                            recursive=True,
+                            n_jobs=(int(self.n_jobs) if self.n_jobs is not None else 1),
+                        )
+                    except TypeError:
+                        # Fallback for older SpikeInterface signatures.
+                        merged = sic.auto_merge_units(
+                            self.analyzer,
+                            presets=presets,
+                            steps_params=steps_params,
+                            recursive=True,
+                        )
+
+                    # SpikeInterface may return an analyzer, a sorting, or a tuple.
+                    if isinstance(merged, tuple) and len(merged) >= 1:
+                        merged = merged[0]
+
+                    if hasattr(merged, "sorting"):
+                        merged_sorting = merged.sorting
+                    else:
+                        merged_sorting = merged
+
+                    n_after = int(merged_sorting.get_num_units())
+                    self.logger.info("Auto-merge units: %d -> %d", n_before, n_after)
+
+                    # Rebuild analyzer on merged sorting (so on-disk outputs reflect merged units).
+                    if analyzer_folder.exists():
+                        shutil.rmtree(analyzer_folder)
+                    sparsity_merged = si.estimate_sparsity(
+                        merged_sorting,
+                        self.recording,
+                        method="radius",
+                        radius_um=50,
+                        peak_sign='neg',
+                    )
+                    self.analyzer = si.create_sorting_analyzer(
+                        merged_sorting,
+                        self.recording,
+                        format="binary_folder",
+                        folder=analyzer_folder,
+                        sparsity=sparsity_merged,
+                        return_in_uV=True,
+                    )
+                except Exception as e:
+                    self.logger.warning("Auto-merge units failed; continuing without merging (%s)", e)
 
             ext_list = ["random_spikes","spike_amplitudes", "waveforms", "templates", "noise_levels", 
                         "quality_metrics", "template_metrics", "unit_locations"]
@@ -823,6 +920,23 @@ def main():
     parser.add_argument('--skip-spikesorting', action='store_true')
     parser.add_argument("--reanalyze-bursts", action="store_true", help="Only re-run burst analysis on existing spike times.")
 
+    # Optional post-spikesort step(s)
+    parser.add_argument(
+        "--auto-merge-units",
+        action='store_true',
+        help="Optional (default off): run SpikeInterface auto_merge_units during analyzer stage.",
+    )
+    parser.add_argument(
+        "--auto-merge-template-diff-thresh",
+        default="0.05,0.15,0.25",
+        help="Comma-separated template_diff_thresh values for auto-merge (used with preset x_contaminations).",
+    )
+    parser.add_argument(
+        "--rerun-analyzer",
+        action='store_true',
+        help="Recompute analyzer_output even if checkpoint says complete (does not rerun spikesorting).",
+    )
+
     args = parser.parse_args()
     
     thresholds = None
@@ -832,11 +946,28 @@ def main():
         else: thresholds = json.loads(args.params)
 
     try:
+        auto_merge_presets = None
+        auto_merge_steps_params = None
+        if args.auto_merge_units:
+            try:
+                diffs = [float(x.strip()) for x in str(args.auto_merge_template_diff_thresh).split(",") if x.strip()]
+                auto_merge_presets = ["x_contaminations"] * len(diffs)
+                auto_merge_steps_params = [{"template_similarity": {"template_diff_thresh": float(t)}} for t in diffs]
+            except Exception:
+                # Fall back to internal defaults in MEAPipeline.run_analyzer
+                auto_merge_presets = None
+                auto_merge_steps_params = None
+
         pipeline = MEAPipeline(
             file_path=args.file_path, stream_id=args.well, recording_num=args.rec,
             output_root=args.output_dir, checkpoint_root=args.checkpoint_dir,
             sorter=args.sorter, docker_image=args.docker, verbose=args.debug,
-            cleanup=args.clean_up, force_restart=args.force_restart
+            cleanup=args.clean_up,
+            force_restart=args.force_restart,
+            auto_merge_units=bool(args.auto_merge_units),
+            auto_merge_presets=auto_merge_presets,
+            auto_merge_steps_params=auto_merge_steps_params,
+            force_rerun_analyzer=bool(args.rerun_analyzer),
         )
 
         if args.reanalyze_bursts:
