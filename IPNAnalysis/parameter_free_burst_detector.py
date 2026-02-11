@@ -170,7 +170,8 @@ def compute_network_bursts(
             "intensity": stats([ev["synchrony_energy"] for ev in events]),
             "participation": stats([ev["participation"] for ev in events]),
             "spikes_per_burst": stats([ev["total_spikes"] for ev in events]),
-            "burst_peak": stats([ev["burst_peak"] for ev in events]) 
+            "burst_peak": stats([ev["burst_peak"] for ev in events]),
+            "peak_synchrony": stats([ev["peak_synchrony"] for ev in events])
         }
 
     if plot and ax_macro is not None:
