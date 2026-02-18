@@ -1,0 +1,43 @@
+{
+  "_comment": "MEA Pipeline Config. CLI flags always override these values. Remove _comment keys before use.",
+
+  "io": {
+    "_comment": "Set output_dir for all results. checkpoint_dir defaults to <output_dir>/checkpoints if not set.",
+    "output_dir": null,
+    "checkpoint_dir": null,
+    "export_to_phy": false,
+    "clean_up": false
+  },
+
+  "sorting": {
+    "_comment": "sorter options: kilosort4, mountainsort5, tridesclous. docker_image only needed for containerized sorting.",
+    "sorter": "kilosort4",
+    "docker_image": null
+  },
+
+  "filtering": {
+    "_comment": "Driver only. reference_file = Excel with 'Run #' and 'Assay' columns.",
+    "reference_file": null,
+    "assay_types": ["network today", "network today/best"]
+  },
+
+  "plotting": {
+    "_comment": "plot_mode: separate | merged. raster_sort: none | firing_rate | location_y | unit_id.",
+    "plot_mode": "separate",
+    "raster_sort": "none",
+    "plot_debug": false
+  },
+
+  "curation": {
+    "_comment": "Set no_curation to true to skip unit filtering entirely.",
+    "no_curation": false,
+    "quality_thresholds": {
+      "_comment": "amplitude_median is negative (uV). Units with amplitude > this value are rejected.",
+      "presence_ratio": 0.75,
+      "rp_contamination": 0.15,
+      "firing_rate": 0.05,
+      "amplitude_median": -20,
+      "amplitude_cv_median": 0.5
+    }
+  }
+}
