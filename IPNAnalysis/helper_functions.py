@@ -260,7 +260,7 @@ def plot_clean_network(
     baseline=None,
     threshold=None,
     ylim=None,
-    color="tab:blue"
+    color="#B22222"
 ):
     """
     Clean network activity plot.
