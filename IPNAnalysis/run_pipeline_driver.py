@@ -19,6 +19,24 @@ import traceback
 import pandas as pd
 import logging
 from datetime import datetime
+
+# This ensures Python looks in the same folder as this script for modules
+script_dir = Path(__file__).resolve().parent
+if str(script_dir) not in sys.path:
+    sys.path.append(str(script_dir))
+
+# Add the parent directory of MEA_Analysis to path so absolute imports work
+root_dir = script_dir.parent.parent 
+if str(root_dir) not in sys.path:
+    sys.path.append(str(root_dir))
+
+# Import your custom modules
+try:
+    from config_loader import load_config, resolve_args, build_extra_args
+except ImportError as e:
+    print(f"CRITICAL ERROR: Could not import helper modules. {e}")
+    print(f"Current sys.path: {sys.path}")
+    sys.exit(1)
 BASE_FILE_PATH = str(Path(__file__).resolve().parent)
 
 # ----------------------------------------------------------
@@ -76,28 +94,73 @@ def launch_sorting_subprocess(file_path, rec_name, stream_id, extra_args=""):
 # Main
 # ----------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="MEA Pipeline Driver")
+    parser = argparse.ArgumentParser(
+        description="MEA Pipeline Driver — batch processes MEA data files",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
 
-    parser.add_argument("path", type=str, help="File or directory path containing MEA data")
-    parser.add_argument("--reference", type=str, help="Optional Excel file to filter runs")
-    parser.add_argument("--type", nargs="+", default=['network today', 'network today/best'], help="Assay types to include")
-    parser.add_argument("--params", type=str, help="JSON file or string with quality thresholds")
-    parser.add_argument("--docker", type=str, help="Docker image name if using containerized sorting")
-    #parser.add_argument("--resume", action="store_true", help="Resume from checkpoint"). #auto resumes
-    parser.add_argument("--skip-spikesorting", action="store_true", help="Skip spike sorting stage")
-    parser.add_argument("--force-restart", action="store_true", help="Restart even if checkpoint complete")
-    parser.add_argument("--sorter", default="kilosort4", help="Sorter to use")
-    parser.add_argument("--debug", action="store_true", help="Debug mode")
-    parser.add_argument("--dry", action="store_true", help="Dry run only (no processing)")
-    parser.add_argument("--clean-up", action="store_true", help="Clear sorter outputs etc.")
-    parser.add_argument("--export-to-phy", action="store_true", help="Export results to Phy format")
-    parser.add_argument("--checkpoint-dir", type=str, default=None, help="Checkpoint directory")
-    parser.add_argument("--no-curation", action="store_true", help="Skip automatic curation")
-    parser.add_argument("--output-dir", type=str, help="Output directory for results")
-    parser.add_argument("--reanalyze-bursts", action="store_true", help="Re-analyze bursts even if present")
+    # --- Positional ---
+    parser.add_argument("path", type=str,
+        help="File or directory path containing MEA data")
+
+    # --- Input / Output ---
+    io_group = parser.add_argument_group("input/output")
+    io_group.add_argument("--config", type=str, default=None,
+        help="Path to config JSON file (CLI flags always override config)")
+    io_group.add_argument("--output-dir", type=str, default=None,
+        help="Output directory for all results")
+    io_group.add_argument("--checkpoint-dir", type=str, default=None,
+        help="Checkpoint directory (default: <output-dir>/checkpoints)")
+    io_group.add_argument("--export-to-phy", action="store_true",
+        help="Export results to Phy format")
+    io_group.add_argument("--clean-up", action="store_true",
+        help="Remove intermediate files after processing")
+
+    # --- Filtering (directory mode only) ---
+    filter_group = parser.add_argument_group("filtering (directory mode only)")
+    filter_group.add_argument("--reference", type=str, default=None,
+        help="Excel file to filter runs by assay type\n(must have 'Run #' and 'Assay' columns)")
+    filter_group.add_argument("--type", nargs="+", default=['network today', 'network today/best'],
+        help="Assay types to include\n(default: 'network today' 'network today/best')")
+
+    # --- Sorting (passed to each well) ---
+    sort_group = parser.add_argument_group("sorting (passed to each well)")
+    sort_group.add_argument("--sorter", type=str, default=None,
+        help="Spike sorter to use (default: kilosort4)")
+    sort_group.add_argument("--docker", type=str, default=None,
+        help="Docker image name for containerized sorting")
+    sort_group.add_argument("--skip-spikesorting", action="store_true",
+        help="Run spike detection only, skip full sorting")
+
+    # --- Plotting (passed to each well) ---
+    plot_group = parser.add_argument_group("plotting (passed to each well)")
+    plot_group.add_argument("--plot-mode", choices=["separate", "merged"], default=None,
+        help="Plot raster and network on separate axes or merged twin-axis\n(default: separate)")
+    plot_group.add_argument("--raster-sort", choices=["none", "firing_rate", "location_y", "unit_id"], default=None,
+        help="How to sort units on raster y-axis (default: none)")
+    plot_group.add_argument("--plot-debug", action="store_true",
+    help="Overlay burst and superburst intervals on raster plot")
+    # --- Curation (passed to each well) ---
+    cur_group = parser.add_argument_group("curation (passed to each well)")
+    cur_group.add_argument("--no-curation", action="store_true",
+        help="Skip automatic unit curation")
+    cur_group.add_argument("--params", type=str, default=None,
+        help="JSON string or file path with quality thresholds")
+
+    # --- Run Control ---
+    ctrl_group = parser.add_argument_group("run control")
+    ctrl_group.add_argument("--force-restart", action="store_true",
+        help="Ignore checkpoints and restart from scratch")
+    ctrl_group.add_argument("--reanalyze-bursts", action="store_true",
+        help="Re-run burst analysis on existing spike times")
+    ctrl_group.add_argument("--dry", action="store_true",
+        help="Print what would run without any processing")
+    ctrl_group.add_argument("--debug", action="store_true",
+        help="Enable verbose logging")
 
     args = parser.parse_args()
-
+    config   = load_config(args.config)
+    resolved = resolve_args(args, config)
     logger = None
 
     # -------------------------------------------------------------------
@@ -145,21 +208,9 @@ def main():
     # ------------------------------------------------------
     # Build extra argument string for subprocess
     # ------------------------------------------------------
-    extra_args = []
-    #if args.resume: extra_args.append("--resume")
-    if args.force_restart: extra_args.append("--force-restart")
-    if args.docker: extra_args.append(f"--docker {args.docker}")
-    if args.sorter: extra_args.append(f"--sorter {args.sorter}")
-    if args.debug: extra_args.append("--debug")
-    if args.params: extra_args.append(f"--params '{args.params}'")
-    if args.clean_up: extra_args.append("--clean-up")
-    if args.checkpoint_dir: extra_args.append(f"--checkpoint-dir '{args.checkpoint_dir}'")
-    if args.export_to_phy: extra_args.append("--export-to-phy")
-    if args.no_curation: extra_args.append("--no-curation")
-    if args.skip_spikesorting: extra_args.append("--skip-spikesorting")
-    if args.output_dir: extra_args.append(f"--output-dir '{args.output_dir}'")
-    if args.reanalyze_bursts: extra_args.append("--reanalyze-bursts")
-    extra_arg_string = " ".join(extra_args)
+    extra_arg_string = build_extra_args(resolved, args)
+    logger.debug(f"Constructed extra argument string for subprocesses: {extra_arg_string}")
+
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
     #ticker
     start_clock = time.time()
