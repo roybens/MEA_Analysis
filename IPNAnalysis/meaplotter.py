@@ -21,7 +21,7 @@ class MEAPlotter:
     def calculate_stats(self, df, x, y, order=None):
         """
         STEP 1: Pure Analysis.
-        Returns a DataFrame containing T-stats, P-values, and Cohen's d.
+        Returns a DataFrame containing Descriptive Stats, T-stats, P-values, and Cohen's d.
         """
         data = df.copy()
         if order is None: order = sorted(data[x].unique())
@@ -35,12 +35,19 @@ class MEAPlotter:
             d1 = data[data[x] == group1][y]
             d2 = data[data[x] == group2][y]
             
+            # Descriptive Stats
+            n1, n2 = len(d1), len(d2)
+            mean1, mean2 = d1.mean(), d2.mean()
+            # Handle SEM carefully in case N=1
+            sem1 = d1.sem() if n1 > 1 else 0.0
+            sem2 = d2.sem() if n2 > 1 else 0.0
+            
             # Welch's t-test
             t_stat, p_val = stats.ttest_ind(d1, d2, equal_var=False)
             
             # Cohen's d
             pooled_std = np.sqrt((d1.std()**2 + d2.std()**2) / 2)
-            cohens_d = (d1.mean() - d2.mean()) / pooled_std
+            cohens_d = (mean1 - mean2) / pooled_std
             
             # Stars
             stars = "ns"
@@ -50,13 +57,15 @@ class MEAPlotter:
 
             stats_list.append({
                 "Comparison": f"{group1} vs {group2}",
+                "Grp1_Stats": f"{mean1:.1f} ± {sem1:.1f} (n={n1})",
+                "Grp2_Stats": f"{mean2:.1f} ± {sem2:.1f} (n={n2})",
                 "t-stat": t_stat,
                 "p-val": p_val,
                 "Sig": stars,
                 "Cohen's d": cohens_d
             })
             
-            print(f"{group1} vs {group2}: p={p_val:.4e} ({stars}), d={cohens_d:.3f}")
+            print(f"{group1} (n={n1}) vs {group2} (n={n2}): p={p_val:.4e} ({stars}), d={cohens_d:.3f}")
             
         return pd.DataFrame(stats_list)
 
@@ -76,7 +85,7 @@ class MEAPlotter:
 
         # 2. Strip Plot
         sns.stripplot(data=df, x=x, y=y, order=order, palette=palette,
-                      color='black', alpha=0.6, jitter=0.2, size=5, 
+                      color='black', alpha=0.6, jitter=0.2, size=15, 
                       edgecolor='black', linewidth=0.5, ax=ax)
 
         # 3. Add Significance Brackets (Calculates its own stats for placement)
@@ -97,17 +106,20 @@ class MEAPlotter:
         
         return ax
 
-    def save_pdf(self, df, x, y, order, stats_df, palette=None, title=None, filename="Report.pdf"):
+    def save_pdf(self, df, x, y, order, stats_df, palette=None, title=None, filename="Report.pdf",pdf_obj=None):
         """
         STEP 3: Report Generation.
         Combines Plot (Top) and Stats Table (Bottom) into one PDF.
         """
         # Create a figure with 2 rows (Plot is 3x taller than Table)
-        fig = plt.figure(figsize=(8, 11)) 
+        fig = plt.figure(figsize=(10, 12)) # Widened to fit the extra table columns
         gs = fig.add_gridspec(2, 1, height_ratios=[3, 1])
 
         # Draw Plot in Top Section
         ax_plot = fig.add_subplot(gs[0])
+        
+        # Center the plot slightly by wrapping it in standard margins
+        ax_plot.margins(x=0.1) 
         self.plot_bars(df, x, y, order, palette, title, ax=ax_plot)
 
         # Draw Table in Bottom Section
@@ -117,33 +129,42 @@ class MEAPlotter:
         # Prepare table text
         cell_text = []
         for _, row in stats_df.iterrows():
-            # FIX: Use .format() instead of f-string for key with quote
-            cohen_val = "{:.3f}".format(row["Cohen's d"])
+            cohen_val = "{:.2f}".format(row["Cohen's d"])
             
             cell_text.append([
                 row['Comparison'],
-                f"{row['t-stat']:.3f}",
+                row['Grp1_Stats'],
+                row['Grp2_Stats'],
+                f"{row['t-stat']:.2f}",
                 f"{row['p-val']:.4e}",
                 row['Sig'],
                 cohen_val
             ])
             
-        col_labels = ["Comparison", "t-stat", "p-value", "Sig", "Cohen's d"]
+        col_labels = ["Comparison", "Grp 1 (Mean ± SEM)", "Grp 2 (Mean ± SEM)", "t-stat", "p-val", "Sig", "Cohen's d"]
         
         # Add table
         table = ax_table.table(cellText=cell_text, colLabels=col_labels, 
                                loc='center', cellLoc='center')
         table.auto_set_font_size(False)
-        table.set_fontsize(10)
-        table.scale(1.2, 1.5)
+        table.set_fontsize(9) # Slightly smaller font to fit the wider table
+        table.scale(1.1, 1.8) # Stretch height for readability
 
-        plt.tight_layout()
+        # Bold the column headers
+        for (row, col), cell in table.get_celld().items():
+            if row == 0:
+                cell.set_text_props(weight='bold')
+
+        plt.tight_layout(pad=3.0)
         
-        # Save
-        # Auto-append .pdf if missing
-        if not filename.endswith('.pdf'): filename += ".pdf"
-
-        with PdfPages(filename) as pdf:
-            pdf.savefig(fig)
-        print(f"✅ PDF saved to: {filename}")
+        if pdf_obj is not None:
+                    # If part of a loop, save to the open multi-page PDF
+                    pdf_obj.savefig(fig)
+        else:
+            # If running a single plot, create and save a new PDF
+            if not filename.endswith('.pdf'): filename += ".pdf"
+            with PdfPages(filename) as pdf:
+                pdf.savefig(fig)
+            print(f"✅ PDF saved to: {filename}")
+            
         plt.close(fig)
