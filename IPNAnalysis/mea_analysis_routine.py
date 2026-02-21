@@ -111,6 +111,7 @@ class MEAPipeline:
         
         # Define Directory Structure: Output / Pattern / Well
         self.relative_pattern = self.metadata.get('relative_pattern', 'UnknownPattern')
+        self.output_root = Path(output_root)
         self.output_dir = Path(output_root) / self.relative_pattern / self.stream_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -588,7 +589,7 @@ class MEAPipeline:
                         add_scalebar(ax, 
                                     matchx=False, matchy=False, 
                                     sizex=1.0, labelx='1 ms', 
-                                    sizey=50, labely='50 µV', 
+                                    sizey=50, labely='50 �V', 
                                     loc='lower right', 
                                     hidex=True, hidey=True)
                     except Exception:
@@ -602,7 +603,7 @@ class MEAPipeline:
                 pdf_doc.savefig(fig)
                 plt.close(fig)
 
-    def _run_burst_analysis(self, ids_list=None):
+    def _run_burst_analysis(self, ids_list=None, fixed_y=False):
             self.logger.info("Running Network Burst Analysis...")
             
             spike_times = {}
@@ -678,7 +679,7 @@ class MEAPipeline:
                     fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
                     ax_raster , ax_network = axs
                     helper.plot_clean_raster(
-                                ax_raster,
+                                ax_raster,  
                                 spike_times,
                                 color='gray',
                                 markersize=4,
@@ -686,6 +687,32 @@ class MEAPipeline:
                                 alpha=1.0
                         )
                     helper.plot_clean_network(ax_network, **network_data["plot_data"])
+                    # Save this well's y-max to project-level summary
+                    print("plotting y max")
+                    y_max = ax_network.get_ylim()[1]
+                    summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
+
+                    # Load existing, update, write back
+                    summary = {}
+                    if summary_file.exists():
+                        with open(summary_file, 'r') as f:
+                            summary = json.load(f)
+
+                    # Nested structure: date -> chip_id -> well
+                    date = self.metadata.get('date', 'UnknownDate')
+                    chip_id = self.metadata.get('chip_id', 'UnknownChip')
+
+                    if date not in summary:
+                        summary[date] = {}
+                    if chip_id not in summary[date]:
+                        summary[date][chip_id] = {}
+
+                    summary[date][chip_id][self.stream_id] = float(y_max)
+
+                    with open(summary_file, 'w') as f:
+                        json.dump(summary, f, indent=2)
+
+                    self.logger.info(f"Saved y-max {y_max:.4f} for {date}/{chip_id}/{self.stream_id}")
                 elif plot_Mode == 'merged':
                     fig, ax = plt.subplots(figsize=(12, 5))
                     ax_raster = ax
@@ -722,11 +749,11 @@ class MEAPipeline:
                         (ev["start"], ev["end"]) for ev in sb_events
                     ]
                     #plotting this on ax_network
-                    for start, end in burst_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
+                    #for start, end in burst_intervals:
+                        #ax_network.axvspan(start, end, color='gray', alpha=0.2)
                     for start, end in sb_intervals:
                         ax_network.axvspan(start, end, color='gray', alpha=0.3)
-            
+                    
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
 
                 # 60 s zoom
@@ -743,6 +770,46 @@ class MEAPipeline:
                 plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
                 plt.close(fig)
                 # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
+
+                # After existing plt.savefig calls, add:
+                if fixed_y:
+                    summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
+                    if not summary_file.exists():
+                        self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
+                    else:
+                        with open(summary_file, 'r') as f:
+                            summary = json.load(f)
+                        # Flatten all values and find global max
+                        all_maxima = [
+                            v for date in summary.values()
+                            for chip in date.values()
+                            for v in chip.values()
+                        ]
+                        global_max = max(all_maxima)
+                        self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
+
+                        # Replot with fixed y
+                        fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+                        ax_raster2, ax_network2 = axs2
+                        helper.plot_clean_raster(ax_raster2, spike_times, color='gray', markersize=4, markeredgewidth=0.5, alpha=1.0)
+                        helper.plot_clean_network(ax_network2, **network_data["plot_data"])
+                        ax_network2.set_ylim(0, global_max)
+                        plt.tight_layout()
+                        plt.subplots_adjust(hspace=0.05)
+                        for start, end in sb_intervals: 
+                            ax_network2.axvspan(start, end, color='gray', alpha=0.3)
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.svg")
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.png", dpi=300)
+                        ax_raster2.set_xlim(0, 60)
+                        ax_network2.set_xlim(0, 60)
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_60s.svg")
+                        ax_raster2.set_xlim(0, 30)
+                        ax_network2.set_xlim(0, 30)
+                        ax_network2.set_xlabel("Time (s)")
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
+            
+                        plt.close(fig2)
                 
 
 
@@ -780,9 +847,9 @@ def main():
     parser.add_argument('--no-curation', action='store_true')
     parser.add_argument('--skip-spikesorting', action='store_true')
     parser.add_argument("--reanalyze-bursts", action="store_true", help="Only re-run burst analysis on existing spike times.")
-
+    parser.add_argument("--fixed-y", action = "store_true", help="User project y-max summary to fix network axis")
     args = parser.parse_args()
-    
+
     thresholds = None
     if args.params:
         if os.path.exists(args.params):
@@ -799,7 +866,7 @@ def main():
 
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
-            pipeline._run_burst_analysis()
+            pipeline._run_burst_analysis(fixed_y=args.fixed_y)
             current_stage = ProcessingStage(pipeline.state['stage'])
             pipeline._save_checkpoint(current_stage, note="Burst Re-analysis Performed",last_updated=str(datetime.now()))
             print("Burst Re-analysis Complete.")

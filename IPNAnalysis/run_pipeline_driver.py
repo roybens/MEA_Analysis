@@ -95,6 +95,7 @@ def main():
     parser.add_argument("--no-curation", action="store_true", help="Skip automatic curation")
     parser.add_argument("--output-dir", type=str, help="Output directory for results")
     parser.add_argument("--reanalyze-bursts", action="store_true", help="Re-analyze bursts even if present")
+    parser.add_argument("--fixed-y", action = "store_true")
 
     args = parser.parse_args()
 
@@ -159,6 +160,7 @@ def main():
     if args.skip_spikesorting: extra_args.append("--skip-spikesorting")
     if args.output_dir: extra_args.append(f"--output-dir '{args.output_dir}'")
     if args.reanalyze_bursts: extra_args.append("--reanalyze-bursts")
+    if args.fixed_y: extra_args.append("--fixed-y")
     extra_arg_string = " ".join(extra_args)
     logger.info(f"start time : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
     #ticker
