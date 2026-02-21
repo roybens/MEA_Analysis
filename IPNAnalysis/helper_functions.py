@@ -290,14 +290,14 @@ def plot_clean_network(
         lw=1.5,
         zorder=2
     )
-    if signal_smooth is not None:
+    '''if signal_smooth is not None:
         ax.plot(
             t,
             signal_smooth,
             color="tab:orange",
             lw=1.0,
             zorder=3
-        )
+        )'''
     # --- burst peaks (ONE per network burst) ---
     if (
         burst_peak_times is not None
