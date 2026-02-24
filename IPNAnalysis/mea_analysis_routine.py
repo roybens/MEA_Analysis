@@ -755,11 +755,13 @@ class MEAPipeline:
                         ax_network.axvspan(start, end, color='gray', alpha=0.3)
                     
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
+                plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
 
                 # 60 s zoom
                 ax_raster.set_xlim(0, 60)
                 ax_network.set_xlim(0, 60)
                 plt.savefig(self.output_dir / "raster_burst_plot_60s.svg")
+                plt.savefig(self.output_dir / "raster_burst_plot_60s.png", dpi=300)
 
                 # 30 s zoom
                 ax_raster.set_xlim(0, 30)
