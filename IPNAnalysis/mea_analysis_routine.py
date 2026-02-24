@@ -960,12 +960,15 @@ def main():
     )
 
     args = parser.parse_args()
-    
-    thresholds = None
-    if args.params:
-        if os.path.exists(args.params):
-            with open(args.params) as f: thresholds = json.load(f)
-        else: thresholds = json.loads(args.params)
+    config = load_config(args.config)
+    resolved = resolve_args(args, config)
+
+    plot_mode = resolved["plot_mode"]
+    plot_debug = resolved["plot_debug"]
+    raster_sort = resolved["raster_sort"]
+    sorter = resolved["sorter"]
+    thresholds = resolved["quality_thresholds"]
+    rec = args.rec or "rec0000"
 
     try:
         auto_merge_presets = None
