@@ -13,12 +13,20 @@ This is a production-grade **MEA (Microelectrode Array) processing pipeline** fo
 - Launches subprocesses for each recording-well combination via `mea_analysis_routine.py`
 - Handles reference filtering, dry-runs, and logging
 - Supports batch processing with checkpoint-based resumption
+- Accepts a `--config` JSON file for project-level defaults; CLI flags always override config
 
 **2. mea_analysis_routine.py — Core Pipeline (`MEAPipeline` class)**
 - Per-well worker executing the full processing pipeline
 - Stages: Preprocessing → Sorting → Analysis → Reports
 - Checkpoint-based resumption (resume on crash, skip completed stages)
 - Metadata parsing and intelligent output directory structuring
+- Can be invoked independently of the driver for single-well processing
+
+**3. config_loader.py — Shared Configuration**
+- Shared by both scripts
+- Resolves values in priority order: CLI flag → config file → hardcoded default
+- `build_extra_args()` constructs subprocess argument strings for the driver
+- Run directly (`python config_loader.py`) to generate a config template
 
 ## HDF5 File Structure
 
@@ -44,9 +52,9 @@ The pipeline uses a `recording_map` to efficiently map all recordings to their c
 
 | Stage | Method | Purpose |
 |-------|--------|---------|
-| **Preprocessing** | `run_preprocessing()` | Bandpass filter (300–6000 Hz), common average reference, optional Zarr compression |
+| **Preprocessing** | `run_preprocessing()` | Highpass filter (300 Hz), local common median reference, float32 conversion, binary cache |
 | **Spike Sorting** | `run_sorting()` | Kilosort4 (default), SpikeInterface integration, Docker support for reproducibility |
-| **Analyzer** | `run_analyzer()` | Template computation, quality metrics (firing rate, SNR, ISI violations) |
+| **Analyzer** | `run_analyzer()` | Template computation, quality metrics (firing rate, presence ratio, ISI violations, amplitude) |
 | **Reports** | `generate_reports()` | Waveform visualizations, probe locations, burst analysis, automatic curation |
 
 ## Key Features
@@ -54,15 +62,17 @@ The pipeline uses a `recording_map` to efficiently map all recordings to their c
 ✅ **Multi-Recording Support** — Handle multiple recordings per HDF5 file  
 ✅ **Checkpointing** — Resume from failures; state saved as JSON  
 ✅ **Logging** — Per-well logs + driver-level logs with timestamps  
-✅ **Quality Curation** — Automatic unit filtering via configurable thresholds (ISI violations, SNR, firing rate)  
+✅ **Quality Curation** — Automatic unit filtering via configurable thresholds  
 ✅ **Containerization** — Docker image support for Kilosort reproducibility  
 ✅ **Flexible I/O** — HDF5 (primary), placeholders for NWB and raw binary formats  
 ✅ **Burst Detection** — Parameter-free adaptive network burst detection  
-✅ **Visualization** — Waveforms, probe maps, rasters, metrics  
+✅ **Visualization** — Waveforms, probe maps, rasters, network burst overlays  
+✅ **Config System** — JSON config file with CLI override support  
 
 ## Supporting Modules
 
-- **helper_functions.py** — Peak detection, file discovery, directory management utilities
+- **config_loader.py** — Config file loading, CLI/config/default resolution, subprocess arg builder
+- **helper_functions.py** — Peak detection, file discovery, raster and network plotting utilities
 - **parameter_free_burst_detector.py** — Adaptive network burst detection with:
   - Per-unit ISI bursts (biological calibration)
   - Population firing rate signal computation
@@ -80,178 +90,141 @@ The pipeline infers project structure from file paths:
 
 Output organized as:
 ```
-AnalyzedData/<project>/<date>/<chip>/<run_id>/well000/
-  ├── kilosort4__rec0000/        (sorter outputs)
-  ├── waveforms__rec0000/        (extracted waveforms)
-  ├── reports/                   (plots, metrics)
-  └── checkpoints/               (resume state)
+<output_dir>/<project>/<date>/<chip>/<run_id>/well000/
+  ├── binary/                    (preprocessed recording cache)
+  ├── sorter_output/             (kilosort4 outputs)
+  ├── analyzer_output/           (waveforms, templates, quality metrics)
+  ├── raster_burst_plot.svg      (full recording raster + network burst)
+  ├── raster_burst_plot_30s.svg  (30s zoom)
+  ├── raster_burst_plot_60s.svg  (60s zoom)
+  ├── network_results.json       (burst statistics)
+  ├── spike_times.npy            (spike times per unit)
+  ├── metrics_curated.xlsx       (quality metrics post-curation)
+  ├── rejection_log.xlsx         (rejected units and reasons)
+  ├── waveforms_grid.pdf         (waveform overview)
+  ├── locations_unfiltered.pdf   (all unit probe locations)
+  └── checkpoints/               (resume state per well)
 ```
+
+## Configuration System
+
+The pipeline uses a three-level priority chain:
+
+```
+CLI flag  →  config file (mea_config.json)  →  hardcoded defaults
+```
+
+**Generate a config template:**
+```bash
+python config_loader.py mea_config.json
+```
+
+Edit `mea_config.json` for your project, then pass it to either script via `--config`. CLI flags always override config file values. `--well` and `--rec` are always CLI-only (per-file identifiers, not project settings).
+
+**Config sections:**
+
+| Section | Keys |
+|---------|------|
+| `io` | `output_dir`, `checkpoint_dir`, `export_to_phy`, `clean_up` |
+| `sorting` | `sorter`, `docker_image` |
+| `filtering` | `reference_file`, `assay_types` (driver only) |
+| `plotting` | `plot_mode`, `raster_sort`, `plot_debug` |
+| `curation` | `no_curation`, `quality_thresholds` |
 
 ## Typical Workflow
 
-### Process Entire Directory Tree with Docker
+### 1. Set up config for a new project
 ```bash
-python IPNAnalysis/run_pipeline_driver.py /data/experiment \
-  --docker si-98-ks4-maxwell \
-  --sorter kilosort4 \
-  --output-dir /results
+python config_loader.py mea_config.json
+# edit mea_config.json — set output_dir, sorter, thresholds
 ```
 
-### Resume on Failure (Automatic via Checkpoint)
+### 2. Dry run to verify what would be processed
 ```bash
-python IPNAnalysis/run_pipeline_driver.py /data/experiment \
-  --docker si-98-ks4-maxwell \
-  --force-restart
+python run_pipeline_driver.py /data/experiment --config mea_config.json --dry
 ```
 
-### Single File Processing
+### 3. Full batch run
 ```bash
-python IPNAnalysis/mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5 \
-  --rec rec0001 \
-  --well well000 \
+python run_pipeline_driver.py /data/experiment --config mea_config.json
+```
+
+### 4. Override config at runtime
+```bash
+# config says kilosort4, override for this run
+python run_pipeline_driver.py /data/experiment --config mea_config.json --sorter mountainsort5
+```
+
+### 5. Single well processing
+```bash
+python mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5 \
+  --well well000 --rec rec0001 \
+  --config mea_config.json \
   --debug
 ```
 
-### Dry Run (Preview Processing Steps)
+### 6. Skip sorting, detection only
 ```bash
-python IPNAnalysis/run_pipeline_driver.py /data/experiment --dry
+python run_pipeline_driver.py /data/experiment --config mea_config.json --skip-spikesorting
 ```
 
-### Re-analyze Bursts Only
+### 7. Re-analyze bursts on existing spike times
 ```bash
-python IPNAnalysis/run_pipeline_driver.py /data/experiment \
-  --skip-spikesorting \
-  --reanalyze-bursts
+python mea_analysis_routine.py /data/file.h5 --well well000 \
+  --config mea_config.json \
+  --reanalyze-bursts \
+  --plot-mode merged \
+  --raster-sort firing_rate \
+  --plot-debug
 ```
 
-## Command-Line Arguments Reference
+### 8. Resume after crash (automatic via checkpoint)
+```bash
+# just re-run the same command — checkpoints handle resumption automatically
+python run_pipeline_driver.py /data/experiment --config mea_config.json
 
-| Argument | Type | Description |
-|----------|------|-------------|
-| `path` | str | File or directory path containing MEA data |
-| `--reference` | str | Excel file to filter runs by assay type |
-| `--type` | list | Assay types to include (default: ['network today', 'network today/best']) |
-| `--params` | str | JSON file or string with quality thresholds |
-| `--docker` | str | Docker image name for containerized sorting |
-| `--skip-spikesorting` | flag | Skip spike sorting stage |
-| `--force-restart` | flag | Restart even if checkpoint complete |
-| `--sorter` | str | Sorter algorithm to use (default: kilosort4) |
-| `--debug` | flag | Debug mode with verbose logging |
-| `--dry` | flag | Dry run only (preview without processing) |
-| `--clean-up` | flag | Clear sorter outputs etc. |
-| `--export-to-phy` | flag | Export results to Phy format |
-| `--checkpoint-dir` | str | Checkpoint directory (default: output-dir/checkpoints) |
-| `--no-curation` | flag | Skip automatic curation |
-| `--output-dir` | str | Output directory for results |
-| `--reanalyze-bursts` | flag | Re-analyze bursts even if present |
+# force full restart ignoring checkpoints
+python run_pipeline_driver.py /data/experiment --config mea_config.json --force-restart
+```
 
-## Class Descriptions and Key Functions
+## Command-Line Reference
 
-![UML Diagram](image.png)
+### run_pipeline_driver.py
 
-### Logger
-- **Attributes:**
-  - `logger`
-  - `logging`
-- **Methods:**
-  - `setup()`: Configures the logger.
-  - `log_info(msg)`: Logs informational messages.
-  - `log_error(msg)`: Logs error messages.
+| Group | Argument | Description |
+|-------|----------|-------------|
+| positional | `path` | File or directory path containing MEA data |
+| input/output | `--config` | Path to config JSON (CLI flags always override) |
+| input/output | `--output-dir` | Output directory for all results |
+| input/output | `--checkpoint-dir` | Checkpoint directory (default: output-dir/checkpoints) |
+| input/output | `--export-to-phy` | Export results to Phy format |
+| input/output | `--clean-up` | Remove intermediate files after processing |
+| filtering | `--reference` | Excel file to filter runs by assay type |
+| filtering | `--type` | Assay types to include |
+| sorting | `--sorter` | Spike sorter to use (default: kilosort4) |
+| sorting | `--docker` | Docker image for containerized sorting |
+| sorting | `--skip-spikesorting` | Spike detection only, skip full sorting |
+| plotting | `--plot-mode` | `separate` or `merged` (default: separate) |
+| plotting | `--raster-sort` | `none`, `firing_rate`, `location_y`, `unit_id` |
+| plotting | `--plot-debug` | Overlay burst/superburst intervals on plot |
+| curation | `--no-curation` | Skip automatic unit curation |
+| curation | `--params` | JSON string or file with quality thresholds |
+| run control | `--force-restart` | Ignore checkpoints, restart from scratch |
+| run control | `--reanalyze-bursts` | Re-run burst analysis on existing spike times |
+| run control | `--dry` | Preview what would run without processing |
+| run control | `--debug` | Enable verbose logging |
 
-### DataHandler
-- **Attributes:**
-  - `file_path`
-  - `stream_id`
-- **Methods:**
-  - `get_data_maxwell()`: Reads Maxwell MEA recordings.
-  - `save_to_zarr()`: Saves and compresses the file into the Zarr format.
+### mea_analysis_routine.py
 
-### Preprocessor
-- **Methods:**
-  - `preprocess()`: Performs bandpass filtering and common average referencing on the recorded data to enhance signal quality.
-  - `get_channel_recording_stats()`: Retrieves channel recording statistics such as sampling frequency, number of channels, and total recording duration.
+Same groups and flags as the driver, minus `--dry` and the filtering group, plus:
 
-### KilosortHandler
-- **Methods:**
-  - `run_kilosort()`: Runs the Kilosort algorithm to detect and sort spikes.
-  - `get_kilosort_result()`: Retrieves the result from a specified Kilosort output folder.
+| Group | Argument | Description |
+|-------|----------|-------------|
+| input/output | `--well` | Well ID to process (e.g. well000) — **required** |
+| input/output | `--rec` | Recording name in HDF5 file (default: rec0000) |
 
-### WaveformHandler
-- **Methods:**
-  - `extract_waveforms()`: Extracts waveform snippets around detected spikes.
-  - `get_waveforms_result()`: Loads waveform results, optionally with the associated recording and sorting.
+## Notes
 
-### QualityMetrics
-- **Methods:**
-  - `get_quality_metrics()`: Computes various quality metrics such as firing rates, SNR, and inter-spike interval violations.
-  - `remove_violated_units()`: Filters out units that do not meet specific quality criteria.
-
-### TemplateHandler
-- **Methods:**
-  - `get_template_metrics()`: Computes metrics related to the waveform templates.
-  - `get_temp_similarity_matrix()`: Computes a similarity matrix for the templates.
-  - `merge_similar_templates()`: Merges similar templates based on a similarity score.
-  - `remove_similar_templates()`: Identifies and removes redundant templates based on a similarity score.
-
-### ChannelAnalyzer
-- **Methods:**
-  - `get_unique_templates_channels()`: Analyzes units and their corresponding extremum channels, removes units that correspond to the same channel, and keeps the highest amplitude one.
-  - `get_channel_locations_mapping()`: Retrieves channel location mappings.
-
-### Visualization
-- **Methods:**
-  - `plot_waveforms()`: Visualizes the spatial distribution of units on the MEA probe and saves waveform plots.
-
-### Utilities
-- **Methods:**
-  - `find_connected_components()`: Finds connected components in a graph, used for identifying transitive relationships between templates.
-
-### Helper
-- **Methods:**
-  - `isexists_folder_not_empty()`: Checks if a folder exists and is not empty.
-  - `empty_directory()`: Empties the contents of a directory.
-
-### Main
-- **Methods:**
-  - `main()`: Handles command-line arguments and determines whether to process a single file or a directory of files.
-  - `process_block(file_path, time_in_s=300, stream_id='well000', recnumber=0, sorting_folder=f"{BASE_FILE_PATH}/Sorting_Intermediate_files", clear_temp_files=True)`: Processes a block of data, including preprocessing, spike sorting, waveform extraction, and saving results.
-  - `routine_sequential(file_path, number_of_configurations, time_in_s)`: Processes multiple recording configurations sequentially.
-  - `routine_parallel(file_path, number_of_configurations, time_in_s)`: Processes multiple recording configurations in parallel using multiprocessing.
-
-## Data Flow and Interactions
-
-1. **Logger Setup:**
-   - The `Logger` class is instantiated and configured to log messages to `application.log`.
-
-2. **Data Handling:**
-   - The `DataHandler` class reads Maxwell MEA recordings and can save them in the Zarr format.
-
-3. **Preprocessing:**
-   - The `Preprocessor` class preprocesses the data by performing bandpass filtering and common average referencing. It also retrieves channel recording statistics.
-
-4. **Spike Sorting:**
-   - The `KilosortHandler` class runs the Kilosort algorithm to detect and sort spikes. The results are retrieved from the specified output folder.
-
-5. **Waveform Extraction and Analysis:**
-   - The `WaveformHandler` class extracts waveform snippets around detected spikes and loads waveform results.
-   - The `QualityMetrics` class computes quality metrics and filters out units that do not meet specific criteria.
-
-6. **Template Analysis:**
-   - The `TemplateHandler` class computes metrics related to waveform templates, identifies and merges similar templates, and removes redundant templates.
-
-7. **Channel Analysis:**
-   - The `ChannelAnalyzer` class analyzes units and their corresponding extremum channels, ensuring only unique templates are retained.
-
-8. **Visualization:**
-   - The `Visualization` class visualizes the spatial distribution of units on the MEA probe and saves waveform plots.
-
-9. **Utilities and Helper Functions:**
-   - The `Utilities` class finds connected components for identifying transitive relationships between templates.
-   - The `Helper` class provides utility functions to check and empty directories.
-
-10. **Main Execution:**
-    - The `Main` class handles the command-line arguments and processes data either sequentially or in parallel. It coordinates the entire data processing pipeline, from reading the data to saving the final results.
-
-## Conclusion
-
-This script provides a comprehensive pipeline for MEA data analysis, from preprocessing and spike sorting to detailed waveform analysis and visualization. It utilizes advanced sorting algorithms and quality metric computations to ensure high-quality data analysis, suitable for neuroscientific research.
+- `--well` and `--rec` are always CLI-only — they identify a specific file/recording and are never set in config
+- `--debug`, `--dry`, `--force-restart`, `--reanalyze-bursts`, `--skip-spikesorting` are CLI-only run control flags — they represent one-off decisions and are never set in config
+- Everything else can be set in `mea_config.json` and overridden per-run from CLI
