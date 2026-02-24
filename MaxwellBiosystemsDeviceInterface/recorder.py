@@ -22,9 +22,12 @@ import time
 import sys
 import os
 from datetime import datetime
+from pathlib import Path
 
+import maxlab
 import maxlab.saving
 import maxlab.util
+import maxlab.chip
 
 
 def parse_args():
@@ -55,23 +58,29 @@ def main():
 
     try:
         # Ensure output directory exists
-        output_dir = os.path.dirname(args.output)
+        output_dir = os.path.dirname(args.output) or os.path.expanduser("~/recordings")
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
 
         # Get just the filename (no directory)
         filename_only = os.path.splitext(os.path.basename(args.output))[0]
 
-        print(f"[recorder] Initializing maxlab...")
+        print(f"[recorder] Initializing maxlab system...")
+        maxlab.util.initialize(wells=[int(w) for w in wells])
+
+        print(f"[recorder] Setting up saving object...")
         saving = maxlab.saving.Saving()
 
-        print(f"[recorder] Opening directory: {output_dir if output_dir else '/tmp'}")
-        saving.open_directory(output_dir if output_dir else "/tmp")
+        print(f"[recorder] Opening directory: {output_dir}")
+        # Expand ~ in directory path
+        expanded_dir = os.path.expanduser(output_dir)
+        saving.open_directory(expanded_dir)
 
         print(f"[recorder] Creating file: {filename_only}")
         saving.start_file(filename_only)
 
         print(f"[recorder] Starting recording on wells {wells} for {args.duration} seconds...")
+        # Note: maxlab.saving.Saving.start_recording() expects wells parameter
         saving.start_recording(wells=wells)
 
         # Record for specified duration
@@ -88,7 +97,15 @@ def main():
 
         print()
         print(f"[recorder] ✓ Recording complete!")
-        print(f"[recorder] Output file: {args.output}")
+        # Note: actual file format (.raw, .h5, .mcs) depends on Maxwell settings
+        # Check the output directory for the saved file
+        actual_files = list(Path(expanded_dir).glob(f"{filename_only}*"))
+        if actual_files:
+            print(f"[recorder] Saved files:")
+            for f in actual_files:
+                print(f"           {f}")
+        else:
+            print(f"[recorder] Output directory: {expanded_dir}/")
         print()
 
     except KeyboardInterrupt:

@@ -32,13 +32,19 @@ from pathlib import Path
 
 import numpy as np
 
-# Try h5py first, fallback to other methods
+# Try h5py for .h5 files
 try:
     import h5py
     HAS_H5PY = True
 except ImportError:
     HAS_H5PY = False
-    print("[WARNING] h5py not available — trying binary fallback", file=sys.stderr)
+
+# Try numpy for reading .npy or raw binary files  
+try:
+    import scipy.io as sio
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
 
 # POSIX IPC for shared memory
 try:
@@ -185,37 +191,68 @@ class SharedMemoryEmulator:
             print(f"[WARNING] Cleanup error: {e}", file=sys.stderr)
 
 
-class HDF5Reader:
-    """Read data from HDF5 file."""
+class DataReader:
+    """Read data from various formats (HDF5, .npy, binary, .mcs)."""
 
     def __init__(self, filepath):
-        if not HAS_H5PY:
-            raise ImportError("h5py required for HDF5 files")
+        self.filepath = filepath
+        self.file = None
+        self.data = None
+        self.time_axis = 0
+        self.data_key = None
         
-        self.file = h5py.File(filepath, 'r')
-        self._discover_structure()
+        # Auto-detect format and load
+        self._load_file()
 
-    def _discover_structure(self):
-        """Auto-detect HDF5 structure and dataset names."""
-        print(f"[emulator] HDF5 structure:")
+    def _load_file(self):
+        """Auto-detect and load file format."""
+        filepath = self.filepath
         
+        # Try HDF5 first
+        if filepath.endswith(('.h5', '.hdf5', '.HDF5')):
+            self._load_hdf5(filepath)
+            return
+        
+        # Try .npy
+        if filepath.endswith('.npy'):
+            self._load_npy(filepath)
+            return
+        
+        # Try to detect HDF5 by content
+        try:
+            self._load_hdf5(filepath)
+            return
+        except:
+            pass
+        
+        # Fallback: try as binary raw file
+        print(f"[emulator] WARNING: Unknown format, trying raw binary", file=sys.stderr)
+        self._load_raw(filepath)
+
+    def _load_hdf5(self, filepath):
+        """Load HDF5 file."""
+        if not HAS_H5PY:
+            raise ImportError("h5py required for HDF5 files: pip install h5py")
+        
+        print(f"[emulator] Opening HDF5 file: {filepath}")
+        self.file = h5py.File(filepath, 'r')
+        
+        # Print structure
+        print(f"[emulator] HDF5 structure:")
         def print_structure(name, obj):
-            print(f"  {name}: {type(obj).__name__}", end="")
             if isinstance(obj, h5py.Dataset):
-                print(f" shape={obj.shape} dtype={obj.dtype}", end="")
-            print()
+                print(f"  {name}: shape={obj.shape} dtype={obj.dtype}")
         
         self.file.visititems(print_structure)
-
-        # Try common dataset names
+        
+        # Find data dataset
         self.data_key = None
-        for candidate in ["data", "recording", "raw", "signals", "electrode_data"]:
+        for candidate in ["data", "recording", "raw", "signals", "electrode_data", "Data"]:
             if candidate in self.file:
                 self.data_key = candidate
                 break
         
         if not self.data_key:
-            # Use first dataset found
             keys = [k for k in self.file.keys() if isinstance(self.file[k], h5py.Dataset)]
             if keys:
                 self.data_key = keys[0]
@@ -224,32 +261,57 @@ class HDF5Reader:
             raise ValueError("No datasets found in HDF5 file")
         
         dset = self.file[self.data_key]
-        print(f"[emulator] Using dataset '{self.data_key}' shape={dset.shape} dtype={dset.dtype}")
-
-        # Determine data shape: assume (time, channels) or (channels, time)
+        print(f"[emulator] Using HDF5 dataset '{self.data_key}' shape={dset.shape}")
+        
+        # Determine shape: assume (time, channels) or (channels, time)
         if dset.shape[0] > dset.shape[1]:
-            # First dim larger → likely time
             self.time_axis = 0
             self.n_samples, self.n_channels = dset.shape
         else:
-            # Second dim larger → likely time
             self.time_axis = 1
             self.n_channels, self.n_samples = dset.shape
         
-        print(f"[emulator] Data shape: {self.n_samples} samples × {self.n_channels} channels")
+        print(f"[emulator] Data: {self.n_samples} samples × {self.n_channels} channels")
+
+    def _load_npy(self, filepath):
+        """Load .npy file."""
+        print(f"[emulator] Opening .npy file: {filepath}")
+        self.data = np.load(filepath)
+        
+        if self.data.ndim != 2:
+            raise ValueError(f"Expected 2D array, got shape {self.data.shape}")
+        
+        # Determine shape
+        if self.data.shape[0] > self.data.shape[1]:
+            self.time_axis = 0
+            self.n_samples, self.n_channels = self.data.shape
+        else:
+            self.time_axis = 1
+            self.n_channels, self.n_samples = self.data.shape
+        
+        print(f"[emulator] Data: {self.n_samples} samples × {self.n_channels} channels")
+
+    def _load_raw(self, filepath):
+        """Load raw binary file (assumes float32, must be (time, channels) or (channels, time))."""
+        print(f"[emulator] Opening raw binary file: {filepath}")
+        # This is a fallback - user would need to specify dimensions
+        raise NotImplementedError("Raw binary format requires dimension specification")
 
     def read_frame(self, sample_index):
-        """
-        Read one frame (all channels) at given sample index.
-        
-        Returns:
-            1D numpy array of length n_channels (float32)
-        """
-        dset = self.file[self.data_key]
-        if self.time_axis == 0:
-            frame = dset[sample_index, :].astype(np.float32)
+        """Read one frame (all channels) at given sample index."""
+        if self.file:
+            # HDF5 case
+            dset = self.file[self.data_key]
+            if self.time_axis == 0:
+                frame = dset[sample_index, :].astype(np.float32)
+            else:
+                frame = dset[:, sample_index].astype(np.float32)
         else:
-            frame = dset[:, sample_index].astype(np.float32)
+            # In-memory case (.npy, etc.)
+            if self.time_axis == 0:
+                frame = self.data[sample_index, :].astype(np.float32)
+            else:
+                frame = self.data[:, sample_index].astype(np.float32)
         return frame
 
     def get_duration(self, sample_rate=20_000):
@@ -257,7 +319,9 @@ class HDF5Reader:
         return self.n_samples / sample_rate
 
     def close(self):
-        self.file.close()
+        """Close file if open."""
+        if self.file:
+            self.file.close()
 
 
 def main():
@@ -277,9 +341,9 @@ def main():
     print()
 
     try:
-        # Open HDF5 file
+        # Open recording file (auto-detect format)
         print(f"[emulator] Opening {args.file}...")
-        reader = HDF5Reader(args.file)
+        reader = DataReader(args.file)
 
         n_channels = args.channels[0] if args.channels else reader.n_channels
         if args.channels:
