@@ -1,3 +1,10 @@
+# ==========================================================
+# mea_analysis_routine.py
+# Author: Mandar Patil
+# Contributors: Yuxin Ren
+# LLM Assisted Edits: Yes ChatGPT-4, Claude sonnet 4.6
+# ==========================================================
+
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 os.environ["QT_QPA_PLATFORM"] = "offscreen"  # For headless environments
@@ -52,19 +59,22 @@ try:
         from .parameter_free_burst_detector import compute_network_bursts
         from . import helper_functions as helper
         from .scalebury import add_scalebar
+        from .config_loader import load_config, resolve_args
     else:
         from parameter_free_burst_detector import compute_network_bursts
         import helper_functions as helper
         from scalebury import add_scalebar
+        from config_loader import load_config, resolve_args
 except ImportError:
     try:
         from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
         from MEA_Analysis.IPNAnalysis import helper_functions as helper
         from MEA_Analysis.IPNAnalysis.scalebury import add_scalebar
+        from MEA_Analysis.IPNAnalysis.config_loader import load_config, resolve_args
     except ImportError as e:
         raise ImportError(
             "Could not import MEA_Analysis.IPNAnalysis helper modules "
-            "(parameter_free_burst_detector/helper_functions/scalebury). "
+            "(parameter_free_burst_detector/helper_functions/scalebury/config_loader). "
             "If you are running this file directly, prefer: "
             "`python -m MEA_Analysis.IPNAnalysis.mea_analysis_routine ...`"
         ) from e
@@ -448,20 +458,6 @@ class MEAPipeline:
             )
         
         np.save(self.output_dir / "spike_times.npy", spike_times)
-        
-        # # Quick raster plot
-        # fig, ax = plt.subplots(figsize=(12, 8))
-        # sorted_chs = sorted(spike_times.keys())
-        # for i, ch in enumerate(sorted_chs):
-        #     times = spike_times.get(ch, [])
-        #     if len(times) > 0:
-        #         ax.plot(times, np.ones_like(times) * i, '|', markersize=1, color='black', alpha=0.5)
-        # ax.set_title(f"MUA Raster - {self.stream_id}")
-        # plt.savefig(self.output_dir / "mua_channel_raster.svg", dpi=300)
-        # #also save a 30s zoom
-        # ax.set_xlim(0,30)
-        # plt.savefig(self.output_dir / "mua_channel_raster_30s.svg", dpi=300)
-        #plt.close(fig)
 
         return list(spike_times.keys())
 
@@ -599,7 +595,7 @@ class MEAPipeline:
             raise
 
     # --- Phase 4: Reports & Curation ---
-    def generate_reports(self, thresholds=None, no_curation=False, export_phy=False):
+    def generate_reports(self, thresholds=None, no_curation=False, export_phy=False,plot_mode="separate", plot_debug=False, raster_sort=None):
         if self.state['stage'] == ProcessingStage.REPORTS_COMPLETE.value: return
 
         self.logger.info("--- [Phase 4] Reports & Curation ---")
@@ -634,7 +630,7 @@ class MEAPipeline:
             mask = np.isin(self.analyzer.unit_ids, clean_units)
             self._plot_probe_locations(clean_units, locations[mask], f"locations_{len(clean_units)}_units.pdf")
             self._plot_waveforms_grid(clean_units)
-            self._run_burst_analysis(clean_units)
+            self._run_burst_analysis(clean_units,plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort)
 
             if export_phy:
                 si.export_to_phy(self.analyzer.select_units(clean_units), 
@@ -666,6 +662,7 @@ class MEAPipeline:
             if row.get('rp_contamination', 0) > defaults['rp_contamination']: reasons.append("High Contam")
             if row.get('firing_rate', 0) < defaults['firing_rate']: reasons.append("Low FR")
             if row.get('amplitude_median', -100) > defaults['amplitude_median']: reasons.append("Low Amp")
+            #TODO : need to add cv_median logic after checking if metric exists in current version of SI
             
             if reasons:
                 keep_mask[metrics.index.get_loc(row.name)] = False
@@ -704,13 +701,12 @@ class MEAPipeline:
                     best_ch = np.argmin(np.min(mean_wf, axis=0))
                     
                     # [2] Create time vector in milliseconds
-                    # (NumSamples / fs) * 1000
                     time_ms = np.arange(wf.shape[1]) / fs * 1000
 
                     # Random subset logic
                     n_spikes = wf.shape[0]
-                    if n_spikes > 50:
-                        indices = np.random.choice(n_spikes, 50, replace=False)
+                    if n_spikes > 100:
+                        indices = np.random.choice(n_spikes, 100, replace=False)
                         spikes_to_plot = wf[indices, :, best_ch]
                     else:
                         spikes_to_plot = wf[:, :, best_ch]
@@ -722,7 +718,6 @@ class MEAPipeline:
                     ax.set_title(f"Unit {uid} | Ch {best_ch}", fontsize=10)
                     
                     # [4] Add Scale Bar (1 ms x 50 uV)
-                    # hidex/hidey=True removes the standard axis ticks
                     try:
                         add_scalebar(ax, 
                                     matchx=False, matchy=False, 
@@ -731,7 +726,6 @@ class MEAPipeline:
                                     loc='lower right', 
                                     hidex=True, hidey=True)
                     except Exception:
-                        # Fallback if scalebury is missing or fails
                         ax.spines['top'].set_visible(False)
                         ax.spines['right'].set_visible(False)
 
@@ -741,7 +735,7 @@ class MEAPipeline:
                 pdf_doc.savefig(fig)
                 plt.close(fig)
 
-    def _run_burst_analysis(self, ids_list=None):
+    def _run_burst_analysis(self, ids_list=None, plot_mode='separate', plot_debug=False, raster_sort='none'):
             self.logger.info("Running Network Burst Analysis...")
             
             spike_times = {}
@@ -765,22 +759,7 @@ class MEAPipeline:
 
             # 2. Main Analysis Block
             try:
-                # A. Statistics & Raster Plot
-                #burst_stats = helper.detect_bursts_statistics(spike_times, isi_threshold=0.1)
-                #bursts = [x['bursts'] for x in burst_stats.values()]
-                
-                #fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-                #title_suffix = "(Sorted Units)" if self.sorting else "(Channel MUA)"
-                #title_suffix = f" "
-                #helper.plot_raster_with_bursts(axs[0], spike_times, bursts, title_suffix=title_suffix)
-                # Raster Plot
- 
-
-                # B. Network Burst Calculation
-                # network_data = compute_network_bursts(ax_raster=None, ax_macro=axs[1], SpikeTimes=spike_times, plot=True)
-                # network_data['file'] = str(self.relative_pattern)
-                # network_data['well'] = self.stream_id
-                # Network (bottom)
+                # A. Network Burst Calculation
                 network_data = compute_network_bursts(
                     SpikeTimes=spike_times,
                     plot=False
@@ -788,7 +767,6 @@ class MEAPipeline:
 
                 # Clean data in memory
                 network_data_clean = helper.recursive_clean(network_data)
-                #add number of units
                 network_data_clean['n_units'] = len(spike_times)
                 
                 # Atomic Write (Temp -> Rename) to prevent corruption
@@ -802,69 +780,60 @@ class MEAPipeline:
                     os.replace(temp_file, final_file)
                     self.logger.info(f"Successfully saved: {final_file}")
 
-                #total_channels = self.recording.get_num_channels()
-                #channels_in_raster = len(spike_times)
+                # B. Sort units for raster if requested
+                sorted_units = self._sort_units_for_raster(spike_times, raster_sort)
 
-                #self.logger.info(
-                #    f"Raster plotting {channels_in_raster}/{total_channels} channels "
-                #    f"(including silent channels)"
-                #)
+                # C. Plotting
+                
 
-                plot_Mode = 'separate'
-                debug_Mode = True
-
-                if plot_Mode == 'separate':
+                if plot_mode == 'separate':
                     fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-                    ax_raster , ax_network = axs
-                    helper.plot_clean_raster(
-                                ax_raster,
-                                spike_times,
-                                color='gray',
-                                markersize=4,
-                                markeredgewidth=0.5,
-                                alpha=1.0
-                        )
-                    helper.plot_clean_network(ax_network, **network_data["plot_data"])
-                elif plot_Mode == 'merged':
-                    fig, ax = plt.subplots(figsize=(12, 5))
-                    ax_raster = ax
-                    ax_network = ax.twinx()
-                    # Raster (left axis)
+                    ax_raster, ax_network = axs
                     helper.plot_clean_raster(
                         ax_raster,
                         spike_times,
+                        sorted_units,
                         color='gray',
                         markersize=4,
                         markeredgewidth=0.5,
                         alpha=1.0
                     )
+                    helper.plot_clean_network(ax_network, **network_data["plot_data"])
 
-                    # Network (right axis)
+                elif plot_mode == 'merged':
+                    fig, ax = plt.subplots(figsize=(12, 5))
+                    ax_raster = ax
+                    ax_network = ax.twinx()
+                    helper.plot_clean_raster(
+                        ax_raster,
+                        spike_times,
+                        sorted_units,
+                        color='gray',
+                        markersize=4,
+                        markeredgewidth=0.5,
+                        alpha=1.0
+                    )
                     helper.plot_clean_network(
                         ax_network,
                         **network_data["plot_data"]
                     )
                     ax.spines["right"].set_visible(True)
                 else:
-                    self.logger.warning(f"Unknown plot mode: {plot_Mode}")
+                    self.logger.warning(f"Unknown plot mode: {plot_mode}")
                     return
+
                 plt.tight_layout()
                 plt.subplots_adjust(hspace=0.05)
 
-                if debug_Mode:
+                if plot_debug:
                     nb_events = network_data["network_bursts"]["events"]
-                    burst_intervals = [
-                        (ev["start"], ev["end"]) for ev in nb_events
-                    ]
+                    burst_intervals = [(ev["start"], ev["end"]) for ev in nb_events]
                     sb_events = network_data["superbursts"]["events"]
-                    sb_intervals = [
-                        (ev["start"], ev["end"]) for ev in sb_events
-                    ]
-                    #plotting this on ax_network
+                    sb_intervals = [(ev["start"], ev["end"]) for ev in sb_events]
                     for start, end in burst_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
+                        ax_network.axvspan(start, end, color='gray', alpha=0.1)
                     for start, end in sb_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.3)
+                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
             
                 plt.savefig(self.output_dir / "raster_burst_plot.svg")
 
@@ -881,14 +850,25 @@ class MEAPipeline:
 
                 plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
                 plt.close(fig)
-                # C. Robust JSON Saving (Handles numpy types AND dictionary keys)
-                
-
 
             except Exception as e:
                 self.logger.error(f"Burst analysis error: {e}")
                 traceback.print_exc()
                 raise e
+
+    def _sort_units_for_raster(self, spike_times, raster_sort):
+        """Returns ordered list of unit keys for raster y-axis."""
+        if raster_sort == 'none':
+            return None  # plot_clean_raster handles default ordering itself
+
+        if raster_sort == 'firing_rate':
+            return sorted(spike_times.keys(), key=lambda uid: len(spike_times[uid]))
+
+        elif raster_sort == 'unit_id':
+            return sorted(spike_times.keys())
+
+        self.logger.warning(f"Unknown raster_sort: {raster_sort}. Falling back to none.")
+        return None
 
     # --- Cleanup ---
     def cleanup(self):
@@ -903,22 +883,64 @@ class MEAPipeline:
 
 # --- CLI Entry Point ---
 def main():
-    parser = argparse.ArgumentParser(description="SOTA 2D MEA Pipeline")
-    parser.add_argument('file_path')
-    parser.add_argument('--well', required=True)
-    parser.add_argument('--output-dir', required=True)
-    parser.add_argument('--checkpoint-dir')
-    parser.add_argument('--docker')
-    parser.add_argument('--sorter', default='kilosort4')
-    parser.add_argument('--params')
-    parser.add_argument('--rec', default='rec0000')
-    parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--clean-up', action='store_true')
-    parser.add_argument('--force-restart', action='store_true')
-    parser.add_argument('--export-to-phy', action='store_true')
-    parser.add_argument('--no-curation', action='store_true')
-    parser.add_argument('--skip-spikesorting', action='store_true')
-    parser.add_argument("--reanalyze-bursts", action="store_true", help="Only re-run burst analysis on existing spike times.")
+    parser = argparse.ArgumentParser(
+        description="MEA Analysis Routine — processes a single well from an MEA recording",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    # --- Positional ---
+    parser.add_argument("file_path",
+        help="Path to .h5, .nwb, or .raw MEA recording file")
+
+    # --- Input / Output ---
+    io_group = parser.add_argument_group("input/output")
+    io_group.add_argument("--config", type=str, default=None,
+        help="Path to config JSON file (CLI flags always override config)")
+    io_group.add_argument("--well", required=True,
+        help="Well ID to process (e.g. well000)")
+    io_group.add_argument("--rec", type=str, default=None,
+        help="Recording name inside HDF5 file (default: rec0000)")
+    io_group.add_argument("--output-dir", type=str, default=None,
+        help="Output directory for results")
+    io_group.add_argument("--checkpoint-dir", type=str, default=None,
+        help="Checkpoint directory (default: <output-dir>/checkpoints)")
+    io_group.add_argument("--export-to-phy", action="store_true",
+        help="Export results to Phy format")
+    io_group.add_argument("--clean-up", action="store_true",
+        help="Remove intermediate files after processing")
+
+    # --- Sorting ---
+    sort_group = parser.add_argument_group("sorting")
+    sort_group.add_argument("--sorter", type=str, default=None,
+        help="Spike sorter to use (default: kilosort4)")
+    sort_group.add_argument("--docker", type=str, default=None,
+        help="Docker image name for containerized sorting")
+    sort_group.add_argument("--skip-spikesorting", action="store_true",
+        help="Run spike detection only, skip full sorting")
+
+    # --- Plotting ---
+    plot_group = parser.add_argument_group("plotting")
+    plot_group.add_argument("--plot-mode", choices=["separate", "merged"], default=None,
+        help="Plot raster and network on separate axes or merged twin-axis\n(default: separate)")
+    plot_group.add_argument("--raster-sort", choices=["none", "firing_rate", "location_y", "unit_id"], default=None,
+        help="How to sort units on raster y-axis (default: none)")
+    plot_group.add_argument("--plot-debug", action="store_true",
+    help="Overlay burst and superburst intervals on raster plot")
+    # --- Curation ---
+    cur_group = parser.add_argument_group("curation")
+    cur_group.add_argument("--no-curation", action="store_true",
+        help="Skip automatic unit curation")
+    cur_group.add_argument("--params", type=str, default=None,
+        help="JSON string or file path with quality thresholds")
+
+    # --- Run Control ---
+    ctrl_group = parser.add_argument_group("run control")
+    ctrl_group.add_argument("--force-restart", action="store_true",
+        help="Ignore checkpoint and restart from scratch")
+    ctrl_group.add_argument("--reanalyze-bursts", action="store_true",
+        help="Re-run burst analysis on existing spike times only")
+    ctrl_group.add_argument("--debug", action="store_true",
+        help="Enable verbose logging")
 
     # Optional post-spikesort step(s)
     parser.add_argument(
@@ -959,10 +981,10 @@ def main():
                 auto_merge_steps_params = None
 
         pipeline = MEAPipeline(
-            file_path=args.file_path, stream_id=args.well, recording_num=args.rec,
-            output_root=args.output_dir, checkpoint_root=args.checkpoint_dir,
-            sorter=args.sorter, docker_image=args.docker, verbose=args.debug,
-            cleanup=args.clean_up,
+            file_path=args.file_path, stream_id=args.well, recording_num=rec,
+            output_root=resolved["output_dir"], checkpoint_root=resolved["checkpoint_dir"],
+            sorter=sorter, docker_image=resolved["docker_image"], verbose=args.debug,
+            cleanup=resolved["clean_up"],
             force_restart=args.force_restart,
             auto_merge_units=bool(args.auto_merge_units),
             auto_merge_presets=auto_merge_presets,
@@ -972,12 +994,11 @@ def main():
 
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
-            pipeline._run_burst_analysis()
+            pipeline._run_burst_analysis(plot_mode=plot_mode,plot_debug=plot_debug, raster_sort=raster_sort)
             current_stage = ProcessingStage(pipeline.state['stage'])
-            pipeline._save_checkpoint(current_stage, note="Burst Re-analysis Performed",last_updated=str(datetime.now()))
+            pipeline._save_checkpoint(current_stage, note="Burst Re-analysis Performed", last_updated=str(datetime.now()))
             print("Burst Re-analysis Complete.")
             sys.exit(0)
-
 
         if pipeline.should_skip(): sys.exit(0)
 
@@ -986,10 +1007,10 @@ def main():
         if not args.skip_spikesorting:
             pipeline.run_sorting()
             pipeline.run_analyzer()
-            pipeline.generate_reports(thresholds, args.no_curation, args.export_to_phy)
+            pipeline.generate_reports(thresholds, resolved["no_curation"], resolved["export_to_phy"],plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort)
         else:
             ids = pipeline._spike_detection_only()
-            pipeline._run_burst_analysis(ids)
+            pipeline._run_burst_analysis(ids, plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort)
 
         pipeline.cleanup()
         print(f"Processing Complete for {args.well}")
