@@ -471,6 +471,8 @@ class MEAPipeline:
         ):
             self.logger.info("Resuming: Loading Sorting Analyzer.")
             self.analyzer = si.load_sorting_analyzer(analyzer_folder)
+            # Keep sorting/analyzer unit IDs consistent for downstream reports.
+            self.sorting = self.analyzer.sorting
             return
         
         self._save_checkpoint(ProcessingStage.ANALYZER)
@@ -548,6 +550,9 @@ class MEAPipeline:
                     n_after = int(merged_sorting.get_num_units())
                     self.logger.info("Auto-merge units: %d -> %d", n_before, n_after)
 
+                    # Canonicalize sorting for all downstream stages.
+                    self.sorting = merged_sorting
+
                     # Rebuild analyzer on merged sorting (so on-disk outputs reflect merged units).
                     if analyzer_folder.exists():
                         shutil.rmtree(analyzer_folder)
@@ -581,6 +586,9 @@ class MEAPipeline:
             if self.n_jobs is not None:
                 compute_kwargs['n_jobs'] = int(self.n_jobs)
             self.analyzer.compute(ext_list, extension_params=ext_params, **compute_kwargs)
+
+            # Always use analyzer sorting as the source of truth going forward.
+            self.sorting = self.analyzer.sorting
             self._save_checkpoint(ProcessingStage.ANALYZER_COMPLETE,failed_stage=None, error=None)
         except Exception as e:
             err = {
