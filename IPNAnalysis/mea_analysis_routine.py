@@ -743,9 +743,29 @@ class MEAPipeline:
             # 1. Load Spike Times
             if self.sorting:
                 fs = self.recording.get_sampling_frequency()
-                if ids_list is None: ids_list = self.analyzer.unit_ids
+                if ids_list is None:
+                    ids_list = self.analyzer.unit_ids
+
+                missing_unit_ids = []
                 for uid in ids_list:
-                    spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
+                    try:
+                        spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
+                    except KeyError:
+                        missing_unit_ids.append(uid)
+
+                if missing_unit_ids:
+                    self.logger.warning(
+                        "Skipping %d unit(s) not present in active sorting during burst analysis: %s",
+                        len(missing_unit_ids),
+                        missing_unit_ids[:20],
+                    )
+
+                if not spike_times:
+                    self.logger.error(
+                        "No valid units left for burst analysis after filtering missing unit IDs."
+                    )
+                    return
+
                 np.save(self.output_dir / "spike_times.npy", spike_times)
             else:
                 npy_spike_file = self.output_dir / "spike_times.npy"
