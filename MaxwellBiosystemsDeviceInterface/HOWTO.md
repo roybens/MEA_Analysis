@@ -7,6 +7,8 @@
 | `setup.py` | Python | Init chip, load .cfg, power stim unit, fire pulses |
 | `mxw_streamer.cpp` | C++ | Tap raw stream → shared memory ring buffer |
 | `oscilloscope.py` | Python | Read shared memory → live display (no MaxLab API) |
+| `recorder.py` | Python | Block record all channels via maxlab.saving API |
+| `emulator.py` | Python | Read HDF5 file, emulate streaming to shared memory |
 
 ---
 
@@ -29,8 +31,10 @@ g++ -std=c++17 -O3 -o mxw_streamer /path/to/mxw_streamer.cpp \
 ## Install Python dependencies
 
 ```bash
-pip install numpy matplotlib posix_ipc
+pip install numpy matplotlib posix_ipc h5py
 ```
+
+For the original C++ streamer approach, `h5py` is optional.
 
 ---
 
@@ -113,6 +117,91 @@ Row 3  rec el4888 [cyan]
 
 Artifact: large amplitude, fast decay, starts exactly at stim pulse.
 Evoked AP: ~50–300 µV, slower shape, appears 2–15 ms post-stim on neighbor channels.
+
+---
+
+## Python-Only Alternative (No C++ Compilation Required)
+
+If `mxw_streamer` fails to compile due to library ABI mismatches, use the Python POC approach:
+**recorder.py** captures data directly via MaxLab API, then **emulator.py** replays it to shared memory.
+
+### Files
+
+| File | Does |
+|------|------|
+| `recorder.py` | Block record all channels to HDF5 file via `maxlab.saving` API |
+| `emulator.py` | Read HDF5 file, stream to shared memory at real-time speed |
+
+### Install extra Python dependencies
+
+```bash
+pip install h5py
+```
+
+### Run order (four terminals)
+
+This approach sacrifices real-time display (~30–60 sec latency) for complete Python-only operation.
+
+#### Terminal 1 — Setup + stimulation (unchanged)
+```bash
+python setup.py \
+    --cfg ~/configs/my_network.cfg \
+    --stim-electrode 4887 \
+    --amplitude 100 \
+    --pulse-width 4 \
+    --isi 2.0 \
+    --n-pulses 10
+```
+Fires 10 biphasic pulses at your chosen parameters.
+
+#### Terminal 2 — Start block recording
+Start this **while Terminal 1 is running** to capture the stimulus:
+```bash
+python recorder.py \
+    --duration 20 \
+    --output /tmp/mea_recording.h5 \
+    --wells 0
+```
+
+Waits 20 seconds and saves all channels to `/tmp/mea_recording.h5`.
+
+#### Terminal 3 — Oscilloscope viewer (unchanged)
+```bash
+python oscilloscope.py \
+    --channels 4887 4886 4885 4888 \
+    --labels "stim el4887" "rec el4886" "rec el4885" "rec el4888"
+```
+
+Will show "Waiting for mxw_scope..." until emulator starts.
+
+#### Terminal 4 — Start emulator (after recorder finishes)
+```bash
+python emulator.py /tmp/mea_recording.h5 \
+    --speed 1.0
+```
+
+Reads HDF5 file and streams to shared memory. Oscilloscope displays live-ish traces (replayed at 20 kHz).
+
+### Workflow for parameter tuning
+
+1. **Initial setup**: Run Terminals 1–3
+2. **Record stimulus**: Run Terminal 2 with chosen `--amplitude`, `--pulse-width`, `--isi`
+3. **Replay data**: Once Terminal 2 finishes, run Terminal 4
+4. **Inspect waveforms**: Use oscilloscope controls (SPACE, ←/→, S) to examine evoked APs
+5. **Adjust parameters**: If AP isn't visible, Ctrl-C Terminals 1–4, change `--amplitude`, repeat
+
+### Advantages & Limitations
+
+**Advantages:**
+- No C++ compilation needed
+- Full Python workflow via maxlab API
+- Complete data capture (all 26,400 channels)
+- Post-hoc visualization identical to real-time oscilloscope
+
+**Limitations:**
+- ~30–60 second delay (download time + playback)
+- Cannot adjust amplitude during recording (must restart)
+- Requires h5py (`pip install h5py`)
 
 ---
 
