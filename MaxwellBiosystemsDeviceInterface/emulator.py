@@ -70,7 +70,7 @@ DATA_SIZE        = RING_FRAMES * MAX_CHANNELS * 4  # float32
 SHM_TOTAL        = DATA_OFFSET + DATA_SIZE
 
 # Header struct format (must match oscilloscope.py HEADER_FMT)
-HEADER_FMT       = "=II8HQQIF"
+HEADER_FMT       = "=IIHHHHHHHHQQIf"
 HEADER_SIZE      = struct.calcsize(HEADER_FMT)
 
 
@@ -107,24 +107,55 @@ class SharedMemoryEmulator:
 
         # Clean up any existing shared memory
         try:
-            posix_ipc.SharedMemory(SHM_NAME).unlink()
-        except (ValueError, FileNotFoundError):
+            shm_existing = posix_ipc.SharedMemory(SHM_NAME)
+            try:
+                shm_existing.unlink()
+                print(f"[emulator] Cleaned up existing shared memory segment")
+            except (ValueError, OSError, posix_ipc.PermissionsError) as e:
+                print(f"[WARNING] Could not unlink existing segment: {e}")
+                print(f"[WARNING] Will try to reuse it...")
+        except (ValueError, FileNotFoundError, posix_ipc.PermissionsError, posix_ipc.ExistentialError):
+            # No existing segment or can't access it, continue
             pass
 
-        # Create new shared memory segment
-        print(f"[emulator] Creating shared memory {SHM_NAME} ({SHM_TOTAL} bytes)")
-        self.shm = posix_ipc.SharedMemory(SHM_NAME, posix_ipc.O_CREAT | posix_ipc.O_EXCL,
-                                          size=SHM_TOTAL)
-        self.buf = mmap.mmap(self.shm.fd, SHM_TOTAL)
-        os.close(self.shm.fd)  # Close fd, mmap holds the reference
+        # Create new shared memory segment (or attach to existing one)
+        print(f"[emulator] Creating/attaching shared memory {SHM_NAME} ({SHM_TOTAL} bytes)")
+        try:
+            # Try to create new segment
+            self.shm = posix_ipc.SharedMemory(SHM_NAME, posix_ipc.O_CREAT | posix_ipc.O_EXCL,
+                                              size=SHM_TOTAL)
+            print(f"[emulator] Created new shared memory segment")
+            created_new = True
+        except (FileExistsError, posix_ipc.ExistentialError):
+            # Segment exists, try to attach to it
+            print(f"[emulator] Attaching to existing shared memory segment")
+            try:
+                self.shm = posix_ipc.SharedMemory(SHM_NAME)
+                created_new = False
+            except posix_ipc.PermissionsError as e:
+                print(f"[ERROR] Cannot access existing shared memory: {e}")
+                print(f"[ERROR] Try: ipcrm -m <shmid> to remove orphaned segments")
+                print(f"[ERROR] Or: ipcs -m to list all segments")
+                raise
+        
+        try:
+            self.buf = mmap.mmap(self.shm.fd, SHM_TOTAL)
+            os.close(self.shm.fd)  # Close fd, mmap holds the reference
+        except Exception as e:
+            print(f"[ERROR] Failed to mmap shared memory: {e}")
+            raise
 
-        # Initialize ring buffer to zeros
-        self.buf.seek(0)
-        self.buf.write(b'\x00' * SHM_TOTAL)
-        self.buf.flush()
+        # Only initialize if we created a new segment
+        if created_new:
+            # Initialize ring buffer to zeros
+            self.buf.seek(0)
+            self.buf.write(b'\x00' * SHM_TOTAL)
+            self.buf.flush()
 
-        # Write header
-        self._write_header()
+            # Write header
+            self._write_header()
+        else:
+            print(f"[emulator] Reusing existing shared memory, skipping init")
         self.write_pos = 0
         self.frame_number = 0
 
@@ -230,46 +261,104 @@ class DataReader:
         self._load_raw(filepath)
 
     def _load_hdf5(self, filepath):
-        """Load HDF5 file."""
+        """Load HDF5 file (handles Maxwell format)."""
         if not HAS_H5PY:
             raise ImportError("h5py required for HDF5 files: pip install h5py")
         
         print(f"[emulator] Opening HDF5 file: {filepath}")
         self.file = h5py.File(filepath, 'r')
         
-        # Print structure
-        print(f"[emulator] HDF5 structure:")
-        def print_structure(name, obj):
-            if isinstance(obj, h5py.Dataset):
-                print(f"  {name}: shape={obj.shape} dtype={obj.dtype}")
+        # Print top-level structure
+        print(f"[emulator] Top-level HDF5 keys: {list(self.file.keys())}")
         
-        self.file.visititems(print_structure)
-        
-        # Find data dataset
+        # Find actual waveform data (2D array with many samples)
+        # Maxwell might store data in: recordings/, data_store/, or raw/
         self.data_key = None
-        for candidate in ["data", "recording", "raw", "signals", "electrode_data", "Data"]:
-            if candidate in self.file:
-                self.data_key = candidate
-                break
+        candidates = []
+        
+        def find_data_arrays(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                # Look for 2D arrays with substantial size
+                if len(obj.shape) == 2 and obj.shape[0] > 100 and obj.shape[1] > 1:
+                    candidates.append((name, obj.shape))
+                # Also look for very large 1D arrays (might be raveled waveform)
+                elif len(obj.shape) == 1 and obj.shape[0] > 10_000:
+                    candidates.append((name, obj.shape))
+        
+        self.file.visititems(find_data_arrays)
+        
+        if candidates:
+            print(f"[emulator] Found candidate data arrays:")
+            for name, shape in candidates:
+                print(f"  {name}: shape={shape}")
+            # Use the largest one
+            self.data_key = max(candidates, key=lambda x: np.prod(x[1]))[0]
+        
+        # If no large arrays found, check common container paths
+        if not self.data_key:
+            print(f"[emulator] Searching in known container paths...")
+            
+            # Check recordings/
+            if 'recordings' in self.file:
+                print(f"[emulator] Found 'recordings' group, exploring...")
+                recordings = self.file['recordings']
+                for key in recordings.keys():
+                    item = recordings[key]
+                    if isinstance(item, h5py.Dataset):
+                        print(f"  recordings/{key}: shape={item.shape}")
+                        if len(item.shape) >= 2 and item.shape[0] > 100:
+                            self.data_key = f"recordings/{key}"
+                            break
+            
+            # Check data_store/data0000/ more carefully
+            if not self.data_key and 'data_store' in self.file:
+                print(f"[emulator] Checking data_store structure...")
+                ds = self.file['data_store']
+                for well_key in ds.keys():
+                    well = ds[well_key]
+                    print(f"  data_store/{well_key} keys: {list(well.keys())}")
+                    # Look for 'raw', 'data', 'waveform', etc.
+                    for data_key in ['raw', 'data', 'waveform', 'continuous']:
+                        if data_key in well and isinstance(well[data_key], h5py.Dataset):
+                            dset = well[data_key]
+                            print(f"    → Found {data_key}: shape={dset.shape}")
+                            if len(dset.shape) >= 2 and dset.shape[0] > 100:
+                                self.data_key = f"data_store/{well_key}/{data_key}"
+                                break
+                    if self.data_key:
+                        break
         
         if not self.data_key:
-            keys = [k for k in self.file.keys() if isinstance(self.file[k], h5py.Dataset)]
-            if keys:
-                self.data_key = keys[0]
-        
-        if not self.data_key:
-            raise ValueError("No datasets found in HDF5 file")
+            print(f"[emulator] ERROR: No suitable waveform data found!")
+            print(f"[emulator] Full HDF5 structure:")
+            def print_all(name, obj):
+                indent = len(name.split('/')) * 2
+                if isinstance(obj, h5py.Dataset):
+                    print(f"  {' ' * indent}{name}: shape={obj.shape} dtype={obj.dtype}")
+                elif isinstance(obj, h5py.Group):
+                    print(f"  {' ' * indent}{name}/ [group]")
+            self.file.visititems(print_all)
+            
+            raise ValueError("No continuous waveform data found in HDF5 file. "
+                           "This file may only contain spike data.")
         
         dset = self.file[self.data_key]
-        print(f"[emulator] Using HDF5 dataset '{self.data_key}' shape={dset.shape}")
+        print(f"[emulator] Using dataset '{self.data_key}' shape={dset.shape} dtype={dset.dtype}")
         
-        # Determine shape: assume (time, channels) or (channels, time)
-        if dset.shape[0] > dset.shape[1]:
-            self.time_axis = 0
-            self.n_samples, self.n_channels = dset.shape
+        # Determine shape: assume (time, channels) or (channels, time) or (time,) for 1D
+        if len(dset.shape) == 1:
+            raise ValueError(f"Cannot stream 1D data. Expected 2D array, got shape {dset.shape}")
+        elif len(dset.shape) == 2:
+            if dset.shape[0] > dset.shape[1]:
+                # First dim larger → likely time
+                self.time_axis = 0
+                self.n_samples, self.n_channels = dset.shape
+            else:
+                # Second dim larger → likely time
+                self.time_axis = 1
+                self.n_channels, self.n_samples = dset.shape
         else:
-            self.time_axis = 1
-            self.n_channels, self.n_samples = dset.shape
+            raise ValueError(f"Expected 2D dataset, got shape {dset.shape}")
         
         print(f"[emulator] Data: {self.n_samples} samples × {self.n_channels} channels")
 
@@ -345,11 +434,13 @@ def main():
         print(f"[emulator] Opening {args.file}...")
         reader = DataReader(args.file)
 
-        n_channels = args.channels[0] if args.channels else reader.n_channels
+        # Determine channels to stream (max 8 due to ring buffer size)
         if args.channels:
             channel_ids = args.channels[:8]
         else:
             channel_ids = list(range(min(reader.n_channels, MAX_CHANNELS)))
+        
+        n_channels = len(channel_ids)
 
         # Initialize shared memory
         shm = SharedMemoryEmulator(
@@ -426,3 +517,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
