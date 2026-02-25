@@ -65,8 +65,8 @@ def main():
         # Get just the filename (no directory)
         filename_only = os.path.splitext(os.path.basename(args.output))[0]
 
-        print(f"[recorder] Initializing maxlab system...")
-        maxlab.util.initialize(wells=[int(w) for w in wells])
+        #print(f"[recorder] Initializing maxlab system...")
+        #maxlab.util.initialize(wells=[int(w) for w in wells])
 
         print(f"[recorder] Setting up saving object...")
         saving = maxlab.saving.Saving()
@@ -75,7 +75,7 @@ def main():
         # Expand ~ in directory path
         expanded_dir = os.path.expanduser(output_dir)
         saving.open_directory(expanded_dir)
-
+         saving.group_define(0, "all_channels", range(1024))
         print(f"[recorder] Creating file: {filename_only}")
         saving.start_file(filename_only)
 
