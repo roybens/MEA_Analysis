@@ -76,11 +76,11 @@ def make_biphasic_pulse(amplitude: int, phase_samples: int, dac: int = 0) -> mx.
     phase_samples : samples per half-phase (multiply by 50 to get µs)
     """
     seq = mx.Sequence()
-    seq.append(mx.DAC(dac, 512 - amplitude))   # cathodic phase
-    seq.append(mx.DelaySamples(phase_samples))
-    seq.append(mx.DAC(dac, 512 + amplitude))   # anodic phase
-    seq.append(mx.DelaySamples(phase_samples))
-    seq.append(mx.DAC(dac, 512))               # return to baseline
+    seq.append(mx.chip.DAC(dac, 512 - amplitude))   # cathodic phase
+    seq.append(mx.system.DelaySamples(phase_samples))
+    seq.append(mx.chip.DAC(dac, 512 + amplitude))   # anodic phase
+    seq.append(mx.system.DelaySamples(phase_samples))
+    seq.append(mx.chip.DAC(dac, 512))               # return to baseline
     return seq
 
 
@@ -94,12 +94,12 @@ def setup(cfg_path: str, stim_electrode: int, wells: list) -> int:
     After this, Scope will reflect the new configuration.
     """
     print("[setup] Initializing system ...")
-    mx.initialize()
-    mx.send(mx.Core().enable_stimulation_power(True))
+    mx.util.initialize()
+    mx.send(mx.chip.Core().enable_stimulation_power(True))
 
     # Load routing from .cfg file
     print(f"[setup] Loading config: {cfg_path}")
-    array = mx.Array("stimulation")
+    array = mx.chip.Array("stimulation")
     array.load_config(cfg_path)
 
     # Connect stim electrode to a stimulation unit
@@ -119,7 +119,7 @@ def setup(cfg_path: str, stim_electrode: int, wells: list) -> int:
 
     # Power up the stim unit in voltage mode
     mx.send(
-        mx.StimulationUnit(unit)
+        mx.chip.StimulationUnit(unit)
           .power_up(True)
           .connect(True)
           .set_voltage_mode()

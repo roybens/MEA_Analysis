@@ -72,7 +72,7 @@ SHM_TOTAL    = DATA_OFFSET + DATA_SIZE
 #   Q  frame_number   uint64
 #   I  sample_rate    uint32
 #   f  lsb_uv         float32
-HEADER_FMT  = "=II8HQQIF"
+HEADER_FMT  = "=IIHHHHHHHQQIf"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -146,8 +146,12 @@ class Oscilloscope:
         self.window_sec     = window_sec
         self.screenshot_dir = screenshot_dir
 
-        self.n_disp = int(window_sec * SAMPLING_RATE)
-        self.t_axis = np.linspace(-window_sec, 0, self.n_disp)
+        # Cap window to ring buffer size (2 seconds max)
+        max_window_sec = (RING_FRAMES - 1) / SAMPLING_RATE
+        self.window_sec = min(window_sec, max_window_sec)
+        
+        self.n_disp = int(self.window_sec * SAMPLING_RATE)
+        self.t_axis = np.linspace(-self.window_sec, 0, self.n_disp)
 
         # Shared memory state
         self.shm_buf  = None
@@ -411,3 +415,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
