@@ -108,6 +108,7 @@ class MEAGui(tk.Tk):
             (self.clean_up,      "Clean up temp files",        "Delete binary / sorter output after run"),
             (self.dry_run,       "Dry run",                    "Print commands only, no processing"),
             (self.debug,         "Debug mode",                 "Verbose logging"),
+            (self.fixed_y,       "Fixed Y axis",               "Fixed Y - axis based on project max"),
         ]
 
         cb_frame = tk.Frame(self, bg=BG)

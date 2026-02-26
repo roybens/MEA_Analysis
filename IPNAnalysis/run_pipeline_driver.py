@@ -157,6 +157,8 @@ def main():
         help="Print what would run without any processing")
     ctrl_group.add_argument("--debug", action="store_true",
         help="Enable verbose logging")
+    ctrl_group.add_argument("--fixed-y", action="store_true",
+        help="Use fixed y-axis limits for raster plots - must run at least once without --fixed-y to generate summary")
 
     args = parser.parse_args()
     config   = load_config(args.config)
