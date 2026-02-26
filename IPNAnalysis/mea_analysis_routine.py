@@ -1,7 +1,7 @@
 # ==========================================================
 # mea_analysis_routine.py
 # Author: Mandar Patil
-# Contributors: Yuxin Ren
+# Contributors: Yuxin Ren, Shruti Shah
 # LLM Assisted Edits: Yes ChatGPT-4, Claude sonnet 4.6
 # ==========================================================
 
