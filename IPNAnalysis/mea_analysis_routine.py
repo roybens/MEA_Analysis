@@ -1,7 +1,7 @@
 # ==========================================================
 # mea_analysis_routine.py
 # Author: Mandar Patil
-# Contributors: Yuxin Ren
+# Contributors: Yuxin Ren, Shruti Shah
 # LLM Assisted Edits: Yes ChatGPT-4, Claude sonnet 4.6
 # ==========================================================
 
@@ -587,7 +587,7 @@ class MEAPipeline:
                 pdf_doc.savefig(fig)
                 plt.close(fig)
 
-    def _run_burst_analysis(self, ids_list=None, plot_mode='separate', plot_debug=False, raster_sort='none'):
+    def _run_burst_analysis(self, ids_list=None, plot_mode='separate', plot_debug=False, raster_sort='none', fixed_y = True):
             self.logger.info("Running Network Burst Analysis...")
             
             spike_times = {}
@@ -652,6 +652,7 @@ class MEAPipeline:
                     )
                     helper.plot_clean_network(ax_network, **network_data["plot_data"])
 
+
                 elif plot_mode == 'merged':
                     fig, ax = plt.subplots(figsize=(12, 5))
                     ax_raster = ax
@@ -702,6 +703,47 @@ class MEAPipeline:
 
                 plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
                 plt.close(fig)
+
+                # Fixed Y Logic 
+                if fixed_y:
+                    summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
+                    if not summary_file.exists():
+                        self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
+                    else:
+                        with open(summary_file, 'r') as f:
+                            summary = json.load(f)
+                        # Flatten all values and find global max
+                        all_maxima = [
+                            v for date in summary.values()
+                            for chip in date.values()
+                            for v in chip.values()
+                        ]
+                        global_max = max(all_maxima)
+                        self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
+
+                        # Replot with fixed y
+                        fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+                        ax_raster2, ax_network2 = axs2
+                        helper.plot_clean_raster(ax_raster2, spike_times, color='gray', markersize=4, markeredgewidth=0.5, alpha=1.0)
+                        helper.plot_clean_network(ax_network2, **network_data["plot_data"])
+                        ax_network2.set_ylim(0, global_max)
+                        plt.tight_layout()
+                        plt.subplots_adjust(hspace=0.05)
+                        for start, end in sb_intervals: 
+                            ax_network2.axvspan(start, end, color='gray', alpha=0.3)
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.svg")
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.png", dpi=300)
+                        ax_raster2.set_xlim(0, 60)
+                        ax_network2.set_xlim(0, 60)
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_60s.svg")
+                        ax_raster2.set_xlim(0, 30)
+                        ax_network2.set_xlim(0, 30)
+                        ax_network2.set_xlabel("Time (s)")
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
+                        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
+            
+                        plt.close(fig2)
+                
 
             except Exception as e:
                 self.logger.error(f"Burst analysis error: {e}")
@@ -793,11 +835,15 @@ def main():
         help="Re-run burst analysis on existing spike times only")
     ctrl_group.add_argument("--debug", action="store_true",
         help="Enable verbose logging")
+    ctrl_group.add_argument("--fixed-y", action="store_true",
+        help="Use fixed y-axis limits for raster plots - must run at least once without --fixed-y to generate summary")
 
     args = parser.parse_args()
     config = load_config(args.config)
     resolved = resolve_args(args, config)
+    fixed_y = resolved["fixed_y"]
 
+   
     plot_mode   = resolved["plot_mode"]
     plot_debug  = resolved["plot_debug"]
     raster_sort = resolved["raster_sort"]
@@ -815,7 +861,7 @@ def main():
 
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
-            pipeline._run_burst_analysis(plot_mode=plot_mode,plot_debug=plot_debug, raster_sort=raster_sort)
+            pipeline._run_burst_analysis(plot_mode=plot_mode,plot_debug=plot_debug, raster_sort=raster_sort, fixed_y=args.fixed_y)
             current_stage = ProcessingStage(pipeline.state['stage'])
             pipeline._save_checkpoint(current_stage, note="Burst Re-analysis Performed", last_updated=str(datetime.now()))
             print("Burst Re-analysis Complete.")
@@ -828,10 +874,10 @@ def main():
         if not args.skip_spikesorting:
             pipeline.run_sorting()
             pipeline.run_analyzer()
-            pipeline.generate_reports(thresholds, resolved["no_curation"], resolved["export_to_phy"],plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort)
+            pipeline.generate_reports(thresholds, resolved["no_curation"], resolved["export_to_phy"],plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y = fixed_y)
         else:
             ids = pipeline._spike_detection_only()
-            pipeline._run_burst_analysis(ids, plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort)
+            pipeline._run_burst_analysis(ids, plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y = fixed_y)
 
         pipeline.cleanup()
         print(f"Processing Complete for {args.well}")

@@ -30,6 +30,7 @@ DEFAULTS = {
         "plot_mode":        "separate",
         "raster_sort":      "none",
         "plot_debug":       False,
+        "fixed_y":       False,
     },
     "curation": {
         "no_curation":      False,
@@ -116,6 +117,7 @@ def resolve_args(args, config):
         "plot_mode":        _resolve(getattr(args, "plot_mode", None),       _cfg(config, "plotting", "plot_mode"),       DEFAULTS["plotting"]["plot_mode"]),
         "raster_sort":      _resolve(getattr(args, "raster_sort", None),     _cfg(config, "plotting", "raster_sort"),     DEFAULTS["plotting"]["raster_sort"]),
         "plot_debug":       _resolve(_bool(args, "plot_debug"),              _cfg(config, "plotting", "plot_debug"),      DEFAULTS["plotting"]["plot_debug"]),
+        "fixed_y":        _resolve(_bool(args, "fixed_y"),               _cfg(config, "plotting", "fixed_y"),         DEFAULTS["plotting"].get("fixed_y", False)),
         # curation
         "no_curation":      _resolve(_bool(args, "no_curation"),             _cfg(config, "curation", "no_curation"),     DEFAULTS["curation"]["no_curation"]),
         "quality_thresholds": _resolve_thresholds(args, config),
@@ -150,6 +152,7 @@ def build_extra_args(resolved, cli_args):
 
     # curation
     if resolved["no_curation"]:     extra.append("--no-curation")
+    if resolved["fixed_y"]:        extra.append("--fixed-y")
 
     # CLI-only flags - passed through directly, never in config
     if getattr(cli_args, "force_restart", False):     extra.append("--force-restart")
