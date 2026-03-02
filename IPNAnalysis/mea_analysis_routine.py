@@ -447,7 +447,7 @@ class MEAPipeline:
             raise
 
     # --- Phase 4: Reports & Curation ---
-    def generate_reports(self, thresholds=None, no_curation=False, export_phy=False,plot_mode="separate", plot_debug=False, raster_sort=None):
+    def generate_reports(self, thresholds=None, no_curation=False, export_phy=False,plot_mode="separate", plot_debug=False, raster_sort=None, fixed_y=False):
         if self.state['stage'] == ProcessingStage.REPORTS_COMPLETE.value: return
 
         self.logger.info("--- [Phase 4] Reports & Curation ---")
@@ -482,7 +482,7 @@ class MEAPipeline:
             mask = np.isin(self.analyzer.unit_ids, clean_units)
             self._plot_probe_locations(clean_units, locations[mask], f"locations_{len(clean_units)}_units.pdf")
             self._plot_waveforms_grid(clean_units)
-            self._run_burst_analysis(clean_units,plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort)
+            self._run_burst_analysis(clean_units,plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y=fixed_y)
 
             if export_phy:
                 si.export_to_phy(self.analyzer.select_units(clean_units), 
