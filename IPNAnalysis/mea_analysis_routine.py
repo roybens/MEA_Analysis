@@ -603,13 +603,13 @@ class MEAPipeline:
                 npz_spike_file = self.output_dir / "spike_times.npz"
                 npy_spike_file = self.output_dir / "spike_times.npy"
                 if npz_spike_file.exists():
-                    data = np.load(npz_spike_file)
-                    spike_times = {}
-                    for k in data.files:
-                        try:
-                            spike_times[int(k)] = data[k]
-                        except ValueError:
-                            spike_times[k] = data[k]
+                    with np.load(npz_spike_file) as data:
+                        spike_times = {}
+                        for k in data.files:
+                            try:
+                                spike_times[int(k)] = data[k]
+                            except ValueError:
+                                spike_times[k] = data[k]
                 elif npy_spike_file.exists():
                     try:
                         spike_times = np.load(npy_spike_file, allow_pickle=True).item()
