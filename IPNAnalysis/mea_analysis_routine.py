@@ -397,7 +397,7 @@ class MEAPipeline:
                 else np.array([])
             )
         
-        np.save(self.output_dir / "spike_times.npy", spike_times)
+        np.savez(self.output_dir / "spike_times.npz", **{str(k): v for k, v in spike_times.items()})
 
         return list(spike_times.keys())
 
@@ -598,11 +598,28 @@ class MEAPipeline:
                 if ids_list is None: ids_list = self.analyzer.unit_ids
                 for uid in ids_list:
                     spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
-                np.save(self.output_dir / "spike_times.npy", spike_times)
+                np.savez(self.output_dir / "spike_times.npz", **{str(k): v for k, v in spike_times.items()})
             else:
+                npz_spike_file = self.output_dir / "spike_times.npz"
                 npy_spike_file = self.output_dir / "spike_times.npy"
-                if npy_spike_file.exists():
-                    spike_times = np.load(npy_spike_file, allow_pickle=True).item()
+                if npz_spike_file.exists():
+                    data = np.load(npz_spike_file)
+                    spike_times = {}
+                    for k in data.files:
+                        try:
+                            spike_times[int(k)] = data[k]
+                        except ValueError:
+                            spike_times[k] = data[k]
+                elif npy_spike_file.exists():
+                    try:
+                        spike_times = np.load(npy_spike_file, allow_pickle=True).item()
+                    except ModuleNotFoundError as e:
+                        self.logger.error(
+                            f"Failed to load spike_times.npy (pickle compatibility error: {e}). "
+                            "This file was saved in a different Python/NumPy environment. "
+                            "Re-run sorting to regenerate spike times in portable .npz format."
+                        )
+                        return
                 else:
                     self.logger.error("No spike times found for burst analysis.")
                     return
