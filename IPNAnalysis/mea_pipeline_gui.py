@@ -10,6 +10,7 @@ from tkinter import ttk, filedialog, messagebox
 import subprocess
 import shlex
 import os
+import json
 from pathlib import Path
 
 BASE_FILE_PATH = str(Path(__file__).resolve().parent)
@@ -33,6 +34,7 @@ class MEAGui(tk.Tk):
         self.resizable(True, True)
 
         # ── state vars ────────────────────────────────────────────────────────
+        self.config_path    = tk.StringVar()
         self.data_path      = tk.StringVar()
         self.output_dir     = tk.StringVar()
         self.checkpoint_dir = tk.StringVar()
@@ -71,6 +73,49 @@ class MEAGui(tk.Tk):
         sep = tk.Frame(self, bg=BORDER, height=1)
         sep.pack(fill="x", padx=20, pady=(10, 0))
 
+        # ── Config section ────────────────────────────────────────────────────
+        self._section("CONFIG FILE", pad)
+        cfg_row = tk.Frame(self, bg=BG)
+        cfg_row.pack(fill="x", padx=20, pady=2)
+
+        tk.Label(cfg_row, text="Config file (JSON)", width=30, anchor="w",
+                 font=("Courier New", 9), bg=BG, fg=SUBTEXT).pack(side="left")
+
+        tk.Entry(cfg_row, textvariable=self.config_path, bg=PANEL, fg=TEXT,
+                 insertbackground=TEXT, relief="flat",
+                 font=("Courier New", 9), width=46).pack(side="left", padx=(0, 6))
+
+        def _browse_config():
+            p = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+            if p:
+                self.config_path.set(p)
+
+        tk.Button(cfg_row, text="Browse", font=("Courier New", 8),
+                  bg=BORDER, fg=TEXT, activebackground=ACCENT,
+                  activeforeground="white", relief="flat",
+                  cursor="hand2", padx=8, pady=2,
+                  command=_browse_config).pack(side="left")
+
+        cfg_btn_row = tk.Frame(self, bg=BG)
+        cfg_btn_row.pack(fill="x", padx=20, pady=(2, 6))
+
+        tk.Button(cfg_btn_row, text="Load Config → populate fields",
+                  font=("Courier New", 8),
+                  bg=PANEL, fg=SUBTEXT, activebackground=BORDER,
+                  activeforeground=TEXT, relief="flat", cursor="hand2",
+                  padx=8, pady=2,
+                  command=self._load_config).pack(side="left", padx=(0, 8))
+
+        tk.Button(cfg_btn_row, text="Save Config ← current fields",
+                  font=("Courier New", 8),
+                  bg=PANEL, fg=SUBTEXT, activebackground=BORDER,
+                  activeforeground=TEXT, relief="flat", cursor="hand2",
+                  padx=8, pady=2,
+                  command=self._save_config).pack(side="left")
+
+        sep_cfg = tk.Frame(self, bg=BORDER, height=1)
+        sep_cfg.pack(fill="x", padx=20, pady=(6, 0))
+
         # ── Path section ──────────────────────────────────────────────────────
         self._section("DATA PATH", pad)
         self._path_row("Data path (file or directory)*", self.data_path,
@@ -108,7 +153,6 @@ class MEAGui(tk.Tk):
             (self.clean_up,      "Clean up temp files",        "Delete binary / sorter output after run"),
             (self.dry_run,       "Dry run",                    "Print commands only, no processing"),
             (self.debug,         "Debug mode",                 "Verbose logging"),
-            (self.fixed_y,       "Fixed Y axis",               "Fixed Y - axis based on project max"),
         ]
 
         cb_frame = tk.Frame(self, bg=BG)
@@ -130,7 +174,7 @@ class MEAGui(tk.Tk):
         self.cmd_text.pack(fill="x", padx=20, pady=(0, 8))
 
         # Update preview on any change
-        for var in [self.data_path, self.output_dir, self.checkpoint_dir,
+        for var in [self.config_path, self.data_path, self.output_dir, self.checkpoint_dir,
                     self.reference, self.params, self.docker, self.sorter,
                     self.skip_sorting, self.force_restart, self.debug,
                     self.dry_run, self.clean_up, self.export_phy,
@@ -222,6 +266,85 @@ class MEAGui(tk.Tk):
         tk.Label(frm, text=f"  —  {tip}", font=("Courier New", 8),
                  bg=BG, fg=SUBTEXT).pack(side="left")
 
+    # ── Config load / save ────────────────────────────────────────────────────
+    def _load_config(self):
+        path = self.config_path.get().strip()
+        if not path:
+            path = filedialog.askopenfilename(
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+            if not path:
+                return
+            self.config_path.set(path)
+        try:
+            with open(path, encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Load Config", f"Could not read config:\n{e}")
+            return
+
+        io      = cfg.get("io", {})
+        sorting = cfg.get("sorting", {})
+        filt    = cfg.get("filtering", {})
+        plot    = cfg.get("plotting", {})
+        cur     = cfg.get("curation", {})
+
+        if io.get("output_dir"):        self.output_dir.set(io["output_dir"])
+        if io.get("checkpoint_dir"):    self.checkpoint_dir.set(io["checkpoint_dir"])
+        if io.get("export_to_phy") is not None:
+            self.export_phy.set(bool(io["export_to_phy"]))
+        if io.get("clean_up") is not None:
+            self.clean_up.set(bool(io["clean_up"]))
+
+        if sorting.get("sorter"):       self.sorter.set(sorting["sorter"])
+        if sorting.get("docker_image"): self.docker.set(sorting["docker_image"])
+
+        if filt.get("reference_file"):  self.reference.set(filt["reference_file"])
+
+        if plot.get("fixed_y") is not None:
+            self.fixed_y.set(bool(plot["fixed_y"]))
+
+        if cur.get("no_curation") is not None:
+            self.no_curation.set(bool(cur["no_curation"]))
+
+        messagebox.showinfo("Load Config", f"Config loaded from:\n{path}")
+
+    def _save_config(self):
+        path = self.config_path.get().strip()
+        if not path:
+            path = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+            if not path:
+                return
+            self.config_path.set(path)
+        cfg = {
+            "io": {
+                "output_dir":     self.output_dir.get().strip() or None,
+                "checkpoint_dir": self.checkpoint_dir.get().strip() or None,
+                "export_to_phy":  self.export_phy.get(),
+                "clean_up":       self.clean_up.get(),
+            },
+            "sorting": {
+                "sorter":       self.sorter.get().strip() or "kilosort4",
+                "docker_image": self.docker.get().strip() or None,
+            },
+            "filtering": {
+                "reference_file": self.reference.get().strip() or None,
+            },
+            "plotting": {
+                "fixed_y": self.fixed_y.get(),
+            },
+            "curation": {
+                "no_curation": self.no_curation.get(),
+            },
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+            messagebox.showinfo("Save Config", f"Config saved to:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Save Config", f"Could not save config:\n{e}")
+
     # ── Command builder ───────────────────────────────────────────────────────
     def _build_command(self):
         driver = os.path.join(BASE_FILE_PATH, "run_pipeline_driver.py")
@@ -231,6 +354,8 @@ class MEAGui(tk.Tk):
         if path:
             parts.append(shlex.quote(path))
 
+        if self.config_path.get().strip():
+            parts += ["--config", shlex.quote(self.config_path.get().strip())]
         if self.output_dir.get().strip():
             parts += ["--output-dir", shlex.quote(self.output_dir.get().strip())]
         if self.checkpoint_dir.get().strip():
