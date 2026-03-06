@@ -78,6 +78,43 @@ class MEAPlotter:
         if p < 0.05:
             return "*"
         return "ns"
+    
+    def get_style(
+        self,
+        figsize=(6,4),
+        title="Title",
+        xlabel="X label",
+        ylabel="Y label",
+        xticks=None,
+        xticklabels=None
+    ):
+        """
+        Returns a styled (fig, ax) with the MEAPlotter defaults applied.
+        No data is plotted. Intended for quick notebook experimentation.
+        """
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # ----- labels -----
+        ax.set_title(title, fontsize=9, fontweight="bold", pad=6)
+        ax.set_xlabel(xlabel, fontsize=8, fontweight="bold")
+        ax.set_ylabel(ylabel, fontsize=8, fontweight="bold")
+
+        # ----- ticks -----
+        ax.tick_params(axis="x", labelsize=6, width=0.8, length=3)
+        ax.tick_params(axis="y", labelsize=6, width=0.8, length=3)
+
+        # optional tick preview
+        if xticks is not None:
+            ax.set_xticks(xticks)
+
+        if xticklabels is not None:
+            ax.set_xticklabels(xticklabels)
+
+        # clean axes
+        sns.despine(ax=ax)
+
+        return fig, ax
 
     def calculate_stats_welch(self, df, group_col, y, group_order=None):
         """
