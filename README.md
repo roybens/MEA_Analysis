@@ -179,25 +179,19 @@ docker run -it --rm ubuntu-spikeinterface
 
 ### Running a Docker image on the lab server
 
-To get a shell inside an image (e.g. for debugging) without running the default entrypoint:
+Run the spike-sorter image with GPU access, mounted lab disks, and memory limits so Kilosort runs reliably. Opens an interactive bash shell; use it to run the pipeline manually or for debugging.
 
 ```bash
-docker run -it --rm --entrypoint bash si-98-ks2-maxwell
+docker run -it --gpus all --rm --entrypoint bash \
+  --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 \
+  -v /mnt/disk15tb/:/mnt/disk15tb -v /mnt/disk20tb:/mnt/disk20tb \
+  -p 8884:8884 \
+  mandarmp/benshalom:v1
 ```
 
-Replace `si-98-ks2-maxwell` with your image name.
-
----
-
-### Shifter vs Docker
-
-[Shifter](https://github.com/NERSC/shifter) is a container runtime used on some HPC systems (e.g. NERSC). It can run Docker-style images in a compatible way.
-
-- **Installation (e.g. CentOS 7):** [Shifter installation guide](https://shifter.readthedocs.io/en/latest/install/centos7.html)
-- **Shifter commands:** [Shifter command reference](https://shifter.readthedocs.io/en/latest/command/shifter.html)
-- **Using Shifter at NERSC:** [NERSC Shifter how-to](https://docs.nersc.gov/development/shifter/how-to-use/)
-
-To create images for Shifter you typically use a Dockerfile; the Dockerfile format is the same. Build the image with Docker, then import or run it with Shifter as per your site’s docs.
+- `--gpus all`: use all GPUs; `--entrypoint bash`: get a shell instead of running the pipeline entrypoint.
+- `--shm-size=1g`, `memlock=-1`, `stack=67108864`: increase shared memory and stack limits for the sorter.
+- `-v`: mount lab data disks; `-p 8884:8884`: expose port (e.g. for Jupyter). Replace image name if you use a different one.
 
 ---
 
