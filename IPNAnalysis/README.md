@@ -187,6 +187,31 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json
 python run_pipeline_driver.py /data/experiment --config mea_config.json --force-restart
 ```
 
+### 9. Filter runs by assay type (reference Excel file)
+```bash
+# Only process runs listed in the Excel file with assay type "network today" or "network today/best"
+python run_pipeline_driver.py /data/experiment \
+  --config mea_config.json \
+  --reference /data/experiment/run_list.xlsx
+
+# Use a custom assay type filter
+python run_pipeline_driver.py /data/experiment \
+  --config mea_config.json \
+  --reference /data/experiment/run_list.xlsx \
+  --type "network best"
+```
+
+> The Excel file must have `Run #` and `Assay` columns. Rows whose `Assay` value matches `--type` are included; all others are skipped.
+
+### 10. Fix y-axis scale across all raster plots
+```bash
+# Step 1 — run once without --fixed-y to generate the summary file
+python run_pipeline_driver.py /data/experiment --config mea_config.json
+
+# Step 2 — re-run with --fixed-y to use a consistent axis range
+python run_pipeline_driver.py /data/experiment --config mea_config.json --fixed-y
+```
+
 ## Command-Line Reference
 
 ### run_pipeline_driver.py
@@ -213,6 +238,7 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json --force-
 | run control | `--reanalyze-bursts` | Re-run burst analysis on existing spike times |
 | run control | `--dry` | Preview what would run without processing |
 | run control | `--debug` | Enable verbose logging |
+| run control | `--fixed-y` | Fix y-axis limits on raster plots using a saved summary (run once without this flag first) |
 
 ### mea_analysis_routine.py
 

@@ -223,10 +223,10 @@ def main():
         logger.info(f"[DIR MODE] Scanning directory: {path}")
 
         valid_runs = None
-        if args.reference:
+        if resolved["reference_file"]:
             try:
-                df = pd.read_excel(args.reference)
-                filtered = df[df['Assay'].str.lower().isin([t.lower() for t in args.type])]
+                df = pd.read_excel(resolved["reference_file"])
+                filtered = df[df['Assay'].str.lower().isin([t.lower() for t in resolved["assay_types"]])]
                 valid_runs = set(filtered['Run #'].astype(int).tolist())
                 logger.info(f"Reference filter applied: {len(valid_runs)} valid runs")
             except Exception as e:
