@@ -42,6 +42,11 @@ python IPNAnalysis/run_pipeline_driver.py /data/experiment --config mea_config.j
 # Full batch run
 python IPNAnalysis/run_pipeline_driver.py /data/experiment --config mea_config.json
 
+# Filter runs by assay type using a reference Excel file (must have 'Run #' and 'Assay' columns)
+python IPNAnalysis/run_pipeline_driver.py /data/experiment \
+  --config mea_config.json \
+  --reference /data/experiment/run_list.xlsx
+
 # Single well
 python IPNAnalysis/mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5 \
   --well well000 --rec rec0001 --config mea_config.json
