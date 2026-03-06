@@ -24,7 +24,7 @@
   "plotting": {
     "_comment": "plot_mode: separate | merged. raster_sort: none | firing_rate | location_y | unit_id.",
     "plot_mode": "separate",
-    "raster_sort": "none",
+    "raster_sort": "firing_rate",
     "plot_debug": false
   },
 
