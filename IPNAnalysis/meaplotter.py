@@ -2,9 +2,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+
 from scipy import stats
 from itertools import combinations
 from matplotlib.backends.backend_pdf import PdfPages
+
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 
 class MEAPlotter:
@@ -64,8 +69,21 @@ class MEAPlotter:
             return palette
         return self.palette_default
 
+    def _prepare_data(self, df, cols, div_col=None):
+        """
+        Common cleaning helper.
+        """
+        d = df.dropna(subset=cols).copy()
+
+        if div_col is not None:
+            d[div_col] = pd.to_numeric(d[div_col], errors="coerce")
+            d = d.dropna(subset=[div_col])
+            d[div_col] = d[div_col].astype(int)
+
+        return d
+
     # --------------------------
-    # stats
+    # stats helpers
     # --------------------------
     @staticmethod
     def _stars_from_p(p):
@@ -78,10 +96,32 @@ class MEAPlotter:
         if p < 0.05:
             return "*"
         return "ns"
-    
+
+    @staticmethod
+    def _safe_sem(x):
+        x = pd.Series(x).dropna()
+        return x.sem() if len(x) > 1 else np.nan
+
+    @staticmethod
+    def _safe_cohens_d(d1, d2):
+        d1 = pd.Series(d1).dropna()
+        d2 = pd.Series(d2).dropna()
+
+        if len(d1) < 2 or len(d2) < 2:
+            return np.nan
+
+        sd1 = d1.std(ddof=1)
+        sd2 = d2.std(ddof=1)
+        pooled_std = np.sqrt((sd1**2 + sd2**2) / 2)
+
+        if not np.isfinite(pooled_std) or pooled_std <= 0:
+            return np.nan
+
+        return (d1.mean() - d2.mean()) / pooled_std
+
     def get_style(
         self,
-        figsize=(6,4),
+        figsize=(6, 4),
         title="Title",
         xlabel="X label",
         ylabel="Y label",
@@ -92,33 +132,322 @@ class MEAPlotter:
         Returns a styled (fig, ax) with the MEAPlotter defaults applied.
         No data is plotted. Intended for quick notebook experimentation.
         """
-
         fig, ax = plt.subplots(figsize=figsize)
 
-        # ----- labels -----
         ax.set_title(title, fontsize=9, fontweight="bold", pad=6)
         ax.set_xlabel(xlabel, fontsize=8, fontweight="bold")
         ax.set_ylabel(ylabel, fontsize=8, fontweight="bold")
 
-        # ----- ticks -----
         ax.tick_params(axis="x", labelsize=6, width=0.8, length=3)
         ax.tick_params(axis="y", labelsize=6, width=0.8, length=3)
 
-        # optional tick preview
         if xticks is not None:
             ax.set_xticks(xticks)
-
         if xticklabels is not None:
             ax.set_xticklabels(xticklabels)
 
-        # clean axes
         sns.despine(ax=ax)
-
         return fig, ax
 
+    # --------------------------
+    # centralized stats dispatcher
+    # --------------------------
+    def _run_group_stats(self, df, group_col, y, group_order=None, alpha=0.05):
+        """
+        Central inferential logic.
+
+        Rules:
+        - <2 groups with data -> no test
+        - exactly 2 groups -> independent t-test
+        - >=3 groups -> one-way ANOVA, then Tukey HSD if omnibus is significant
+
+        Returns dict with:
+            test_type
+            omnibus_stat
+            omnibus_p
+            pairwise_df
+        """
+        d = self._prepare_data(df, [group_col, y])
+
+        if d.empty:
+            return {
+                "test_type": None,
+                "omnibus_stat": np.nan,
+                "omnibus_p": np.nan,
+                "pairwise_df": pd.DataFrame()
+            }
+
+        group_order = self._resolve_group_order(d, group_col, group_order)
+        present_groups = []
+        for g in group_order:
+            n = d.loc[d[group_col] == g, y].dropna().shape[0]
+            if n > 0:
+                present_groups.append(g)
+
+        if len(present_groups) < 2:
+            return {
+                "test_type": None,
+                "omnibus_stat": np.nan,
+                "omnibus_p": np.nan,
+                "pairwise_df": pd.DataFrame()
+            }
+
+        # ---------------- 2 groups -> t-test ----------------
+        if len(present_groups) == 2:
+            g1, g2 = present_groups
+            d1 = d.loc[d[group_col] == g1, y].dropna()
+            d2 = d.loc[d[group_col] == g2, y].dropna()
+
+            if len(d1) <= 1 or len(d2) <= 1:
+                pairwise_df = pd.DataFrame([{
+                    "group1": g1,
+                    "group2": g2,
+                    "comparison": f"{g1} vs {g2}",
+                    "p_adj": np.nan,
+                    "raw_p": np.nan,
+                    "reject": False,
+                    "stat": np.nan,
+                    "Grp1_Stats": f"{d1.mean():.2f} ± {self._safe_sem(d1):.2f} (n={len(d1)})" if len(d1) > 0 else f"NA (n={len(d1)})",
+                    "Grp2_Stats": f"{d2.mean():.2f} ± {self._safe_sem(d2):.2f} (n={len(d2)})" if len(d2) > 0 else f"NA (n={len(d2)})",
+                    "Cohen's d": np.nan
+                }])
+                return {
+                    "test_type": "t-test",
+                    "omnibus_stat": np.nan,
+                    "omnibus_p": np.nan,
+                    "pairwise_df": pairwise_df
+                }
+
+            # Standard 2-group independent t-test
+            t_stat, p_val = stats.ttest_ind(d1, d2, equal_var=True, nan_policy="omit")
+            cohens_d = self._safe_cohens_d(d1, d2)
+
+            pairwise_df = pd.DataFrame([{
+                "group1": g1,
+                "group2": g2,
+                "comparison": f"{g1} vs {g2}",
+                "p_adj": p_val,
+                "raw_p": p_val,
+                "reject": bool(p_val < alpha) if np.isfinite(p_val) else False,
+                "stat": t_stat,
+                "Grp1_Stats": f"{d1.mean():.2f} ± {self._safe_sem(d1):.2f} (n={len(d1)})",
+                "Grp2_Stats": f"{d2.mean():.2f} ± {self._safe_sem(d2):.2f} (n={len(d2)})",
+                "Cohen's d": cohens_d
+            }])
+
+            return {
+                "test_type": "t-test",
+                "omnibus_stat": t_stat,
+                "omnibus_p": p_val,
+                "pairwise_df": pairwise_df
+            }
+
+        # ---------------- 3+ groups -> one-way ANOVA ----------------
+        # safer formula quoting
+        yq = f'Q("{y}")'
+        gq = f'Q("{group_col}")'
+        formula = f"{yq} ~ C({gq})"
+
+        try:
+            model = ols(formula, data=d).fit()
+            anova_table = sm.stats.anova_lm(model, typ=2)
+            row_name = f"C({gq})"
+            omnibus_stat = anova_table.loc[row_name, "F"]
+            omnibus_p = anova_table.loc[row_name, "PR(>F)"]
+        except Exception:
+            omnibus_stat = np.nan
+            omnibus_p = np.nan
+
+        pairwise_rows = []
+
+        if np.isfinite(omnibus_p) and omnibus_p < alpha:
+            tukey = pairwise_tukeyhsd(endog=d[y], groups=d[group_col], alpha=alpha)
+            tukey_df = pd.DataFrame(
+                tukey._results_table.data[1:],
+                columns=tukey._results_table.data[0]
+            )
+
+            tukey_df = tukey_df.rename(columns={
+                "p-adj": "p_adj",
+                "meandiff": "stat"
+            })
+
+            for _, row in tukey_df.iterrows():
+                g1 = row["group1"]
+                g2 = row["group2"]
+
+                d1 = d.loc[d[group_col] == g1, y].dropna()
+                d2 = d.loc[d[group_col] == g2, y].dropna()
+
+                pairwise_rows.append({
+                    "group1": g1,
+                    "group2": g2,
+                    "comparison": f"{g1} vs {g2}",
+                    "p_adj": float(row["p_adj"]) if pd.notna(row["p_adj"]) else np.nan,
+                    "raw_p": np.nan,
+                    "reject": bool(row["reject"]),
+                    "stat": row["stat"],
+                    "Grp1_Stats": f"{d1.mean():.2f} ± {self._safe_sem(d1):.2f} (n={len(d1)})" if len(d1) > 0 else f"NA (n={len(d1)})",
+                    "Grp2_Stats": f"{d2.mean():.2f} ± {self._safe_sem(d2):.2f} (n={len(d2)})" if len(d2) > 0 else f"NA (n={len(d2)})",
+                    "Cohen's d": self._safe_cohens_d(d1, d2)
+                })
+        else:
+            # still return rows for all pairwise combinations so tables stay informative
+            pairs = list(combinations(present_groups, 2))
+            for g1, g2 in pairs:
+                d1 = d.loc[d[group_col] == g1, y].dropna()
+                d2 = d.loc[d[group_col] == g2, y].dropna()
+
+                pairwise_rows.append({
+                    "group1": g1,
+                    "group2": g2,
+                    "comparison": f"{g1} vs {g2}",
+                    "p_adj": np.nan,
+                    "raw_p": np.nan,
+                    "reject": False,
+                    "stat": np.nan,
+                    "Grp1_Stats": f"{d1.mean():.2f} ± {self._safe_sem(d1):.2f} (n={len(d1)})" if len(d1) > 0 else f"NA (n={len(d1)})",
+                    "Grp2_Stats": f"{d2.mean():.2f} ± {self._safe_sem(d2):.2f} (n={len(d2)})" if len(d2) > 0 else f"NA (n={len(d2)})",
+                    "Cohen's d": self._safe_cohens_d(d1, d2)
+                })
+
+        pairwise_df = pd.DataFrame(pairwise_rows)
+
+        return {
+            "test_type": "one-way ANOVA",
+            "omnibus_stat": omnibus_stat,
+            "omnibus_p": omnibus_p,
+            "pairwise_df": pairwise_df
+        }
+
+    def calculate_stats(self, df, x, y, order=None, alpha=0.05):
+        """
+        Single-panel public stats API.
+        Centralized version:
+        - 2 groups -> t-test
+        - 3+ groups -> one-way ANOVA + Tukey
+        """
+        d = self._prepare_data(df, [x, y])
+        order = self._resolve_group_order(d, x, order)
+
+        result = self._run_group_stats(
+            d,
+            group_col=x,
+            y=y,
+            group_order=order,
+            alpha=alpha
+        )
+
+        pairwise_df = result["pairwise_df"].copy()
+        if pairwise_df.empty:
+            return pd.DataFrame(columns=[
+                "Comparison", "Grp1_Stats", "Grp2_Stats",
+                "Stat", "p-val", "Sig", "Cohen's d",
+                "Test", "Omnibus Stat", "Omnibus p-val"
+            ])
+
+        out_rows = []
+        for _, row in pairwise_df.iterrows():
+            p = row.get("p_adj", np.nan)
+            out_rows.append({
+                "Comparison": row["comparison"],
+                "Grp1_Stats": row["Grp1_Stats"],
+                "Grp2_Stats": row["Grp2_Stats"],
+                "Stat": row["stat"],
+                "p-val": p,
+                "Sig": self._stars_from_p(p),
+                "Cohen's d": row["Cohen's d"],
+                "Test": result["test_type"],
+                "Omnibus Stat": result["omnibus_stat"],
+                "Omnibus p-val": result["omnibus_p"]
+            })
+
+        return pd.DataFrame(out_rows)
+
+    def calculate_stats_by_div(self, df, div_col, group_col, y, div_order=None, group_order=None, alpha=0.05):
+        """
+        Per-DIV public stats API.
+        Centralized version:
+        - 2 groups -> t-test
+        - 3+ groups -> one-way ANOVA + Tukey
+        """
+        d = self._prepare_data(df, [div_col, group_col, y], div_col=div_col)
+        div_order = self._resolve_div_order(d, div_col, div_order)
+        group_order = self._resolve_group_order(d, group_col, group_order)
+
+        rows = []
+
+        print(f"\n{'='*20} CENTRALIZED STATS: {y} by {div_col} {'='*20}")
+
+        for div_val in div_order:
+            div_data = d[d[div_col] == div_val].copy()
+            if div_data.empty:
+                continue
+
+            result = self._run_group_stats(
+                div_data,
+                group_col=group_col,
+                y=y,
+                group_order=group_order,
+                alpha=alpha
+            )
+
+            print(f"\n--- DIV {div_val} ---")
+            print(f"Test: {result['test_type']}, omnibus p = {result['omnibus_p']}")
+
+            pairwise_df = result["pairwise_df"]
+
+            if pairwise_df.empty:
+                rows.append({
+                    "DIV": div_val,
+                    "Comparison": "None",
+                    "Grp1_Stats": "",
+                    "Grp2_Stats": "",
+                    "Stat": np.nan,
+                    "p-val": np.nan,
+                    "Sig": "ns",
+                    "Cohen's d": np.nan,
+                    "Test": result["test_type"],
+                    "Omnibus Stat": result["omnibus_stat"],
+                    "Omnibus p-val": result["omnibus_p"],
+                    "group1": np.nan,
+                    "group2": np.nan,
+                    "reject": False
+                })
+                continue
+
+            for _, row in pairwise_df.iterrows():
+                p = row.get("p_adj", np.nan)
+                stars = self._stars_from_p(p)
+
+                print(f"  {row['comparison']}: p={p}, {stars}")
+
+                rows.append({
+                    "DIV": div_val,
+                    "Comparison": row["comparison"],
+                    "Grp1_Stats": row["Grp1_Stats"],
+                    "Grp2_Stats": row["Grp2_Stats"],
+                    "Stat": row["stat"],
+                    "p-val": p,
+                    "Sig": stars,
+                    "Cohen's d": row["Cohen's d"],
+                    "Test": result["test_type"],
+                    "Omnibus Stat": result["omnibus_stat"],
+                    "Omnibus p-val": result["omnibus_p"],
+                    "group1": row["group1"],
+                    "group2": row["group2"],
+                    "reject": bool(row["reject"])
+                })
+
+        return pd.DataFrame(rows)
+
+    # --------------------------
+    # backward-compatible Welch APIs
+    # --------------------------
     def calculate_stats_welch(self, df, group_col, y, group_order=None):
         """
-        Welch t-test (uncorrected), pairwise across groups (single x-axis panel).
+        Backward-compatible Welch t-test (uncorrected), pairwise across groups.
+        Preserved so existing notebook code does not break.
         """
         data = df.dropna(subset=[group_col, y]).copy()
         group_order = self._resolve_group_order(data, group_col, group_order)
@@ -146,11 +475,9 @@ class MEAPlotter:
                 continue
 
             t_stat, p_val = stats.ttest_ind(d1, d2, equal_var=False, nan_policy="omit")
-
             mean1, mean2 = d1.mean(), d2.mean()
             sem1, sem2 = d1.sem(), d2.sem()
-            pooled_std = np.sqrt((d1.std(ddof=1)**2 + d2.std(ddof=1)**2) / 2)
-            cohens_d = (mean1 - mean2) / pooled_std if np.isfinite(pooled_std) and pooled_std > 0 else np.nan
+            cohens_d = self._safe_cohens_d(d1, d2)
             stars = self._stars_from_p(p_val)
 
             print(f"{g1} (n={n1}) vs {g2} (n={n2}): p={p_val:.4e} ({stars}), d={cohens_d:.3f}")
@@ -169,8 +496,8 @@ class MEAPlotter:
 
     def calculate_stats_by_div_welch(self, df, div_col, group_col, y, div_order=None, group_order=None):
         """
-        Welch t-tests (uncorrected) per DIV, all pairwise group comparisons.
-        Returns DataFrame with a DIV column for table output.
+        Backward-compatible Welch t-tests (uncorrected) per DIV.
+        Preserved so existing notebook code does not break.
         """
         data = df.dropna(subset=[div_col, group_col, y]).copy()
         data[div_col] = pd.to_numeric(data[div_col], errors="coerce")
@@ -210,11 +537,9 @@ class MEAPlotter:
                     continue
 
                 t_stat, p_val = stats.ttest_ind(d1, d2, equal_var=False, nan_policy="omit")
-
                 mean1, mean2 = d1.mean(), d2.mean()
                 sem1, sem2 = d1.sem(), d2.sem()
-                pooled_std = np.sqrt((d1.std(ddof=1)**2 + d2.std(ddof=1)**2) / 2)
-                cohens_d = (mean1 - mean2) / pooled_std if np.isfinite(pooled_std) and pooled_std > 0 else np.nan
+                cohens_d = self._safe_cohens_d(d1, d2)
                 stars = self._stars_from_p(p_val)
 
                 print(f"  {g1} (n={n1}) vs {g2} (n={n2}): p={p_val:.4e} ({stars}), d={cohens_d:.3f}")
@@ -233,12 +558,87 @@ class MEAPlotter:
         return pd.DataFrame(rows)
 
     # --------------------------
+    # annotation helper
+    # --------------------------
+    def _annotate_stats_brackets(self, ax, stats_df, div_order, div_to_x, offsets, y_top_reserved_frac=0.20):
+        """
+        Draw significance brackets from centralized stats output.
+        Expects stats_df with columns:
+            DIV, group1, group2, reject, p-val, Sig
+        """
+        if stats_df is None or len(stats_df) == 0:
+            return ax
+
+        ymin_ax, ymax_ax = ax.get_ylim()
+        yr = ymax_ax - ymin_ax
+        base_top = ymax_ax - y_top_reserved_frac * yr
+        bracket_step = 0.06 * yr
+        max_annotation_y = base_top
+
+        for div_val in div_order:
+            div_tests = stats_df[
+                (stats_df["DIV"] == div_val) &
+                (stats_df["reject"] == True)
+            ].copy()
+
+            if div_tests.empty:
+                continue
+
+            level = 0
+            for _, t in div_tests.iterrows():
+                g1 = t["group1"]
+                g2 = t["group2"]
+                stars = t["Sig"]
+
+                if stars == "ns":
+                    continue
+                if pd.isna(g1) or pd.isna(g2):
+                    continue
+                if g1 not in offsets or g2 not in offsets:
+                    continue
+
+                x1 = div_to_x[div_val] + offsets[g1]
+                x2 = div_to_x[div_val] + offsets[g2]
+                bracket_y = base_top + level * bracket_step
+
+                ax.plot(
+                    [x1, x1, x2, x2],
+                    [
+                        bracket_y,
+                        bracket_y + 0.25 * bracket_step,
+                        bracket_y + 0.25 * bracket_step,
+                        bracket_y
+                    ],
+                    c="black",
+                    lw=1.2,
+                    zorder=7
+                )
+
+                ax.text(
+                    (x1 + x2) / 2,
+                    bracket_y + 0.30 * bracket_step,
+                    stars,
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                    zorder=8
+                )
+
+                max_annotation_y = max(max_annotation_y, bracket_y + 0.55 * bracket_step)
+                level += 1
+
+        if max_annotation_y > ax.get_ylim()[1]:
+            ax.set_ylim(ax.get_ylim()[0], max_annotation_y + 0.04 * yr)
+
+        return ax
+
+    # --------------------------
     # plots
     # --------------------------
     def plot_bars(self, df, x, y, order=None, palette=None, title=None, ax=None, annotate=False):
         """
         Simple grouped bar + scatter (single panel).
-        annotate=False by default (since you're not focusing on this right now).
+        annotate=False by default.
         """
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 6))
@@ -263,8 +663,39 @@ class MEAPlotter:
         ax.set_xlabel("")
         ax.set_ylabel(y.replace('_', ' '), fontweight='bold')
         sns.despine(ax=ax)
+
+        # Optional single-panel annotation using centralized stats
+        if annotate:
+            stats_df = self.calculate_stats(df, x=x, y=y, order=order, alpha=0.05)
+
+            if len(stats_df) > 0:
+                ymin_ax, ymax_ax = ax.get_ylim()
+                yr = ymax_ax - ymin_ax
+                base_y = ymax_ax + 0.02 * yr
+                step = 0.08 * yr
+
+                pos_map = {g: i for i, g in enumerate(order)}
+                level = 0
+
+                for _, row in stats_df.iterrows():
+                    p = row["p-val"]
+                    stars = row["Sig"]
+
+                    if stars == "ns" or not np.isfinite(p):
+                        continue
+
+                    g1, g2 = row["Comparison"].split(" vs ")
+                    x1, x2 = pos_map[g1], pos_map[g2]
+                    yb = base_y + level * step
+
+                    ax.plot([x1, x1, x2, x2], [yb, yb + 0.2 * step, yb + 0.2 * step, yb], c="black", lw=1.1)
+                    ax.text((x1 + x2) / 2, yb + 0.25 * step, stars, ha="center", va="bottom", fontsize=9)
+                    level += 1
+
+                ax.set_ylim(ymin_ax, base_y + (level + 1) * step)
+
         return ax
-    
+
     def plot_line_sem_by_div(
         self,
         df,
@@ -276,21 +707,22 @@ class MEAPlotter:
         palette=None,
         title=None,
         ylabel=None,
-        xlabel=None, 
+        xlabel=None,
         ax=None,
         scatter=True,
         sem_fill=True,
         annotate=True,
         # x-position control
-        group_offset_width=0.25,   # spread groups slightly within each DIV
-        scatter_jitter=0.04,       # small extra jitter around each group offset
+        group_offset_width=0.25,
+        scatter_jitter=0.04,
         # clipping / outlier display
         clip_upper=True,
-        clip_method="quantile",    # "quantile" or "iqr"
+        clip_method="quantile",
         clip_q=0.98,
         clip_k=1.5,
         show_upper_outliers=True,
         # legend
+        show_legend=True,
         legend_outside=True,
         legend_loc="upper right"
     ):
@@ -301,14 +733,11 @@ class MEAPlotter:
         - individual well scatter
         - genotype-specific x-offset within each DIV
         - upper clipped outliers shown as lollipops/triangles
-        - uncorrected Welch t-test annotations per DIV
+        - centralized stats:
+            * 2 groups -> t-test
+            * 3+ groups -> one-way ANOVA + Tukey
         """
-
-        # ---------------- Data prep ----------------
-        d = df.dropna(subset=[div_col, group_col, y]).copy()
-        d[div_col] = pd.to_numeric(d[div_col], errors="coerce")
-        d = d.dropna(subset=[div_col])
-        d[div_col] = d[div_col].astype(int)
+        d = self._prepare_data(df, [div_col, group_col, y], div_col=div_col)
 
         div_order = self._resolve_div_order(d, div_col, div_order)
         group_order = self._resolve_group_order(d, group_col, group_order)
@@ -325,7 +754,7 @@ class MEAPlotter:
             colors = sns.color_palette(palette, len(group_order))
             color_map = {g: colors[i] for i, g in enumerate(group_order)}
 
-        # ---------------- X offsets for groups within each DIV ----------------
+        # ---------------- X offsets ----------------
         n_groups = len(group_order)
         if n_groups == 1:
             offsets = {group_order[0]: 0.0}
@@ -368,7 +797,6 @@ class MEAPlotter:
             sems = np.array(sems, dtype=float)
             xline = np.array(xline, dtype=float)
 
-            # SEM fill
             if sem_fill:
                 ax.fill_between(
                     xline,
@@ -380,7 +808,6 @@ class MEAPlotter:
                     zorder=1
                 )
 
-            # Mean line
             ax.plot(
                 xline,
                 means,
@@ -392,13 +819,11 @@ class MEAPlotter:
                 zorder=3
             )
 
-            # Scatter wells
             if scatter and len(gdata) > 0:
                 xvals = gdata[div_col].map(div_to_x).astype(float).values + xoff
                 xvals = xvals + np.random.uniform(-scatter_jitter, scatter_jitter, size=len(xvals))
 
                 if cap is not None:
-                    # only non-upper-outliers in main scatter
                     main_mask = gdata[y].values <= cap
                 else:
                     main_mask = np.ones(len(gdata), dtype=bool)
@@ -420,7 +845,7 @@ class MEAPlotter:
             pad = 0.08 * max(cap - ymin, 1e-9)
             ax.set_ylim(ymin, cap + pad)
 
-        # ---------------- Upper outliers as lollipops ----------------
+        # ---------------- Upper outliers ----------------
         if show_upper_outliers and cap is not None:
             upper_out = d[d[y] > cap].copy()
             if len(upper_out) > 0:
@@ -448,97 +873,23 @@ class MEAPlotter:
                         zorder=6
                     )
 
-        # ---------------- Uncorrected Welch stats per DIV ----------------
-        all_tests = []
-        pairs = list(combinations(range(len(group_order)), 2))
-
-        for div_val in div_order:
-            div_data = d[d[div_col] == div_val]
-            for idx1, idx2 in pairs:
-                g1, g2 = group_order[idx1], group_order[idx2]
-                d1 = div_data.loc[div_data[group_col] == g1, y].dropna()
-                d2 = div_data.loc[div_data[group_col] == g2, y].dropna()
-
-                if len(d1) > 1 and len(d2) > 1:
-                    t_stat, p_val = stats.ttest_ind(d1, d2, equal_var=False, nan_policy="omit")
-                    all_tests.append({
-                        "div_val": div_val,
-                        "idx1": idx1,
-                        "idx2": idx2,
-                        "g1": g1,
-                        "g2": g2,
-                        "p": p_val
-                    })
-
-        # ---------------- Statistical brackets ----------------
-        if annotate and len(all_tests) > 0:
-            ymin_ax, ymax_ax = ax.get_ylim()
-            yr = ymax_ax - ymin_ax
-
-            # keep bracket region below outlier triangles
-            base_top = ymax_ax - 0.20 * yr
-            bracket_step = 0.06 * yr
-            max_annotation_y = base_top
-
-            for div_val in div_order:
-                div_tests = [t for t in all_tests if t["div_val"] == div_val]
-                if not div_tests:
-                    continue
-
-                level = 0
-                for t in div_tests:
-                    p = t["p"]
-                    if not np.isfinite(p):
-                        continue
-                    if p < 0.001:
-                        stars = "***"
-                    elif p < 0.01:
-                        stars = "**"
-                    elif p < 0.05:
-                        stars = "*"
-                    else:
-                        continue
-
-                    g1 = t["g1"]
-                    g2 = t["g2"]
-
-                    x1 = div_to_x[div_val] + offsets[g1]
-                    x2 = div_to_x[div_val] + offsets[g2]
-
-                    bracket_y = base_top + level * bracket_step
-
-                    ax.plot(
-                        [x1, x1, x2, x2],
-                        [bracket_y,
-                        bracket_y + 0.25 * bracket_step,
-                        bracket_y + 0.25 * bracket_step,
-                        bracket_y],
-                        c="black",
-                        lw=1.2,
-                        zorder=7
-                    )
-
-                    ax.text(
-                        (x1 + x2) / 2,
-                        bracket_y + 0.30 * bracket_step,
-                        stars,
-                        ha="center",
-                        va="bottom",
-                        fontsize=9,
-                        zorder=8
-                    )
-
-                    max_annotation_y = max(max_annotation_y, bracket_y + 0.55 * bracket_step)
-                    level += 1
-
-            if max_annotation_y > ax.get_ylim()[1]:
-                ax.set_ylim(ax.get_ylim()[0], max_annotation_y + 0.04 * yr)
+        # ---------------- Centralized stats + annotation ----------------
+        if annotate:
+            stats_df = self.calculate_stats_by_div(
+                df=d,
+                div_col=div_col,
+                group_col=group_col,
+                y=y,
+                div_order=div_order,
+                group_order=group_order,
+                alpha=0.05
+            )
+            self._annotate_stats_brackets(ax, stats_df, div_order, div_to_x, offsets)
 
         # ---------------- Axes / ticks / labels ----------------
-        #ax.set_xticks(div_order)
         ax.set_xticks(range(len(div_order)))
         ax.set_xticklabels([str(v) for v in div_order])
-        ax.set_xlim(-0.5,len(div_order)-0.5)
+        ax.set_xlim(-0.5, len(div_order) - 0.5)
 
         ax.set_xlabel(xlabel if xlabel else div_col, fontweight="bold", fontsize=8)
         ax.set_ylabel(ylabel if ylabel else y.replace("_", " "), fontweight="bold", fontsize=8)
@@ -547,39 +898,44 @@ class MEAPlotter:
         ax.tick_params(axis="x", labelsize=6, width=0.8, length=3)
         ax.tick_params(axis="y", labelsize=6, width=0.8, length=3)
 
-        if legend_outside:
-            ax.legend(frameon=False, bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=7, title_fontsize=8)
-        else:
-            ax.legend(frameon=False, loc=legend_loc, fontsize=7, title_fontsize=8)
+        if show_legend:
+            if legend_outside:
+                ax.legend(frameon=False, bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=7, title_fontsize=8)
+            else:
+                ax.legend(frameon=False, loc=legend_loc, fontsize=7, title_fontsize=8)
 
         sns.despine(ax=ax)
         return ax
 
-
     def plot_bars_by_div(
-        self, df, div_col, group_col, y,
-        div_order=None, group_order=None,
-        palette=None, title=None, ax=None, annotate=True,
+        self,
+        df,
+        div_col,
+        group_col,
+        y,
+        div_order=None,
+        group_order=None,
+        palette=None,
+        title=None,
+        ax=None,
+        annotate=True,
         # clipping / outliers
         clip_upper=True,
-        clip_method="quantile",  # "iqr" or "quantile"
+        clip_method="quantile",
         clip_k=1.5,
         clip_q=0.98,
         show_upper_outliers=True,
         # legend control
-        legend_loc="upper right",      # inside by default
+        legend_loc="upper right",
         legend_outside=False
     ):
         """
         Grouped bars by DIV with scatter.
-        Upper clipping prevents one insane well from flattening the plot.
-        Upper outliers shown as clipped lollipop markers (triangles) at top.
-        Welch stats are handled by the wrapper; here we only draw brackets from p-values passed in.
+        Centralized stats:
+            * 2 groups -> t-test
+            * 3+ groups -> one-way ANOVA + Tukey
         """
-        data = df.dropna(subset=[div_col, group_col, y]).copy()
-        data[div_col] = pd.to_numeric(data[div_col], errors="coerce")
-        data = data.dropna(subset=[div_col])
-        data[div_col] = data[div_col].astype(int)
+        data = self._prepare_data(df, [div_col, group_col, y], div_col=div_col)
 
         div_order = self._resolve_div_order(data, div_col, div_order)
         group_order = self._resolve_group_order(data, group_col, group_order)
@@ -588,7 +944,6 @@ class MEAPlotter:
         if ax is None:
             fig, ax = plt.subplots(figsize=(max(10, len(div_order) * 1.1 + 2), 6))
 
-        # ---- plot bars + points ----
         sns.barplot(
             data=data,
             x=div_col, y=y,
@@ -599,7 +954,7 @@ class MEAPlotter:
             errorbar="se",
             capsize=0.10,
             alpha=0.75,
-            edgecolor="black",
+            edgecolor='black',
             linewidth=0.8,
             ax=ax
         )
@@ -614,7 +969,7 @@ class MEAPlotter:
             jitter=0.15,
             alpha=0.75,
             size=5,
-            edgecolor="black",
+            edgecolor='black',
             linewidth=0.3,
             ax=ax
         )
@@ -637,7 +992,7 @@ class MEAPlotter:
         else:
             ax.legend(kept_handles, kept_labels, title=group_col, frameon=False, loc=legend_loc)
 
-        # ---- compute clip cap ----
+        # ---- clip cap ----
         cap = None
         if clip_upper:
             yvals = data[y].dropna()
@@ -653,10 +1008,10 @@ class MEAPlotter:
                     cap = float(yvals.quantile(clip_q))
 
                 ymin = float(yvals.min())
-                pad = 0.06 * max(cap - ymin, 1e-9)   # SMALL pad to avoid huge whitespace
+                pad = 0.06 * max(cap - ymin, 1e-9)
                 ax.set_ylim(ymin, cap + pad)
 
-        # ---- show upper outliers as clipped triangles at top ----
+        # ---- upper outliers ----
         if show_upper_outliers and cap is not None:
             upper_out = data[data[y] > cap]
             if len(upper_out) > 0:
@@ -677,10 +1032,33 @@ class MEAPlotter:
 
                     div_idx = div_order.index(div_val)
                     g_idx = group_order.index(g)
-                    x = div_idx + (g_idx - n_groups/2 + 0.5) * bar_width
+                    x = div_idx + (g_idx - n_groups / 2 + 0.5) * bar_width
 
                     ax.plot([x, x], [y_stem0, y_tip], color="black", lw=0.9, zorder=10)
                     ax.scatter([x], [y_tip], marker="^", s=42, color="black", zorder=11)
+
+        # ---- centralized stats annotations ----
+        if annotate:
+            stats_df = self.calculate_stats_by_div(
+                df=data,
+                div_col=div_col,
+                group_col=group_col,
+                y=y,
+                div_order=div_order,
+                group_order=group_order,
+                alpha=0.05
+            )
+
+            # build offsets to match grouped bars
+            n_groups = len(group_order)
+            bar_width = 0.8 / n_groups
+            offsets = {
+                g: (i - n_groups / 2 + 0.5) * bar_width
+                for i, g in enumerate(group_order)
+            }
+            div_to_x = {div: i for i, div in enumerate(div_order)}
+
+            self._annotate_stats_brackets(ax, stats_df, div_order, div_to_x, offsets)
 
         ax.set_title(title if title else f"{y} by {div_col}", fontweight="bold", pad=10)
         ax.set_xlabel("")
@@ -718,12 +1096,14 @@ class MEAPlotter:
     ):
         """
         Orchestrator:
-        - runs Welch stats (uncorrected)
+        - runs centralized stats
         - makes plot
         - adds stats table
         - saves a single PDF page
 
-        NOTE: No multiple-comparison correction (as requested).
+        Stats rule:
+        - 2 groups -> t-test
+        - 3+ groups -> one-way ANOVA + Tukey
         """
         if not filename.endswith(".pdf"):
             filename += ".pdf"
@@ -732,14 +1112,25 @@ class MEAPlotter:
 
         # ---- compute stats ----
         if mode == "by_div":
-            stats_df = self.calculate_stats_by_div_welch(
-                df, div_col=div_col, group_col=group_col, y=y,
-                div_order=div_order, group_order=group_order
+            stats_df = self.calculate_stats_by_div(
+                df=df,
+                div_col=div_col,
+                group_col=group_col,
+                y=y,
+                div_order=div_order,
+                group_order=group_order,
+                alpha=0.05
             )
         elif mode == "by_group":
             if x is None:
                 raise ValueError("For mode='by_group', you must pass x=<group column> (e.g., 'NeuronType').")
-            stats_df = self.calculate_stats_welch(df, group_col=x, y=y, group_order=group_order)
+            stats_df = self.calculate_stats(
+                df=df,
+                x=x,
+                y=y,
+                order=group_order,
+                alpha=0.05
+            )
         else:
             raise ValueError("mode must be 'by_div' or 'by_group'")
 
@@ -772,11 +1163,14 @@ class MEAPlotter:
             )
         else:
             self.plot_bars(
-                df=df, x=x, y=y,
+                df=df,
+                x=x,
+                y=y,
                 order=group_order,
                 palette=palette,
                 title=title,
-                ax=ax_plot
+                ax=ax_plot,
+                annotate=annotate
             )
 
         # ---- table ----
@@ -784,10 +1178,18 @@ class MEAPlotter:
             ax_table.text(0.5, 0.5, "No stats to display", ha="center", va="center")
         else:
             # choose columns
-            if "DIV" in stats_df.columns:
-                cols = ["DIV", "Comparison", "Grp1_Stats", "Grp2_Stats", "t-stat", "p-val", "Sig", "Cohen's d"]
+            if mode == "by_div" and "DIV" in stats_df.columns:
+                cols = [
+                    "DIV", "Test", "Omnibus Stat", "Omnibus p-val",
+                    "Comparison", "Grp1_Stats", "Grp2_Stats",
+                    "Stat", "p-val", "Sig", "Cohen's d"
+                ]
             else:
-                cols = ["Comparison", "Grp1_Stats", "Grp2_Stats", "t-stat", "p-val", "Sig", "Cohen's d"]
+                cols = [
+                    "Test", "Omnibus Stat", "Omnibus p-val",
+                    "Comparison", "Grp1_Stats", "Grp2_Stats",
+                    "Stat", "p-val", "Sig", "Cohen's d"
+                ]
 
             # format
             cell_text = []
@@ -797,9 +1199,9 @@ class MEAPlotter:
                     v = row.get(c, "")
                     if isinstance(v, float) and np.isnan(v):
                         row_vals.append("NA")
-                    elif c == "t-stat" and isinstance(v, (float, np.floating)):
+                    elif c in ["Stat", "Omnibus Stat"] and isinstance(v, (float, np.floating)):
                         row_vals.append(f"{v:.2f}")
-                    elif c == "p-val" and isinstance(v, (float, np.floating)):
+                    elif c in ["p-val", "Omnibus p-val"] and isinstance(v, (float, np.floating)):
                         row_vals.append(f"{v:.3e}")
                     elif c == "Cohen's d" and isinstance(v, (float, np.floating)):
                         row_vals.append(f"{v:.2f}" if np.isfinite(v) else "NA")
@@ -821,7 +1223,7 @@ class MEAPlotter:
                 if r == 0:
                     cell.set_text_props(weight="bold")
 
-        # ---- layout control (NO tight_layout; it fights legends) ----
+        # ---- layout control ----
         right = 0.82 if legend_outside else 0.95
         fig.subplots_adjust(top=0.92, bottom=0.05, left=0.07, right=right, hspace=0.15)
 
