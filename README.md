@@ -54,6 +54,153 @@ python IPNAnalysis/mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5
 - Kilosort4 (GPU recommended, ≥ 8 GB VRAM)
 - See `requirements.txt` for full list
 
+## Docker
+
+The repo provides a Docker image (CUDA 12, SpikeInterface, Kilosort4, Maxwell HDF5 plugin) for reproducible spike sorting and full-pipeline runs.
+
+### Build the image
+
+From the repo root (requires [Docker](https://docs.docker.com/get-docker/) and an NVIDIA GPU with drivers + [nvidia-docker](https://github.com/NVIDIA/nvidia-docker)):
+
+```bash
+docker build -t mea-spikesorter -f dockers/spikesorter/Dockerfile .
+```
+
+### Run the pipeline in Docker
+
+Mount your data and config, and pass pipeline arguments after the image name. The container entrypoint runs `run_pipeline_driver.py` and will pull the latest `main` before each run.
+
+```bash
+docker run --gpus all -it --rm \
+  -v /path/to/your/data:/data \
+  -v /path/to/your/output:/output \
+  -v /path/to/mea_config.json:/config/mea_config.json:ro \
+  mea-spikesorter /data/experiment --config /config/mea_config.json --output-dir /output
+```
+
+Adjust `-v` paths and the positional `/data/experiment` and `--output-dir` to match your layout. Use `--dry` to preview without processing.
+
+### Use a Docker image for sorting only
+
+When running the pipeline on the host (not inside the container), you can run the spike-sorting step inside Docker by passing the image name:
+
+```bash
+python IPNAnalysis/run_pipeline_driver.py /data/experiment --config mea_config.json --docker mea-spikesorter
+```
+
+Or set `"docker_image": "mea-spikesorter"` in the `sorting` section of `mea_config.json`.
+
+---
+
+### Docker basics (Ubuntu)
+
+Use these steps to try a Docker environment with an Ubuntu image.
+
+**Pull the Ubuntu image:**
+
+```bash
+docker pull ubuntu
+```
+
+(On Linux you may need `sudo docker pull ubuntu`. For a specific version: `docker pull ubuntu:20.04`.)
+
+**Run an Ubuntu container and get a shell:**
+
+The `-it` options run the container in interactive mode with a TTY so you can use the container’s shell:
+
+```bash
+docker run -it ubuntu
+```
+
+Or explicitly request a shell:
+
+```bash
+docker run -it --rm ubuntu /bin/bash
+```
+
+`--rm` removes the container when you exit.
+
+---
+
+### Installing Python, pip, and sudo in an Ubuntu container
+
+Inside the Ubuntu container:
+
+```bash
+apt update && apt upgrade -y
+apt install -y sudo
+apt install -y python3-pip
+pip install spikeinterface[full]
+```
+
+---
+
+### Creating a new image from a container
+
+If you install packages in a running container and want to save that state as a new image:
+
+1. Exit the container: `exit`
+2. List containers: `docker ps -a`
+3. Copy the **container ID** of the one you just exited
+4. Create an image from it:  
+   `docker commit [container-id] [image-name]`  
+   (e.g. `docker commit abc123 ubuntu-rohan`)
+5. Run the new image:  
+   `docker run -it ubuntu-rohan /bin/bash`
+6. Inspect installed packages: `pip freeze`
+
+---
+
+### Creating a Dockerfile
+
+Example Dockerfile that builds an image with SpikeInterface:
+
+```dockerfile
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y sudo python3-pip
+
+RUN python3 -m pip install spikeinterface
+
+CMD ["bash"]
+```
+
+From the folder where the Dockerfile is saved:
+
+```bash
+docker build -t ubuntu-spikeinterface .
+docker run -it --rm ubuntu-spikeinterface
+```
+
+---
+
+### Running a Docker image on the lab server
+
+To get a shell inside an image (e.g. for debugging) without running the default entrypoint:
+
+```bash
+docker run -it --rm --entrypoint bash si-98-ks2-maxwell
+```
+
+Replace `si-98-ks2-maxwell` with your image name.
+
+---
+
+### Shifter vs Docker
+
+[Shifter](https://github.com/NERSC/shifter) is a container runtime used on some HPC systems (e.g. NERSC). It can run Docker-style images in a compatible way.
+
+- **Installation (e.g. CentOS 7):** [Shifter installation guide](https://shifter.readthedocs.io/en/latest/install/centos7.html)
+- **Shifter commands:** [Shifter command reference](https://shifter.readthedocs.io/en/latest/command/shifter.html)
+- **Using Shifter at NERSC:** [NERSC Shifter how-to](https://docs.nersc.gov/development/shifter/how-to-use/)
+
+To create images for Shifter you typically use a Dockerfile; the Dockerfile format is the same. Build the image with Docker, then import or run it with Shifter as per your site’s docs.
+
+---
+
 ## License
 
 Pending
