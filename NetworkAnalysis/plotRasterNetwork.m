@@ -3,13 +3,12 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     
     %% NO INPUT PARSER - Simpler for PARFOR
     % Direct color settings
-    RasterColor = '#000000';
+    RasterColor = [0.5 0.5 0.5];  % gray, matching IPNAnalysis style
     NetworkColor = '#0066CC';
     BaseLineColor = '#FF6600';
     ThresholdColor = '#C0392B';
     PeakColor = '#FF3333';
     LineWidth = 1.2;
-    SpikeHeight = 0.9;
     SvgPlot = false;
     
     % Create figure
@@ -24,15 +23,8 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     nSpikes = length(spikeTimes);
     
     if nSpikes > 0
-        x_plot = nan(3*nSpikes, 1, 'single');
-        y_plot = nan(3*nSpikes, 1, 'single');
-        indices = 1:3:3*nSpikes;
-        x_plot(indices) = spikeTimes;
-        x_plot(indices+1) = spikeTimes;
-        half_height = SpikeHeight / 2;
-        y_plot(indices) = channels - half_height;
-        y_plot(indices+1) = channels + half_height;
-        plot(x_plot, y_plot, 'Color', RasterColor, 'LineWidth', LineWidth);
+        plot(spikeTimes, channels, '|', ...
+            'Color', RasterColor, 'MarkerSize', 8, 'LineWidth', 0.5);
     end
     
     ylabel('Channel', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
