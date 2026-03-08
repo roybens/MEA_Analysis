@@ -298,6 +298,10 @@ function processActivityButtonCallback(~, ~)
         
 
         % Call the processing function
+        % Note: neuron-source colors and legend order are configured in
+        % expParameterSetting.json under the "genoColors" key, e.g.:
+        %   "genoColors": { "MxWT": "#4C72B0", "FxHET": "#D55E00", "MxHEMI": "#A63226" }
+        % Leave "genoColors" as {} for automatic color assignment.
         plotParametersComparesWrapper(data);
 
         fclose(logFile);
