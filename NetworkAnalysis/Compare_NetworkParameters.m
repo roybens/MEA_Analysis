@@ -8,6 +8,7 @@ p.addRequired('parameter');
 p.addParameter('BaseParameters', {0.3, 0.1, 1.0, 1.2, 'Fixed', 0.3,1.0});
 p.addParameter('VarParameter', [0, 0.2, 2]);
 p.addParameter('Assay', 'today')
+p.addParameter('GenoColors', containers.Map('KeyType', 'char', 'ValueType', 'any'));
 %p.addParameter('Assay')
 p.parse(fileDir, refDir, outDir, parameter, varargin{:});
 args = p.Results;
@@ -441,9 +442,25 @@ fig2 =figure('color','w','Position',[0 0 800 800],'Visible','off');
 genoColorMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 legendHandlesMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
-% Define a list of colors to use for plots
+% Define a list of colors to use for plots (fallback when GenoColors not specified)
 colorList = {[240, 228, 66] / 255; [0, 114, 178]/255; [213, 94, 0]/255;}; % Add more colors as needed
 colorIndex = 1;
+
+% Pre-populate genoColorMap with user-specified colors and record their order
+userGenoColors = args.GenoColors;
+userGenoOrder = {};
+if ~isempty(userGenoColors)
+    userGenoOrder = keys(userGenoColors);
+    for ki = 1:length(userGenoOrder)
+        gk = userGenoOrder{ki};
+        colorVal = userGenoColors(gk);
+        if ischar(colorVal) || isStringScalar(colorVal)
+            genoColorMap(gk) = hexColorToRgb(colorVal);
+        else
+            genoColorMap(gk) = colorVal;
+        end
+    end
+end
 
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '*.csv'); 
@@ -549,8 +566,14 @@ for k = 1 : iterations
     end
 end
 
-legendHandles = values(legendHandlesMap, keys(genoColorMap));
-legendLabels = keys(genoColorMap);
+% Build legend in user-specified order first, then any auto-colored types
+allMapKeys = keys(genoColorMap);
+presentUserKeys = userGenoOrder(ismember(userGenoOrder, allMapKeys));
+autoKeys = allMapKeys(~ismember(allMapKeys, userGenoOrder));
+orderedKeys = [presentUserKeys, autoKeys];
+validLegendKeys = orderedKeys(isKey(legendHandlesMap, orderedKeys));
+legendHandles = values(legendHandlesMap, validLegendKeys);
+legendLabels = validLegendKeys;
 legend([legendHandles{:}], legendLabels);
 newTable = table(newGenoStrs, newIBIs,newBPs,newNBs,newSPBs, 'VariableNames', {'GenoStr', 'IBI','BP','NB','SPB'});
 % uniqueGenoTypes = unique(newTable.GenoStr);
@@ -693,8 +716,14 @@ for i = 1:length(uniqueGenoTypes)
     
 end
 
-legendHandles = values(legendHandlesMap, keys(genoColorMap));
-legendLabels = keys(genoColorMap);
+% Build legend in user-specified order first, then any auto-colored types
+allMapKeys = keys(genoColorMap);
+presentUserKeys = userGenoOrder(ismember(userGenoOrder, allMapKeys));
+autoKeys = allMapKeys(~ismember(allMapKeys, userGenoOrder));
+orderedKeys = [presentUserKeys, autoKeys];
+validLegendKeys = orderedKeys(isKey(legendHandlesMap, orderedKeys));
+legendHandles = values(legendHandlesMap, validLegendKeys);
+legendLabels = validLegendKeys;
 legend([legendHandles{:}], legendLabels);
 % Find the max x-limit among all subplots
 all_axes = findall(fig2, 'Type', 'axes');
@@ -725,4 +754,18 @@ end
 % Write the concatenated table to a CSV file
 writetable(allData, strcat(opDir, 'Combined_',parameter,'.csv'));
 
+end
+
+function rgb = hexColorToRgb(hexStr)
+% Convert a hex color string (e.g., '#4C72B0' or '4C72B0') to a
+% normalized 1x3 RGB triplet in the range [0, 1].
+    if isstring(hexStr)
+        hexStr = char(hexStr);
+    end
+    hexStr = strrep(hexStr, '#', '');
+    if ~ischar(hexStr) || length(hexStr) ~= 6 || ~all(isstrprop(hexStr, 'xdigit'))
+        error('Compare_NetworkParameters:invalidHexColor', ...
+            'Invalid hex color string "%s". Expected format: ''#RRGGBB'' or ''RRGGBB''.', hexStr);
+    end
+    rgb = reshape(sscanf(hexStr, '%2x'), 1, 3) / 255;
 end
