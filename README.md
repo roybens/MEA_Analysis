@@ -56,7 +56,7 @@ python IPNAnalysis/mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5
 
 ## Docker
 
-The repo provides a Docker image (CUDA 12, SpikeInterface, Kilosort4, Maxwell HDF5 plugin) for reproducible spike sorting and full-pipeline runs.
+The repo provides a Docker image (CUDA 12, SpikeInterface, Kilosort4, Maxwell HDF5 plugin) for containerised spike sorting and full-pipeline runs.
 
 ### Build the image
 
@@ -66,13 +66,15 @@ From the repo root (requires [Docker](https://docs.docker.com/get-docker/) and a
 docker build -t mea-spikesorter -f dockers/spikesorter/Dockerfile .
 ```
 
+**Note:** The `dockers/spikesorter/Dockerfile` clones `roybens/MEA_Analysis` from GitHub during the build. This means the image is built from the remote repository (typically the latest `main`), **not** from your local working tree or branch. Local, unpushed changes in this checkout will not be included in the image. To build an image from your own fork or branch, adjust the clone URL/branch in the Dockerfile before running the `docker build` command above.
+
 ### Run the pipeline in Docker
 
-Mount your data and config, and pass pipeline arguments after the image name. The container entrypoint runs `run_pipeline_driver.py` and will pull the latest `main` before each run.
+Mount your data and config, and pass pipeline arguments after the image name. The container entrypoint runs `run_pipeline_driver.py` and will attempt to update the repo to the latest `main` before each run; if the update fails (for example, when offline or if the remote is unavailable), it continues using the existing checkout.
 
 ```bash
 docker run --gpus all -it --rm \
-  -v /path/to/your/data:/data \
+  -v /path/to/your/experiment:/data/experiment \
   -v /path/to/your/output:/output \
   -v /path/to/mea_config.json:/config/mea_config.json:ro \
   mea-spikesorter /data/experiment --config /config/mea_config.json --output-dir /output
