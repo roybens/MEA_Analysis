@@ -5,5 +5,9 @@
     "StartStopThreshold": [0, 0.02, 1],
     "MinPeakDistance": [0, 0.1, 5],
     "MinPeakProminence": [0.4, 0.1, 5],
-    "genoColors": {}
+    "genoColors": {
+        "MxWT":   "#4C72B0",
+        "FxHET":  "#D55E00",
+        "MxHEMI": "#A63226"
+    }
 }
