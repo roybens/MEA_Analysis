@@ -60,6 +60,24 @@ try
      % Decode JSON file
     params = jsondecode(str);
 
+    % Build GenoColors map from the JSON 'genoColors' field.
+    % Edit 'genoColors' in expParameterSetting.json to specify per-genotype
+    % hex colors and their legend order, e.g.:
+    %   "genoColors": { "MxWT": "#4C72B0", "FxHET": "#D55E00", "MxHEMI": "#A63226" }
+    % Leave it as {} to use automatic color assignment.
+    genoColorKeys   = {};
+    genoColorValues = {};
+    if isfield(params, 'genoColors')
+        colorFields = fieldnames(params.genoColors);
+        genoColorKeys   = cell(length(colorFields), 1);
+        genoColorValues = cell(length(colorFields), 1);
+        for ci = 1:length(colorFields)
+            gk = colorFields{ci};
+            genoColorKeys{ci}   = gk;
+            genoColorValues{ci} = params.genoColors.(gk);
+        end
+    end
+
     % Specify the exact number of cores to use
     numCores =  numParameters;  % Adjust this number based on your needs and resource availability
     
@@ -82,8 +100,16 @@ try
             else
                 error('Parameter name "%s" not found in the JSON file', parameters{i});
             end
+        % Reconstruct GenoColors map inside each worker (containers.Map is a
+        % handle object and cannot be broadcast through parfor directly).
+        genoColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+        if ~isempty(genoColorKeys)
+            for ci = 1:length(genoColorKeys)
+                genoColors(genoColorKeys{ci}) = genoColorValues{ci};
+            end
+        end
         % Call the Compare_NetworkParameters function with current parameter
-        Compare_NetworkParameters(dataDir, refDir, outDir, parameters{i}, parameterValues{i}, 'VarParameter', varParams, 'BaseParameters', base_parameters);
+        Compare_NetworkParameters(dataDir, refDir, outDir, parameters{i}, parameterValues{i}, 'VarParameter', varParams, 'BaseParameters', base_parameters, 'GenoColors', genoColors);
     end
 
     % If completed successfully
