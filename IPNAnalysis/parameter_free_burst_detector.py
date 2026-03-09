@@ -181,6 +181,8 @@ def compute_network_bursts(
         ax_macro.axhline(merge_floor, color="green", ls=":", alpha=0.6, label="Merge Floor")
         for b in network_bursts: ax_macro.axvspan(b["start"], b["end"], color="tab:blue", alpha=0.25)
         for s in superbursts: ax_macro.axvspan(s["start"], s["end"], color="purple", alpha=0.3)
+        ax_macro.set_ylabel("Network synchrony (# active units)")
+        ax_macro.set_xlabel("Time (s)")
 
     # ---------------------------------------------------------
     # 8. Registered Diagnostics
