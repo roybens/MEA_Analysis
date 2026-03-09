@@ -139,7 +139,7 @@ for f = 1 : length(theFiles)
         
         %% Loop through different parameters.
         avg_opt_title = parameter;
-        Averages_opt = {'ChipID','WellID','NeuronType',avg_opt_title,'IBI','Burst Peak','# Bursts','Spikes per Burst'};
+        Averages_opt = {'ChipID','WellID','NeuronType',avg_opt_title,'IBI','Burst Peak','# Bursts','Spikes per Burst','Burst Duration'};
     
         %relativeSpikeTimes_opt = mxw.util.computeRelativeSpikeTimes(networkData);
     
@@ -151,6 +151,7 @@ for f = 1 : length(theFiles)
             meanBurstPeak = nan;       
             nBursts = nan;
             spikesPerBurst = NaN;
+            meanBurstDuration = nan;
 
 
             % compute network according to desired parameter to compare
@@ -244,6 +245,14 @@ for f = 1 : length(theFiles)
                    meanSpikesPerBurst = mean(spikesPerBurst);
                 end
 
+                % compute mean burst duration from start/stop edge times
+                if size(edges, 2) >= 2
+                    validEdgeMask = edges(:,1) > 0 & edges(:,2) > 0;
+                    if any(validEdgeMask)
+                        meanBurstDuration = mean(edges(validEdgeMask,2) - edges(validEdgeMask,1));
+                    end
+                end
+
             end
             
         %%Tim's code for averaging and aggregating mean spiking data (IBI, Burst
@@ -270,7 +279,7 @@ for f = 1 : length(theFiles)
         nBursts = length(networkStats_opt.maxAmplitudesTimes);
         
         chipAverages = [meanSpikesPerBurst, meanIBI, meanBurstPeak, nBursts];
-        Averages_opt = [Averages_opt; {chipID,wellID,strrep(neuronSourceType{1},' ',''),k,meanIBI_opt, meanBurstPeak_opt, nBursts_opt, meanSpikesPerBurst}];
+        Averages_opt = [Averages_opt; {chipID,wellID,strrep(neuronSourceType{1},' ',''),k,meanIBI_opt, meanBurstPeak_opt, nBursts_opt, meanSpikesPerBurst, meanBurstDuration}];
            
         
         end
@@ -321,6 +330,7 @@ IBI_max = 0;
 BurstPeak_max = 0;
 nBursts_max = 0;
 spikePerBurst_max = 0;
+burstDuration_max = 0;
 
 % Get a list of all files in the folder with the desired file name pattern.
 filePattern = fullfile(parentFolderPath, '*.csv'); 
@@ -334,6 +344,7 @@ for f = 1 : length(theFiles)
     BurstPeak_max = max([BurstPeak_max, max(data.("Burst Peak"))]);
     nBursts_max = max([nBursts_max, max(data.("# Bursts"))]);
     spikePerBurst_max = max([spikePerBurst_max, max(data.("Spikes per Burst"))]);
+    burstDuration_max = max([burstDuration_max, max(data.("Burst Duration"), [], 'omitnan')]);
 end
 
 for f = 1 : length(theFiles)
@@ -360,8 +371,8 @@ for f = 1 : length(theFiles)
 %     end    
     genoStr=data.("NeuronType"){1};
     
-    fig = figure('color','w','Position',[0 0 1600 800],'Visible','off');
-    subplot(2,2,1);
+    fig = figure('color','w','Position',[0 0 1600 1200],'Visible','off');
+    subplot(3,2,1);
     plot(data.(parameter),data.('IBI'));
     title(string(extractChipID)+' '+string(WellID) + ' ' + genoStr + ' IBI')
     xlabel(plot_x_title)
@@ -373,7 +384,7 @@ for f = 1 : length(theFiles)
     text(param_val, 0, ['x = ', num2str(param_val)], 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center')
     grid on
 
-    subplot(2,2,2);
+    subplot(3,2,2);
     plot(data.(parameter),data.('Burst Peak'));
     title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr +' Burst Peak')
     xlabel(plot_x_title)
@@ -385,7 +396,7 @@ for f = 1 : length(theFiles)
     text(param_val, 0, ['x = ', num2str(param_val)], 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center')
     grid on
 
-    subplot(2,2,3);
+    subplot(3,2,3);
     plot(data.(parameter),data.('# Bursts'));
     title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr + ' # of Bursts')
     xlabel(plot_x_title)
@@ -397,13 +408,24 @@ for f = 1 : length(theFiles)
     text(param_val, 0, ['x = ', num2str(param_val)], 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center')
     grid on
 
-    subplot(2,2,4);
+    subplot(3,2,4);
     plot(data.(parameter),data.('Spikes per Burst'));
     title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr + ' Spikes per Burst')
     xlabel(plot_x_title)
     %xticks(parameter_start:plot_inc:parameter_end)
     xticks('auto')
     ylim([0 spikePerBurst_max*10/8])
+    xline(param_val,'b--', 'LineWidth', 0.5)
+    % Add a text annotation for the xline value
+    text(param_val, 0, ['x = ', num2str(param_val)], 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center')
+    grid on
+
+    subplot(3,2,5);
+    plot(data.(parameter),data.('Burst Duration'));
+    title(string(extractChipID)+' '+string(WellID)  + ' ' + genoStr + ' Burst Duration')
+    xlabel(plot_x_title)
+    xticks('auto')
+    ylim([0 burstDuration_max*10/8])
     xline(param_val,'b--', 'LineWidth', 0.5)
     % Add a text annotation for the xline value
     text(param_val, 0, ['x = ', num2str(param_val)], 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center')
@@ -471,6 +493,7 @@ newIBIs = cell(iterations,1);
 newBPs = cell(iterations,1);
 newSPBs=cell(iterations,1);
 newNBs=cell(iterations,1);
+newBDs=cell(iterations,1);
 for k = 1 : iterations
     baseFileName = theFiles(k).name;
     %fullFileName = fullfile(theFiles(k).folder, baseFileName);
@@ -560,6 +583,19 @@ for k = 1 : iterations
     
     grid on
     hold on
+    newBDs{k} = data.("Burst Duration");
+    subplot(3,2,5);
+    plot(data.(parameter),data.("Burst Duration"),'Color',color);
+    title('Burst Duration')
+    xlabel(plot_x_title)
+    xticks('auto')
+    ylim([0 burstDuration_max*10/8])
+    xline(param_val,'b--', 'LineWidth', 0.5)
+    % Add a text annotation for the xline value
+    text(param_val, 0, ['x = ', num2str(param_val)], 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'center')
+    
+    grid on
+    hold on
     % If this is the first time this genoStr is plotted, add its handle to legendHandles
     if  ~isKey(legendHandlesMap, genoStr)
         legendHandlesMap(genoStr) = p; % Store the plot handle for the legend
@@ -575,7 +611,7 @@ validLegendKeys = orderedKeys(isKey(legendHandlesMap, orderedKeys));
 legendHandles = values(legendHandlesMap, validLegendKeys);
 legendLabels = validLegendKeys;
 legend([legendHandles{:}], legendLabels);
-newTable = table(newGenoStrs, newIBIs,newBPs,newNBs,newSPBs, 'VariableNames', {'GenoStr', 'IBI','BP','NB','SPB'});
+newTable = table(newGenoStrs, newIBIs,newBPs,newNBs,newSPBs,newBDs, 'VariableNames', {'GenoStr', 'IBI','BP','NB','SPB','BD'});
 % uniqueGenoTypes = unique(newTable.GenoStr);
 % for i = 1:length(uniqueGenoTypes)
 %     genoStr = uniqueGenoTypes{i};
@@ -634,24 +670,28 @@ for i = 1:length(uniqueGenoTypes)
     colDataBP = horzcat(newTable{genotypeFilter, 'BP'}{:});
     colDataNB = horzcat(newTable{genotypeFilter, 'NB'}{:});
     colDataSPB = horzcat(newTable{genotypeFilter, 'SPB'}{:});
+    colDataBD = horzcat(newTable{genotypeFilter, 'BD'}{:});
 
     % Calculate mean for each parameter
     meanIBI = mean(colDataIBI, 2);
     meanBP = mean(colDataBP, 2);
     meanNB = mean(colDataNB, 2);
     meanSPB = mean(colDataSPB, 2);
+    meanBD = mean(colDataBD, 2);
 
     % Calculate IQR for each parameter
     iqrIBI = iqr(colDataIBI,2);
     iqrBP = iqr(colDataBP,2);
     iqrNB = iqr(colDataNB,2);
     iqrSPB = iqr(colDataSPB,2);
+    iqrBD = iqr(colDataBD,2);
 
     % Calculate 95th percentile of IQR
     upperLimitIBI = prctile(iqrIBI, 95,2);
     upperLimitBP = prctile(iqrBP, 95,2);
     upperLimitNB = prctile(iqrNB, 95,2);
     upperLimitSPB = prctile(iqrSPB, 95,2);
+    upperLimitBD = prctile(iqrBD, 95,2);
     % Calculate the 5th percentile of IQR as the lower limit for IBI
     lowerLimitIBI = prctile(iqrIBI, 5, 2);
     
@@ -663,6 +703,9 @@ for i = 1:length(uniqueGenoTypes)
     
     % Calculate the 5th percentile of IQR as the lower limit for SPB
     lowerLimitSPB = prctile(iqrSPB, 5, 2);
+
+    % Calculate the 5th percentile of IQR as the lower limit for BD
+    lowerLimitBD = prctile(iqrBD, 5, 2);
 
     
     grid on;
@@ -713,6 +756,17 @@ for i = 1:length(uniqueGenoTypes)
     xFillSPB = [x_valid; flipud(x_valid)];
     yFillSPB = [y_lower; flipud(y_upper)];
     fill(xFillSPB, yFillSPB, genoColorMap(genoStr), 'LineStyle', 'none', 'FaceAlpha', 0.25);
+
+    % Plot for BD
+    subplot(3,2,5);
+    grid on; hold on;
+    validIdx = ~any(isnan([x, meanBD, lowerLimitBD, upperLimitBD]), 2);
+    x_valid = x(validIdx);
+    y_lower = meanBD(validIdx) - lowerLimitBD(validIdx);
+    y_upper = meanBD(validIdx) + upperLimitBD(validIdx);
+    xFillBD = [x_valid; flipud(x_valid)];
+    yFillBD = [y_lower; flipud(y_upper)];
+    fill(xFillBD, yFillBD, genoColorMap(genoStr), 'LineStyle', 'none', 'FaceAlpha', 0.25);
     
 end
 
