@@ -52,6 +52,7 @@ Initial flags (CLI/config, all default-off):
 - `unitmatch_score_threshold: float`
 - `unitmatch_max_pairs_per_unit: int | None`
 - `unitmatch_dry_run: bool` (report only, no merge)
+- `unitmatch_scored_dry_run: bool` (run actual scoring, but no merge/no downstream mutation)
 - `unitmatch_fail_open: bool = True` (on error: log + continue without merge)
 
 Rationale: this protects collaborative stability while enabling controlled rollout.
@@ -70,10 +71,18 @@ Under `.../unitmatch/` write:
 - Hook call from pipeline with `enabled=False` default.
 - Confirm zero behavior change when disabled.
 
-### Phase 1: Dry-run matching
-- Run DeepUnitMatch and generate reports only.
+### Phase 1: Dry-run plumbing (implemented)
+- Run UnitMatch integration from existing sorting outputs.
+- Generate placeholder candidate artifacts (no DeepUnitMatch scoring yet).
 - No merges applied.
-- Validate score distributions and candidate plausibility.
+- Validate pipeline wiring, checkpoint behavior, and artifact emission.
+
+### Phase 1.5: Scored dry-run (no state mutation)
+- Run actual UnitMatch/DeepUnitMatch scoring on the current sorting object.
+- Generate full score-bearing reports and diagnostics in `output_dir/unitmatch/`.
+- Do not overwrite sorter/analyzer objects.
+- Do not pass matched/merged results forward to later MEA phases.
+- Treat outputs as sidecar analysis only.
 
 ### Phase 2: Controlled merge enablement
 - Enable merge for small test wells / subset.
@@ -138,6 +147,19 @@ Under `.../unitmatch/` write:
 - Completed: added explicit checkpoint enum stages for merge (`MERGE`, `MERGE_COMPLETE`) in `ProcessingStage`.
 - Completed: added checkpoint schema migration for legacy runs (v1 stage values shifted to account for merge stage insertion).
 
+### 2026-03-10 (Phase 1 dry-run)
+- Completed: implemented Phase-1 dry-run in `UnitMatch/runner.py` using existing sorting objects.
+- Completed: dry-run now writes `unitmatch_config.json`, `unitmatch_summary.json`, and `match_candidates.csv`.
+- Completed: candidate generation currently uses all unique unit-ID pairs from sorting (capped by `max_candidate_pairs`).
+- Completed: added DeepUnitMatch import readiness probe in summary (`deepunitmatch_import_ok`, `deepunitmatch_module`).
+- Completed: passed UnitMatch flags through driver (`run_pipeline_driver.py` + `config_loader.build_extra_args`).
+- Completed: added `IPNAnalysis/UnitMatch/SETUP.md` with GitHub-based installation and run instructions.
+- Completed: wired `axon_reconstructor` stg2 spikesort runner to forward `unitmatch_merge_units` and `unitmatch_dry_run` into `MEA_Analysis` pipeline construction.
+- Completed: added debug launcher `tools/debug/run_spikesort_unitmatch_dryrun.sh` for resume-friendly stage2 UnitMatch dry-runs.
+- Not yet completed in Phase 1: real DeepUnitMatch scoring outputs and score distribution validation.
+
 ### Next
-- Implement Phase 1 in `UnitMatch/runner.py`: DeepUnitMatch-backed scoring and candidate export (`match_candidates.csv`) while keeping dry-run/no-merge behavior.
+- Implement Phase 1.5: replace placeholder pair generation with actual DeepUnitMatch scoring adapter.
+- Implement score-bearing report artifacts and validate score distributions/candidate plausibility.
+- Enforce strict no-mutation/no-pass-through guarantees for scored dry-run mode.
 - Define first-pass pair acceptance policy and conflict pruning before enabling real merges.
