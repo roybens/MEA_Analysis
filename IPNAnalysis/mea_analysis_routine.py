@@ -169,6 +169,7 @@ class MEAPipeline:
         
         # Define Directory Structure: Output / Pattern / Well
         self.relative_pattern = self.metadata.get('relative_pattern', 'UnknownPattern')
+        self.output_root = Path(output_root)
         self.output_dir = Path(output_root) / self.relative_pattern / self.stream_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
