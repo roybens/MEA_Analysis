@@ -223,12 +223,12 @@ def main():
         logger.info(f"[DIR MODE] Scanning directory: {path}")
 
         valid_runs = None
-        if args.reference:
+        if resolved['reference_file']:
             try:
-                df = pd.read_excel(args.reference)
-                filtered = df[df['Assay'].str.lower().isin([t.lower() for t in args.type])]
+                df = pd.read_excel(resolved['reference_file'])
+                filtered = df[df['Assay'].str.lower().isin([t.lower() for t in resolved['assay_types']])]
                 valid_runs = set(filtered['Run #'].astype(int).tolist())
-                logger.info(f"Reference filter applied: {len(valid_runs)} valid runs")
+                logger.info(f"Reference filter applied: {len(valid_runs)} valid runs from '{resolved['reference_file']}' for assay types {resolved['assay_types']}")
             except Exception as e:
                 logger.error(f"Failed to load reference: {e}")
                 sys.exit(1)
@@ -258,7 +258,7 @@ def main():
             if suffix == ".h5":
                 try:
                     run_id = int(Path(file_path).parent.name)
-                    if valid_runs and run_id not in valid_runs:
+                    if valid_runs is not None and run_id not in valid_runs:
                         logger.info(f"[SKIP] Run {run_id} not in reference list")
                         continue
                 except Exception as e:
