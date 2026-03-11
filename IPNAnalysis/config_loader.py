@@ -149,10 +149,10 @@ def build_extra_args(resolved, cli_args):
     if resolved["plot_mode"]:       extra.append(f"--plot-mode {resolved['plot_mode']}")
     if resolved["raster_sort"]:     extra.append(f"--raster-sort {resolved['raster_sort']}")
     if resolved["plot_debug"]:      extra.append("--plot-debug")
+    if resolved["fixed_y"]:         extra.append("--fixed-y")
 
     # curation
     if resolved["no_curation"]:     extra.append("--no-curation")
-    if resolved["fixed_y"]:        extra.append("--fixed-y")
 
     # CLI-only flags - passed through directly, never in config
     if getattr(cli_args, "force_restart", False):     extra.append("--force-restart")

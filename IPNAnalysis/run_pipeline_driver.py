@@ -139,7 +139,9 @@ def main():
     plot_group.add_argument("--raster-sort", choices=["none", "firing_rate", "location_y", "unit_id"], default=None,
         help="How to sort units on raster y-axis (default: none)")
     plot_group.add_argument("--plot-debug", action="store_true",
-    help="Overlay burst and superburst intervals on raster plot")
+        help="Overlay burst and superburst intervals on raster plot")
+    plot_group.add_argument("--fixed-y", action="store_true",
+        help="Use fixed y-axis limits for raster plots — run once without it first to generate summary")
     # --- Curation (passed to each well) ---
     cur_group = parser.add_argument_group("curation (passed to each well)")
     cur_group.add_argument("--no-curation", action="store_true",
@@ -157,8 +159,6 @@ def main():
         help="Print what would run without any processing")
     ctrl_group.add_argument("--debug", action="store_true",
         help="Enable verbose logging")
-    ctrl_group.add_argument("--fixed-y", action="store_true",
-        help="Use fixed y-axis limits for raster plots - must run at least once without --fixed-y to generate summary")
 
     args = parser.parse_args()
     config   = load_config(args.config)

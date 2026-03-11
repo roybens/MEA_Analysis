@@ -128,7 +128,7 @@ Edit `mea_config.json` for your project, then pass it to either script via `--co
 | `io` | `output_dir`, `checkpoint_dir`, `export_to_phy`, `clean_up` |
 | `sorting` | `sorter`, `docker_image` |
 | `filtering` | `reference_file`, `assay_types` (driver only) |
-| `plotting` | `plot_mode`, `raster_sort`, `plot_debug` |
+| `plotting` | `plot_mode`, `raster_sort`, `plot_debug`, `fixed_y` |
 | `curation` | `no_curation`, `quality_thresholds` |
 
 ## Typical Workflow
@@ -207,6 +207,7 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json --force-
 | plotting | `--plot-mode` | `separate` or `merged` (default: separate) |
 | plotting | `--raster-sort` | `none`, `firing_rate`, `location_y`, `unit_id` |
 | plotting | `--plot-debug` | Overlay burst/superburst intervals on plot |
+| plotting | `--fixed-y` | Use fixed y-axis limits across wells (run once without it first) |
 | curation | `--no-curation` | Skip automatic unit curation |
 | curation | `--params` | JSON string or file with quality thresholds |
 | run control | `--force-restart` | Ignore checkpoints, restart from scratch |
