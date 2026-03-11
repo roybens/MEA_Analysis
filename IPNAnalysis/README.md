@@ -131,6 +131,49 @@ Edit `mea_config.json` for your project, then pass it to either script via `--co
 | `plotting` | `plot_mode`, `raster_sort`, `plot_debug`, `fixed_y` |
 | `curation` | `no_curation`, `quality_thresholds` |
 
+## Reference File
+
+The **reference file** is an optional Excel (`.xlsx`) spreadsheet that maps run IDs to their assay types. When provided, the driver runs **only** the recordings whose assay type matches the requested types — all other runs are skipped.
+
+### Required columns
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `Run #` | integer | Numeric run identifier — must match the run folder name in the data directory |
+| `Assay` | string | Assay type label (e.g. `network today`, `network today/best`, `sparse 7x`) |
+
+Additional columns (e.g. `Date`, `DIV`, `Chip ID`, `Wells_Recorded`) are allowed and ignored by the pipeline.
+
+### How it works
+
+1. The driver reads the Excel file and filters rows whose `Assay` value matches any of the requested types (case-insensitive).
+2. For each HDF5 file discovered in the data directory, the driver extracts the run ID from the **parent folder name** (e.g. `.../12345/Network/data.raw.h5` → run ID `12345`).
+3. If the run ID is not in the filtered set, the file is skipped with a `[SKIP]` log message.
+4. If the run ID cannot be parsed as an integer, the file is processed with a warning.
+
+### Usage
+
+**Via CLI:**
+```bash
+python run_pipeline_driver.py /data/experiment \
+  --reference /data/project_ref.xlsx \
+  --type "network today" "network today/best"
+```
+
+**Via config file** (`mea_config.json`):
+```json
+"filtering": {
+  "reference_file": "/data/project_ref.xlsx",
+  "assay_types": ["network today", "network today/best"]
+}
+```
+Then run:
+```bash
+python run_pipeline_driver.py /data/experiment --config mea_config.json
+```
+
+> **Note:** The reference file and assay-type filtering apply **only** in directory mode (`path` is a folder). When processing a single HDF5 file directly, the filter is not applied.
+
 ## Typical Workflow
 
 ### 1. Set up config for a new project
@@ -178,7 +221,15 @@ python mea_analysis_routine.py /data/file.h5 --well well000 \
   --plot-debug
 ```
 
-### 8. Resume after crash (automatic via checkpoint)
+### 8. Process only specific assay types using a reference file
+```bash
+python run_pipeline_driver.py /data/experiment \
+  --config mea_config.json \
+  --reference /data/project_ref.xlsx \
+  --type "network today"
+```
+
+### 9. Resume after crash (automatic via checkpoint)
 ```bash
 # just re-run the same command — checkpoints handle resumption automatically
 python run_pipeline_driver.py /data/experiment --config mea_config.json
@@ -199,8 +250,8 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json --force-
 | input/output | `--checkpoint-dir` | Checkpoint directory (default: output-dir/checkpoints) |
 | input/output | `--export-to-phy` | Export results to Phy format |
 | input/output | `--clean-up` | Remove intermediate files after processing |
-| filtering | `--reference` | Excel file to filter runs by assay type |
-| filtering | `--type` | Assay types to include |
+| filtering | `--reference` | Path to an Excel file mapping run IDs to assay types (see [Reference File](#reference-file)) |
+| filtering | `--type` | Assay type(s) to include — only runs whose `Assay` value matches are processed (default: `network today`, `network today/best`) |
 | sorting | `--sorter` | Spike sorter to use (default: kilosort4) |
 | sorting | `--docker` | Docker image for containerized sorting |
 | sorting | `--skip-spikesorting` | Spike detection only, skip full sorting |
