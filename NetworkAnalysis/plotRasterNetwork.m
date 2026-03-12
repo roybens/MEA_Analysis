@@ -1,5 +1,5 @@
 function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,binSize, ...
-    opDir,chipWellFolder,xlimNetwork,ylimNetwork,textString,plotFileName,baselineFiringRate, plotTitle)
+    opDir,chipWellFolder,xlimNetwork,ylimNetwork,textString,plotFileName,baselineFiringRate, plotTitle, plotMode)
     
     %% NO INPUT PARSER - Simpler for PARFOR
     % Direct color settings
@@ -11,15 +11,27 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     LineWidth = 1.2;
     SpikeHeight = 0.9;
     SvgPlot = true;
+    if nargin < 14 || isempty(plotMode)
+        plotMode = 'separate';
+    end
+    mergedMode = strcmpi(plotMode, 'merged');
     
     % Create figure
     f = figure('Color','white', 'Position', [0 0 800 600], 'Visible', 'off');
     set(f, 'PaperPositionMode', 'auto', 'InvertHardcopy', 'off');
-    tl = tiledlayout(f, 2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+    if mergedMode
+        ax1 = axes(f, 'Position', [0.10 0.12 0.78 0.78]);
+        ax2 = axes(f, 'Position', ax1.Position, 'Color', 'none', ...
+            'YAxisLocation', 'right', ...
+            'Box', 'off', 'FontSize', 9, 'TickDir', 'out');
+        linkaxes([ax1, ax2], 'x');
+    else
+        tl = tiledlayout(f, 2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+        ax1 = nexttile(tl);
+        ax2 = nexttile(tl);
+    end
 
     %% RASTER PLOT
-    ax1 = nexttile(tl);
-    
     spikeTimes = single(relativeSpikeTimes.time);
     channels = single(relativeSpikeTimes.channel);
     nSpikes = length(spikeTimes);
@@ -33,58 +45,68 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
         half_height = SpikeHeight / 2;
         y_plot(indices) = channels - half_height;
         y_plot(indices+1) = channels + half_height;
-        plot(x_plot, y_plot, 'Color', RasterColor, 'LineWidth', LineWidth);
+        plot(ax1, x_plot, y_plot, 'Color', RasterColor, 'LineWidth', LineWidth);
     end
     
-    ylabel('Channel', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
+    ylabel(ax1, 'Channel', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
 
     % Title Text Added (SS) --- 
-    titleText = {plotTitle, 'Neural Activity Raster'};  % Two-line title
-    title(titleText, 'Interpreter', 'none', 'FontSize', 10, 'FontWeight', 'bold');
+    if mergedMode
+        titleText = {plotTitle, 'Neural Activity Raster + Network Activity'};
+    else
+        titleText = {plotTitle, 'Neural Activity Raster'};  % Two-line title
+    end
+    title(ax1, titleText, 'Interpreter', 'none', 'FontSize', 10, 'FontWeight', 'bold');
 
     %title('Neural Activity Raster', 'FontSize', 11, 'FontWeight', 'bold');
     box off; set(ax1, 'YDir', 'normal', 'FontSize', 9, 'TickDir', 'out');
     set(ax1, 'XColor', [0.2 0.2 0.2], 'YColor', [0.2 0.2 0.2]);
-    set(ax1, 'XTickLabel', []);
+    if ~mergedMode
+        set(ax1, 'XTickLabel', []);
+    end
     
     if ~isempty(channels)
         ylim(ax1, [min(channels) - 1, max(channels) + 1]);
     end
     
     %% NETWORK ACTIVITY
-    ax2 = nexttile(tl);
-    
-    plot(networkAct.time, networkAct.firingRate, 'Color', NetworkColor, 'LineWidth', LineWidth*1.2);
-    hold on;
+    plot(ax2, networkAct.time, networkAct.firingRate, 'Color', NetworkColor, 'LineWidth', LineWidth*1.2);
+    hold(ax2, 'on');
     
     % Threshold
     if ~isempty(networkStats.threshold)
         switch upper(networkStats.thresholdFunction)
             case {'FIXED', 'RMS'}
-                t_limits = xlim;
-                plot(t_limits, [networkStats.threshold networkStats.threshold], ...
+                t_limits = xlim(ax2);
+                plot(ax2, t_limits, [networkStats.threshold networkStats.threshold], ...
                      '--', 'Color', ThresholdColor, 'LineWidth', LineWidth);
         end
     end
     
     % Peaks
-    plot(networkStats.maxAmplitudesTimes, networkStats.maxAmplitudesValues, 'o', ...
+    plot(ax2, networkStats.maxAmplitudesTimes, networkStats.maxAmplitudesValues, 'o', ...
          'Color', PeakColor, 'MarkerSize', 4, 'MarkerFaceColor', 'white', 'LineWidth', 1);
     
     % Baseline
-    plot([0 300], [baselineFiringRate baselineFiringRate], '--', 'Color', BaseLineColor, 'LineWidth', LineWidth);
+    plot(ax2, [0 300], [baselineFiringRate baselineFiringRate], '--', 'Color', BaseLineColor, 'LineWidth', LineWidth);
     
-    xlabel('Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
-    ylabel('Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
-    title('Network Activity', 'FontSize', 11, 'FontWeight', 'bold');
+    if mergedMode
+        xlabel(ax1, 'Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
+        ylabel(ax2, 'Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
+        set(ax2, 'XTick', [], 'XColor', 'none', 'YColor', [0.2 0.2 0.2]);
+    else
+        xlabel(ax2, 'Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
+        ylabel(ax2, 'Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
+        title(ax2, 'Network Activity', 'FontSize', 11, 'FontWeight', 'bold');
+        set(ax2, 'XColor', [0.2 0.2 0.2], 'YColor', [0.2 0.2 0.2]);
+    end
     box off; set(ax2, 'FontSize', 9, 'TickDir', 'out');
-    set(ax2, 'XColor', [0.2 0.2 0.2], 'YColor', [0.2 0.2 0.2]);
     
     if ~isempty(networkAct.firingRate)
         y_max = max([max(networkAct.firingRate), max(networkStats.maxAmplitudesValues)]);
         ylim(ax2, [0, y_max * 1.1]);
     end
-    hold off;
+    hold(ax2, 'off');
     
     %% PARFOR-SAFE SAVE OPERATIONS
     try
@@ -142,7 +164,12 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     end
     xlim(ax2, [0 300]); ylim(ax2, [0 ylimNetwork]);
     
-    annotation('textbox', [0.15, 0.48, 0.7, 0.06], 'String', textString, ...
+    if mergedMode
+        textY = 0.02;
+    else
+        textY = 0.48;
+    end
+    annotation('textbox', [0.15, textY, 0.7, 0.06], 'String', textString, ...
         'EdgeColor', 'none', 'BackgroundColor', 'white', 'HorizontalAlignment', 'center', ...
         'VerticalAlignment', 'middle', 'FontSize', 8, 'Color', [0.2 0.2 0.2], 'Margin', 2);
     
@@ -155,4 +182,3 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     
     close(f);
 end
-
