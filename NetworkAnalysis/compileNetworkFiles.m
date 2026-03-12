@@ -21,6 +21,7 @@ function [] = compileNetworkFiles(data)
     %   .xlim               : x-axis limit for plots
     %   .ylim               : y-axis limit for plots
     %   .plotFig            : true/false to generate raster plots
+    %   .plotMode           : 'separate' (default) or 'merged' for raster/network overlay
     %   .extMetricsFlag     : true/false to save extended metrics
     %   .logFile            : path to log file (optional)
     %
@@ -60,6 +61,11 @@ function [] = compileNetworkFiles(data)
     plotFig            = data.plotFig;
     extMetricsFlag     = data.extMetricsFlag;
     logFile            = data.logFile;
+    if isfield(data, 'plotMode') && ~isempty(data.plotMode)
+        plotMode = data.plotMode;
+    else
+        plotMode = 'separate';
+    end
    
     % --- Read reference table and identify runs of interest ---
     refTable = readtable(refDir);
@@ -115,6 +121,7 @@ function [] = compileNetworkFiles(data)
             'ylimNetwork', ylimNetwork, ...
             'plotFig', plotFig, ...
             'extMetricsFlag', extMetricsFlag, ...
+            'plotMode', plotMode, ...
             'logFile', logFile ...
         );
         
@@ -263,8 +270,8 @@ function [] = compileNetworkFiles(data)
                         locData.ypos = networkData.fileObj.map.y;
                         plotRasterNetwork( networkAct, networkStats, ...
                                            relativeSpikeTimes,locData, binSize, opDir, chipWellDir, ...
-                                           xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
-                                            baselineFiringRate, plotTitle);
+                                            xlimNetwork, ylimNetwork, textStr, plotFileBase, ...
+                                             baselineFiringRate, plotTitle, plotMode);
      
                     end
 
@@ -504,6 +511,4 @@ end
     % 
     % 
    
-
-
 
