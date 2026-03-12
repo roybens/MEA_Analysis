@@ -163,7 +163,7 @@ def compute_network_bursts(
     def level_metrics(events):
         if not events: return {}
         starts = [ev["start"] for ev in events]
-        return {
+        metrics = {
             "count": len(events), "rate": len(events) / total_dur,
             "duration": stats([ev["duration_s"] for ev in events]),
             "inter_event_interval": stats(np.diff(starts)) if len(starts) > 1 else stats([]),
@@ -173,6 +173,9 @@ def compute_network_bursts(
             "burst_peak": stats([ev["burst_peak"] for ev in events]),
             "peak_synchrony": stats([ev["peak_synchrony"] for ev in events])
         }
+        if all("fragment_count" in ev for ev in events):
+            metrics["fragments_per_event"] = stats([ev["fragment_count"] for ev in events])
+        return metrics
 
     if plot and ax_macro is not None:
         ax_macro.plot(t_centers, ws_smooth, color="tab:blue", lw=2)
