@@ -77,7 +77,11 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     if ~isempty(networkStats.threshold)
         switch upper(networkStats.thresholdFunction)
             case {'FIXED', 'RMS'}
-                t_limits = xlim(ax2);
+                if mergedMode
+                    t_limits = xlim(ax1);
+                else
+                    t_limits = xlim(ax2);
+                end
                 plot(ax2, t_limits, [networkStats.threshold networkStats.threshold], ...
                      '--', 'Color', ThresholdColor, 'LineWidth', LineWidth);
         end
@@ -93,7 +97,7 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     if mergedMode
         xlabel(ax1, 'Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
         ylabel(ax2, 'Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
-        set(ax2, 'XTick', [], 'XColor', 'none', 'YColor', [0.2 0.2 0.2]);
+        set(ax2, 'XTickLabel', [], 'YColor', [0.2 0.2 0.2]);
     else
         xlabel(ax2, 'Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
         ylabel(ax2, 'Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
