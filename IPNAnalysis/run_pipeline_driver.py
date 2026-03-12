@@ -111,6 +111,8 @@ def main():
         help="Output directory for all results")
     io_group.add_argument("--checkpoint-dir", type=str, default=None,
         help="Checkpoint directory (default: <output-dir>/checkpoints)")
+    io_group.add_argument("--output-subdir-after-well", type=str, default=None,
+        help="Optional single subdirectory appended under each resolved well output directory")
     io_group.add_argument("--export-to-phy", action="store_true",
         help="Export results to Phy format")
     io_group.add_argument("--clean-up", action="store_true",

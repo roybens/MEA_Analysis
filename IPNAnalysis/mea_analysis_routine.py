@@ -17,11 +17,13 @@ import traceback
 import logging
 import argparse
 import configparser
+from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
 from timeit import default_timer as timer
 from enum import Enum
 from math import floor
+from typing import Any
 import psutil
 import pandas as pd
 import numpy as np
@@ -128,7 +130,11 @@ class MEAPipeline:
                  auto_merge_units: bool = False,
                  auto_merge_presets: list[str] | None = None,
                  auto_merge_steps_params: list[dict] | None = None,
-                 force_rerun_analyzer: bool = False):
+                 force_rerun_analyzer: bool = False,
+                 preprocessed_recording=None,
+                 skip_preprocessing: bool = False,
+                 cuda_visible_devices: str | None = None,
+                 output_subdir_after_well: str | None = None):
         
         self.file_path = Path(file_path).resolve()
         self.stream_id = stream_id
@@ -142,6 +148,7 @@ class MEAPipeline:
         # Optional resource hints (used by some SpikeInterface steps).
         self.n_jobs = n_jobs
         self.chunk_duration = chunk_duration
+        self.output_subdir_after_well = self._validate_output_subdir_after_well(output_subdir_after_well)
 
         # Optional sorter kwargs override (e.g. Kilosort4 batch_size tuning).
         self.sorter_kwargs = sorter_kwargs
@@ -158,6 +165,13 @@ class MEAPipeline:
         # Allow re-running analyzer without re-running spikesorting.
         self.force_rerun_analyzer = bool(force_rerun_analyzer)
 
+        # Optional preprocessed recording injection path.
+        self.preprocessed_recording = preprocessed_recording
+        self.skip_preprocessing = bool(skip_preprocessing)
+
+        # Optional runtime/resource controls (default behavior when unset).
+        self.cuda_visible_devices = cuda_visible_devices
+
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
         self.run_id = self.metadata.get('run_id', 'UnknownRun')
@@ -170,7 +184,12 @@ class MEAPipeline:
         # Define Directory Structure: Output / Pattern / Well
         self.relative_pattern = self.metadata.get('relative_pattern', 'UnknownPattern')
         self.output_root = Path(output_root)
-        self.output_dir = Path(output_root) / self.relative_pattern / self.stream_id
+        base_output_dir = Path(output_root) / self.relative_pattern / self.stream_id
+        self.output_dir = (
+            base_output_dir / self.output_subdir_after_well
+            if self.output_subdir_after_well is not None
+            else base_output_dir
+        )
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # 2. Logger Setup
@@ -182,6 +201,10 @@ class MEAPipeline:
         ckpt_root.mkdir(parents=True, exist_ok=True)
         self.checkpoint_file = ckpt_root / f"{self.project_name}_{self.run_id}_{self.stream_id}_checkpoint.json"
         self.state = self._load_checkpoint()
+
+        # Apply optional runtime controls after logger exists so failures are visible.
+        self._apply_runtime_controls()
+        self._log_runtime_controls()
 
         # Data placeholders
         self.recording = None
@@ -204,6 +227,37 @@ class MEAPipeline:
             ch.setFormatter(formatter)
             logger.addHandler(ch)
         return logger
+
+    def _apply_runtime_controls(self):
+        if self.cuda_visible_devices is not None:
+            try:
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(self.cuda_visible_devices)
+            except Exception:
+                pass
+
+    def _log_runtime_controls(self):
+        def _env_or_none(name):
+            value = os.environ.get(name)
+            if value is None:
+                return None
+            token = str(value).strip()
+            return token if token else None
+
+        self.logger.info(
+            "Runtime snapshot: pid=%s cpu_count=%s n_jobs=%s chunk_duration=%s",
+            os.getpid(),
+            os.cpu_count(),
+            self.n_jobs,
+            self.chunk_duration,
+        )
+        self.logger.info(
+            "Runtime controls: cuda_visible_devices=%s",
+            self.cuda_visible_devices,
+        )
+        self.logger.info(
+            "Runtime env effective: CUDA_VISIBLE_DEVICES=%s",
+            _env_or_none("CUDA_VISIBLE_DEVICES"),
+        )
 
     def _parse_metadata(self):
     
@@ -240,6 +294,27 @@ class MEAPipeline:
                     meta['chip_id'] = cfg['runtime'].get('chipid', meta.get('chip_id'))
             except: pass
         return meta
+
+    def _validate_output_subdir_after_well(self, value):
+        if value is None:
+            return None
+
+        token = str(value).strip()
+        if not token:
+            return None
+
+        if "/" in token or "\\" in token:
+            raise ValueError(
+                "output_subdir_after_well must be a single directory name, not a path"
+            )
+
+        candidate = Path(token)
+        if candidate.is_absolute() or token in (".", ".."):
+            raise ValueError(
+                "output_subdir_after_well must be a relative single directory name"
+            )
+
+        return token
 
     # --- Checkpointing Methods ---
     def _load_checkpoint(self):
@@ -306,6 +381,21 @@ class MEAPipeline:
     def run_preprocessing(self):
         binary_folder = self.output_dir / "binary"
 
+        # Optional shortcut for callers that provide a preprocessed recording.
+        if self.preprocessed_recording is not None:
+            self.logger.info(
+                "Using injected preprocessed recording (skip_preprocessing=%s)",
+                bool(self.skip_preprocessing),
+            )
+            self.recording = self.preprocessed_recording
+            self._save_checkpoint(
+                ProcessingStage.PREPROCESSING_COMPLETE,
+                failed_stage=None,
+                error=None,
+                preprocessing_source="injected_preprocessed_recording",
+            )
+            return
+
         # 1. Resume Check
         if self.state['stage'] >= ProcessingStage.PREPROCESSING_COMPLETE.value and binary_folder.exists():
             self.logger.info("Resuming: Loading preprocessed data from binary cache.")
@@ -364,8 +454,8 @@ class MEAPipeline:
             folder=binary_folder, 
             format='binary', 
             overwrite=True, 
-            n_jobs=16, 
-            chunk_duration='1s', 
+            n_jobs=(int(self.n_jobs) if self.n_jobs is not None else 16), 
+            chunk_duration=(str(self.chunk_duration) if self.chunk_duration is not None else '1s'), 
             progress_bar=self.verbose
         )
         
@@ -1086,6 +1176,156 @@ class MEAPipeline:
         self.analyzer = None
         gc.collect()
 
+
+@dataclass(frozen=True)
+class MEARunOptions:
+    file_path: str | Path
+    stream_id: str
+    recording_num: str = "rec0000"
+    output_root: str | Path | None = None
+    checkpoint_root: str | Path | None = None
+    output_subdir_after_well: str | None = None
+    sorter: str = "kilosort4"
+    docker_image: str | None = None
+    verbose: bool = False
+    cleanup: bool = False
+    force_restart: bool = False
+    n_jobs: int | None = None
+    chunk_duration: str | None = None
+    sorter_kwargs: dict | None = None
+    unitmatch_merge_units: bool = False
+    unitmatch_dry_run: bool = True
+    auto_merge_units: bool = False
+    auto_merge_presets: list[str] | None = None
+    auto_merge_steps_params: list[dict] | None = None
+    force_rerun_analyzer: bool = False
+    preprocessed_recording: Any = None
+    skip_preprocessing: bool = False
+    cuda_visible_devices: str | None = None
+    reanalyze_bursts: bool = False
+    skip_spikesorting: bool = False
+    run_analyzer: bool = True
+    run_reports: bool = True
+    thresholds: dict | None = None
+    no_curation: bool = False
+    export_to_phy: bool = False
+    plot_mode: str = "separate"
+    plot_debug: bool = False
+    raster_sort: str | None = None
+    fixed_y: bool = False
+    auto_merge_template_diff_thresh: str = "0.05,0.15,0.25"
+
+
+@dataclass(frozen=True)
+class MEARunResult:
+    pipeline: MEAPipeline
+    skipped: bool = False
+    reanalyzed_bursts: bool = False
+
+
+def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
+    auto_merge_presets = options.auto_merge_presets
+    auto_merge_steps_params = options.auto_merge_steps_params
+
+    if bool(options.auto_merge_units) and (auto_merge_presets is None or auto_merge_steps_params is None):
+        try:
+            diffs = [
+                float(x.strip())
+                for x in str(options.auto_merge_template_diff_thresh).split(",")
+                if x.strip()
+            ]
+            auto_merge_presets = ["x_contaminations"] * len(diffs)
+            auto_merge_steps_params = [
+                {"template_similarity": {"template_diff_thresh": float(t)}}
+                for t in diffs
+            ]
+        except Exception:
+            auto_merge_presets = None
+            auto_merge_steps_params = None
+
+    pipeline = MEAPipeline(
+        file_path=options.file_path,
+        stream_id=options.stream_id,
+        recording_num=options.recording_num,
+        output_root=options.output_root,
+        checkpoint_root=options.checkpoint_root,
+        output_subdir_after_well=options.output_subdir_after_well,
+        sorter=options.sorter,
+        docker_image=options.docker_image,
+        verbose=bool(options.verbose),
+        cleanup=bool(options.cleanup),
+        force_restart=bool(options.force_restart),
+        n_jobs=options.n_jobs,
+        chunk_duration=options.chunk_duration,
+        sorter_kwargs=options.sorter_kwargs,
+        unitmatch_merge_units=bool(options.unitmatch_merge_units),
+        unitmatch_dry_run=bool(options.unitmatch_dry_run),
+        auto_merge_units=bool(options.auto_merge_units),
+        auto_merge_presets=auto_merge_presets,
+        auto_merge_steps_params=auto_merge_steps_params,
+        force_rerun_analyzer=bool(options.force_rerun_analyzer),
+        preprocessed_recording=options.preprocessed_recording,
+        skip_preprocessing=bool(options.skip_preprocessing),
+        cuda_visible_devices=options.cuda_visible_devices,
+    )
+
+    if bool(options.reanalyze_bursts):
+        pipeline._run_burst_analysis(
+            plot_mode=options.plot_mode,
+            plot_debug=bool(options.plot_debug),
+            raster_sort=options.raster_sort,
+            fixed_y=bool(options.fixed_y),
+        )
+        current_stage = ProcessingStage(pipeline.state['stage'])
+        pipeline._save_checkpoint(
+            current_stage,
+            note="Burst Re-analysis Performed",
+            last_updated=str(datetime.now()),
+        )
+        return MEARunResult(pipeline=pipeline, skipped=False, reanalyzed_bursts=True)
+
+    if pipeline.should_skip():
+        return MEARunResult(pipeline=pipeline, skipped=True, reanalyzed_bursts=False)
+
+    pipeline.run_preprocessing()
+
+    if not bool(options.skip_spikesorting):
+        pipeline.run_sorting()
+        pipeline.run_optional_merge_phase()
+
+        if bool(options.run_analyzer):
+            pipeline.run_analyzer()
+
+        if bool(options.run_reports):
+            if (not bool(options.run_analyzer)) and pipeline.analyzer is None:
+                raise RuntimeError(
+                    "Requested report generation but analyzer was not run and no existing analyzer was loaded. "
+                    "Set run_analyzer=True or run once to populate analyzer_output."
+                )
+            pipeline.generate_reports(
+                options.thresholds,
+                bool(options.no_curation),
+                bool(options.export_to_phy),
+                plot_mode=options.plot_mode,
+                plot_debug=bool(options.plot_debug),
+                raster_sort=options.raster_sort,
+                fixed_y=bool(options.fixed_y),
+            )
+    else:
+        ids = pipeline._spike_detection_only()
+        pipeline._run_burst_analysis(
+            ids,
+            plot_mode=options.plot_mode,
+            plot_debug=bool(options.plot_debug),
+            raster_sort=options.raster_sort,
+            fixed_y=bool(options.fixed_y),
+        )
+
+    if bool(options.cleanup):
+        pipeline.cleanup()
+
+    return MEARunResult(pipeline=pipeline, skipped=False, reanalyzed_bursts=False)
+
 # --- CLI Entry Point ---
 def main():
     parser = argparse.ArgumentParser(
@@ -1109,6 +1349,8 @@ def main():
         help="Output directory for results")
     io_group.add_argument("--checkpoint-dir", type=str, default=None,
         help="Checkpoint directory (default: <output-dir>/checkpoints)")
+    io_group.add_argument("--output-subdir-after-well", type=str, default=None,
+        help="Optional single subdirectory appended under the resolved well output directory")
     io_group.add_argument("--export-to-phy", action="store_true",
         help="Export results to Phy format")
     io_group.add_argument("--clean-up", action="store_true",
@@ -1190,54 +1432,48 @@ def main():
     rec = args.rec or "rec0000"
 
     try:
-        auto_merge_presets = None
-        auto_merge_steps_params = None
-        if args.auto_merge_units:
-            try:
-                diffs = [float(x.strip()) for x in str(args.auto_merge_template_diff_thresh).split(",") if x.strip()]
-                auto_merge_presets = ["x_contaminations"] * len(diffs)
-                auto_merge_steps_params = [{"template_similarity": {"template_diff_thresh": float(t)}} for t in diffs]
-            except Exception:
-                # Fall back to internal defaults in MEAPipeline.run_analyzer
-                auto_merge_presets = None
-                auto_merge_steps_params = None
-
-        pipeline = MEAPipeline(
-            file_path=args.file_path, stream_id=args.well, recording_num=rec,
-            output_root=resolved["output_dir"], checkpoint_root=resolved["checkpoint_dir"],
-            sorter=sorter, docker_image=resolved["docker_image"], verbose=args.debug,
-            cleanup=resolved["clean_up"],
-            force_restart=args.force_restart,
-            unitmatch_merge_units=bool(args.unitmatch_merge_units),
-            unitmatch_dry_run=bool(args.unitmatch_dry_run),
-            auto_merge_units=bool(args.auto_merge_units),
-            auto_merge_presets=auto_merge_presets,
-            auto_merge_steps_params=auto_merge_steps_params,
-            force_rerun_analyzer=bool(args.rerun_analyzer),
-        )
-
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
-            pipeline._run_burst_analysis(plot_mode=plot_mode,plot_debug=plot_debug, raster_sort=raster_sort, fixed_y=args.fixed_y)
-            current_stage = ProcessingStage(pipeline.state['stage'])
-            pipeline._save_checkpoint(current_stage, note="Burst Re-analysis Performed", last_updated=str(datetime.now()))
+
+        result = run_mea_pipeline(
+            MEARunOptions(
+                file_path=args.file_path,
+                stream_id=args.well,
+                recording_num=rec,
+                output_root=resolved["output_dir"],
+                checkpoint_root=resolved["checkpoint_dir"],
+                output_subdir_after_well=resolved.get("output_subdir_after_well"),
+                sorter=sorter,
+                docker_image=resolved["docker_image"],
+                verbose=bool(args.debug),
+                cleanup=bool(resolved["clean_up"]),
+                force_restart=bool(args.force_restart),
+                unitmatch_merge_units=bool(args.unitmatch_merge_units),
+                unitmatch_dry_run=bool(args.unitmatch_dry_run),
+                auto_merge_units=bool(args.auto_merge_units),
+                force_rerun_analyzer=bool(args.rerun_analyzer),
+                reanalyze_bursts=bool(args.reanalyze_bursts),
+                skip_spikesorting=bool(args.skip_spikesorting),
+                run_analyzer=True,
+                run_reports=True,
+                thresholds=thresholds,
+                no_curation=bool(resolved["no_curation"]),
+                export_to_phy=bool(resolved["export_to_phy"]),
+                plot_mode=plot_mode,
+                plot_debug=bool(plot_debug),
+                raster_sort=raster_sort,
+                fixed_y=bool(fixed_y),
+                auto_merge_template_diff_thresh=str(args.auto_merge_template_diff_thresh),
+            )
+        )
+
+        if result.reanalyzed_bursts:
             print("Burst Re-analysis Complete.")
             sys.exit(0)
 
-        if pipeline.should_skip(): sys.exit(0)
+        if result.skipped:
+            sys.exit(0)
 
-        pipeline.run_preprocessing()
-
-        if not args.skip_spikesorting:
-            pipeline.run_sorting()
-            pipeline.run_optional_merge_phase()
-            pipeline.run_analyzer()
-            pipeline.generate_reports(thresholds, resolved["no_curation"], resolved["export_to_phy"],plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y = fixed_y)
-        else:
-            ids = pipeline._spike_detection_only()
-            pipeline._run_burst_analysis(ids, plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y = fixed_y)
-
-        pipeline.cleanup()
         print(f"Processing Complete for {args.well}")
 
     except Exception as e:
