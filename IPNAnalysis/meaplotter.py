@@ -610,7 +610,7 @@ class MEAPlotter:
                         bracket_y
                     ],
                     c="black",
-                    lw=1.2,
+                    lw=1.0,
                     zorder=7
                 )
 
@@ -620,7 +620,7 @@ class MEAPlotter:
                     stars,
                     ha="center",
                     va="bottom",
-                    fontsize=9,
+                    fontsize=6,
                     zorder=8
                 )
 
@@ -709,6 +709,8 @@ class MEAPlotter:
         ylabel=None,
         xlabel=None,
         ax=None,
+        fig_width=6,
+        aspect=1.0,
         scatter=True,
         sem_fill=True,
         annotate=True,
@@ -745,7 +747,8 @@ class MEAPlotter:
         div_to_x = {div: i for i, div in enumerate(div_order)}
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(max(8, len(div_order) * 1.0 + 2), 5))
+            fig_height = fig_width * aspect
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
         # ---------------- Colors ----------------
         if isinstance(palette, dict):
@@ -803,7 +806,7 @@ class MEAPlotter:
                     means - sems,
                     means + sems,
                     color=color,
-                    alpha=0.18,
+                    alpha=0.25,
                     linewidth=0,
                     zorder=1
                 )
@@ -812,9 +815,9 @@ class MEAPlotter:
                 xline,
                 means,
                 color=color,
-                linewidth=1.5,
+                linewidth=1.0,
                 marker="o",
-                markersize=3.5,
+                markersize=2,
                 label=g,
                 zorder=3
             )
@@ -832,8 +835,8 @@ class MEAPlotter:
                     xvals[main_mask],
                     gdata[y].values[main_mask],
                     color=color,
-                    alpha=0.70,
-                    s=16,
+                    alpha=0.6,
+                    s=15,
                     edgecolor="black",
                     linewidth=0.25,
                     zorder=2
@@ -918,6 +921,8 @@ class MEAPlotter:
         palette=None,
         title=None,
         ax=None,
+        fig_width=6,
+        aspect=1.0,
         annotate=True,
         # clipping / outliers
         clip_upper=True,
@@ -942,8 +947,8 @@ class MEAPlotter:
         palette = self._resolve_palette(palette)
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(max(10, len(div_order) * 1.1 + 2), 6))
-
+            fig_height = fig_width * aspect
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height))
         sns.barplot(
             data=data,
             x=div_col, y=y,
