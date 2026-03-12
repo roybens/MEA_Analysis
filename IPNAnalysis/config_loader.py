@@ -34,6 +34,7 @@ DEFAULTS = {
     },
     "curation": {
         "no_curation":      False,
+        "no_auto_merge":    False,
         "quality_thresholds": {
             "presence_ratio":       0.75,
             "rp_contamination":     0.15,
@@ -120,6 +121,7 @@ def resolve_args(args, config):
         "fixed_y":        _resolve(_bool(args, "fixed_y"),               _cfg(config, "plotting", "fixed_y"),         DEFAULTS["plotting"].get("fixed_y", False)),
         # curation
         "no_curation":      _resolve(_bool(args, "no_curation"),             _cfg(config, "curation", "no_curation"),     DEFAULTS["curation"]["no_curation"]),
+        "no_auto_merge":    _resolve(_bool(args, "no_auto_merge"),           _cfg(config, "curation", "no_auto_merge"),   DEFAULTS["curation"]["no_auto_merge"]),
         "quality_thresholds": _resolve_thresholds(args, config),
     }
 
@@ -153,6 +155,7 @@ def build_extra_args(resolved, cli_args):
 
     # curation
     if resolved["no_curation"]:     extra.append("--no-curation")
+    if resolved["no_auto_merge"]:   extra.append("--no-auto-merge")
 
     # CLI-only flags - passed through directly, never in config
     if getattr(cli_args, "force_restart", False):     extra.append("--force-restart")

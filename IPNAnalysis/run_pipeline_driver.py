@@ -146,6 +146,8 @@ def main():
     cur_group = parser.add_argument_group("curation (passed to each well)")
     cur_group.add_argument("--no-curation", action="store_true",
         help="Skip automatic unit curation")
+    cur_group.add_argument("--no-auto-merge", action="store_true",
+        help="Skip automatic merging of oversplit units after spike sorting")
     cur_group.add_argument("--params", type=str, default=None,
         help="JSON string or file path with quality thresholds")
 
