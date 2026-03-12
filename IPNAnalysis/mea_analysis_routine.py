@@ -446,6 +446,109 @@ class MEAPipeline:
             self._save_checkpoint(ProcessingStage.SORTING_COMPLETE, error=err)
             raise
 
+    # --- Phase 3b: Auto-Merge ---
+    def run_auto_merge(self, no_auto_merge=False):
+        """
+        Phase 3b: Automatically merge oversplit units using SpikeInterface curation.
+
+        Kilosort4 tends to oversplit neurons — producing two or more units from a single
+        neuron when spike shapes or firing patterns vary slightly. This step detects
+        such pairs/groups and merges them before quality curation, improving downstream
+        analysis accuracy.
+
+        The merge is performed using the SpikeInterface ``auto_merge_units`` function with
+        the ``"similarity_correlograms"`` preset, which:
+
+        1. Filters units with too few spikes (``min_spikes`` threshold, SpikeInterface default: 100).
+        2. Removes contaminated units (high refractory-period violations).
+        3. Requires candidate unit pair locations to be within ``max_distance_um`` (default: 150 µm).
+        4. Checks cross-correlogram similarity (low correlogram-distance metric).
+        5. Checks template shape similarity (low template-difference metric).
+        6. Validates that the merge improves a combined firing-rate / contamination quality score.
+
+        If no merge candidates are found, the original analyzer is kept unchanged.
+        Any failure during the merge process is caught and logged; the pipeline then
+        continues with the original analyzer.
+
+        Parameters
+        ----------
+        no_auto_merge : bool, default False
+            When True the entire merge step is skipped.
+
+        Notes
+        -----
+        ``recursive=False`` runs a single merging pass; setting it to True would
+        iterate until no further merges are found but risks over-merging.
+
+        ``merging_mode="soft"`` reuses and approximates existing extension data for
+        merged units instead of recomputing everything from scratch, which is faster.
+
+        ``sparsity_overlap=0.75`` requires that merged units share at least 75% of
+        their active channels, preventing merges between units recorded on very
+        different electrode subsets.
+        """
+        if no_auto_merge:
+            self.logger.info("Auto-merge skipped (--no-auto-merge flag set).")
+            return
+
+        if self.analyzer is None:
+            self.logger.warning("Auto-merge skipped: no analyzer available.")
+            return
+
+        merged_folder = self.output_dir / "analyzer_merged"
+
+        # Resume: load existing merged analyzer if available
+        if merged_folder.exists():
+            self.logger.info("Resuming: Loading existing merged analyzer.")
+            try:
+                self.analyzer = si.load_sorting_analyzer(merged_folder)
+                self.sorting = self.analyzer.sorting
+                return
+            except Exception:
+                self.logger.warning("Failed to load merged analyzer; recomputing auto-merge...")
+                shutil.rmtree(merged_folder, ignore_errors=True)
+
+        n_before = len(self.analyzer.unit_ids)
+        self.logger.info(f"--- [Phase 3b] Auto-Merging Oversplit Units ({n_before} units) ---")
+
+        try:
+            new_analyzer = sic.auto_merge_units(
+                self.analyzer,
+                presets=["similarity_correlograms"],
+                recursive=False,
+                merging_mode="soft",
+                sparsity_overlap=0.75,
+                verbose=self.verbose,
+            )
+
+            n_after = len(new_analyzer.unit_ids)
+            n_merged = n_before - n_after
+
+            if n_merged > 0:
+                self.logger.info(
+                    f"Auto-merge complete: {n_before} → {n_after} units "
+                    f"({n_merged} unit(s) merged)."
+                )
+                new_analyzer = new_analyzer.save_as(
+                    folder=merged_folder,
+                    format="binary_folder",
+                    overwrite=True,
+                )
+                self.analyzer = new_analyzer
+                self.sorting = self.analyzer.sorting
+            else:
+                self.logger.info(
+                    "Auto-merge: No oversplit unit pairs detected; "
+                    "proceeding with original analyzer."
+                )
+
+        except Exception as e:
+            self.logger.warning(
+                f"Auto-merge failed ({type(e).__name__}: {e}). "
+                "Proceeding without merging."
+            )
+            self.logger.debug(traceback.format_exc())
+
     # --- Phase 4: Reports & Curation ---
     def generate_reports(self, thresholds=None, no_curation=False, export_phy=False,plot_mode="separate", plot_debug=False, raster_sort=None, fixed_y=False):
         if self.state['stage'] == ProcessingStage.REPORTS_COMPLETE.value: return
@@ -826,6 +929,8 @@ def main():
     cur_group = parser.add_argument_group("curation")
     cur_group.add_argument("--no-curation", action="store_true",
         help="Skip automatic unit curation")
+    cur_group.add_argument("--no-auto-merge", action="store_true",
+        help="Skip automatic merging of oversplit units after spike sorting")
     cur_group.add_argument("--params", type=str, default=None,
         help="JSON string or file path with quality thresholds")
 
@@ -874,6 +979,7 @@ def main():
         if not args.skip_spikesorting:
             pipeline.run_sorting()
             pipeline.run_analyzer()
+            pipeline.run_auto_merge(no_auto_merge=resolved["no_auto_merge"])
             pipeline.generate_reports(thresholds, resolved["no_curation"], resolved["export_to_phy"],plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y = fixed_y)
         else:
             ids = pipeline._spike_detection_only()

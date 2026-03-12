@@ -55,6 +55,7 @@ The pipeline uses a `recording_map` to efficiently map all recordings to their c
 | **Preprocessing** | `run_preprocessing()` | Highpass filter (300 Hz), local common median reference, float32 conversion, binary cache |
 | **Spike Sorting** | `run_sorting()` | Kilosort4 (default), SpikeInterface integration, Docker support for reproducibility |
 | **Analyzer** | `run_analyzer()` | Template computation, quality metrics (firing rate, presence ratio, ISI violations, amplitude) |
+| **Auto-Merge** | `run_auto_merge()` | Detect and merge oversplit units using template similarity and cross-correlogram analysis |
 | **Reports** | `generate_reports()` | Waveform visualizations, probe locations, burst analysis, automatic curation |
 
 ## Key Features
@@ -63,6 +64,7 @@ The pipeline uses a `recording_map` to efficiently map all recordings to their c
 ✅ **Checkpointing** — Resume from failures; state saved as JSON  
 ✅ **Logging** — Per-well logs + driver-level logs with timestamps  
 ✅ **Quality Curation** — Automatic unit filtering via configurable thresholds  
+✅ **Auto-Merge** — Automatic detection and merging of oversplit units post-sorting  
 ✅ **Containerization** — Docker image support for Kilosort reproducibility  
 ✅ **Flexible I/O** — HDF5 (primary), placeholders for NWB and raw binary formats  
 ✅ **Burst Detection** — Parameter-free adaptive network burst detection  
@@ -94,6 +96,7 @@ Output organized as:
   ├── binary/                    (preprocessed recording cache)
   ├── sorter_output/             (kilosort4 outputs)
   ├── analyzer_output/           (waveforms, templates, quality metrics)
+  ├── analyzer_merged/           (merged analyzer — only present when units were merged)
   ├── raster_burst_plot.svg      (full recording raster + network burst)
   ├── raster_burst_plot_30s.svg  (30s zoom)
   ├── raster_burst_plot_60s.svg  (60s zoom)
@@ -129,7 +132,7 @@ Edit `mea_config.json` for your project, then pass it to either script via `--co
 | `sorting` | `sorter`, `docker_image` |
 | `filtering` | `reference_file`, `assay_types` (driver only) |
 | `plotting` | `plot_mode`, `raster_sort`, `plot_debug`, `fixed_y` |
-| `curation` | `no_curation`, `quality_thresholds` |
+| `curation` | `no_curation`, `no_auto_merge`, `quality_thresholds` |
 
 ## Reference File
 
@@ -238,6 +241,55 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json
 python run_pipeline_driver.py /data/experiment --config mea_config.json --force-restart
 ```
 
+### 10. Disable auto-merge of oversplit units
+```bash
+# Skip the merging step entirely
+python run_pipeline_driver.py /data/experiment --config mea_config.json --no-auto-merge
+
+# Single-well with no auto-merge
+python mea_analysis_routine.py /data/file.h5 --well well000 --no-auto-merge
+```
+
+## Automatic Unit Merging
+
+Kilosort4 can occasionally **oversplit** a single neuron into two or more clusters when
+spike amplitudes or shapes vary slightly over time (e.g. due to electrode drift or
+bursting activity). The **auto-merge** step (Phase 3b) detects and corrects these
+splits before quality curation.
+
+### How it works
+
+The SpikeInterface `auto_merge_units` function applies a sequence of checks using the
+`"similarity_correlograms"` preset:
+
+1. **Spike count filter** — both units must have at least 100 spikes (the SpikeInterface
+   preset default; configurable via `steps_params`).
+2. **Contamination filter** — units with high refractory-period violations are excluded.
+3. **Location proximity** — candidate pairs must be within 150 µm of each other (preset default).
+4. **Template similarity** — the mean waveforms of both units must be sufficiently similar.
+5. **Correlogram similarity** — the cross-correlogram must resemble the auto-correlograms
+   (indicating a single refractory cell rather than two independent cells).
+6. **Quality score** — the merge is accepted only if the combined firing-rate/contamination
+   quality score improves.
+
+If unit pairs pass all criteria, they are merged into a single unit and all extensions
+(templates, waveforms, quality metrics) are recomputed. The merged analyzer is saved to
+`analyzer_merged/` inside the well output directory and used for all downstream steps.
+If no merges are found, the original analyzer is kept unchanged.
+
+### Disabling auto-merge
+
+Pass `--no-auto-merge` on the command line or add `"no_auto_merge": true` under
+the `curation` section in your config file.
+
+```json
+{
+  "curation": {
+    "no_auto_merge": true
+  }
+}
+```
+
 ## Command-Line Reference
 
 ### run_pipeline_driver.py
@@ -260,6 +312,7 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json --force-
 | plotting | `--plot-debug` | Overlay burst/superburst intervals on plot |
 | plotting | `--fixed-y` | Use fixed y-axis limits across wells (run once without it first) |
 | curation | `--no-curation` | Skip automatic unit curation |
+| curation | `--no-auto-merge` | Skip automatic merging of oversplit units after spike sorting |
 | curation | `--params` | JSON string or file with quality thresholds |
 | run control | `--force-restart` | Ignore checkpoints, restart from scratch |
 | run control | `--reanalyze-bursts` | Re-run burst analysis on existing spike times |
