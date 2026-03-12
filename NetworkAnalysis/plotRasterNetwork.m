@@ -22,7 +22,7 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     if mergedMode
         ax1 = axes(f, 'Position', [0.10 0.12 0.78 0.78]);
         ax2 = axes(f, 'Position', ax1.Position, 'Color', 'none', ...
-            'YAxisLocation', 'right', 'XAxisLocation', 'bottom', ...
+            'YAxisLocation', 'right', ...
             'Box', 'off', 'FontSize', 9, 'TickDir', 'out');
         linkaxes([ax1, ax2], 'x');
     else
@@ -77,11 +77,7 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     if ~isempty(networkStats.threshold)
         switch upper(networkStats.thresholdFunction)
             case {'FIXED', 'RMS'}
-                if mergedMode
-                    t_limits = xlim(ax1);
-                else
-                    t_limits = xlim(ax2);
-                end
+                t_limits = xlim(ax2);
                 plot(ax2, t_limits, [networkStats.threshold networkStats.threshold], ...
                      '--', 'Color', ThresholdColor, 'LineWidth', LineWidth);
         end
@@ -97,7 +93,7 @@ function plotRasterNetwork(networkAct,networkStats,relativeSpikeTimes,locData,bi
     if mergedMode
         xlabel(ax1, 'Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
         ylabel(ax2, 'Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
-        set(ax2, 'XTickLabel', [], 'YColor', [0.2 0.2 0.2]);
+        set(ax2, 'XTick', [], 'XColor', 'none', 'YColor', [0.2 0.2 0.2]);
     else
         xlabel(ax2, 'Time (s)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
         ylabel(ax2, 'Firing Rate (Hz)', 'FontSize', 10, 'Color', [0.2 0.2 0.2]);
