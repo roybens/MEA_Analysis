@@ -1,8 +1,8 @@
 # ==========================================================
 # mea_analysis_routine.py
 # Author: Mandar Patil
-# Contributors: Yuxin Ren, Shruti Shah
-# LLM Assisted Edits: Yes ChatGPT-4, Claude sonnet 4.6
+# Contributors: Yuxin Ren, Shruti Shah, Adam Weiner
+# LLM Assisted Edits: Yes ChatGPT-4, Claude sonnet 4.6, ChatGPT-5.3-Codex
 # ==========================================================
 
 import os
@@ -119,6 +119,46 @@ CHECKPOINT_SCHEMA_VERSION = 2
 
 
 # --- The Main Pipeline Class ---
+def _default_um_kwargs() -> dict[str, Any]:
+    return {
+        "merge_units": False,
+        "dry_run": True,
+        "scored_dry_run": True,
+        "output_subdir_name": "unitmatch_outputs",
+        "throughput_subdir_name": "unitmatch_throughput",
+        "max_candidate_pairs": 20000,
+        "oversplit_min_probability": 0.99,
+        "oversplit_max_suggestions": 2000,
+        "apply_merges": False,
+        "recursive": False,
+        "max_iterations": 5,
+        "max_spikes_per_unit": 100,
+        "keep_all_iterations": True,
+        "generate_reports": True,
+        "report_subdir_name": "unitmatch_reports",
+        "report_max_heatmap_units": 200,
+    }
+
+
+def _default_am_kwargs() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "presets": None,
+        "steps_params": None,
+        "template_diff_thresh": "0.05,0.15,0.25",
+    }
+
+
+def _default_option_kwargs() -> dict[str, Any]:
+    return {
+        "force_rerun_analyzer": False,
+        "preprocessed_recording": None,
+        "skip_preprocessing": False,
+        "cuda_visible_devices": None,
+        "output_subdir_after_well": None,
+    }
+
+
 class MEAPipeline:
     """
     SOTA Pipeline for 2D MEA Analysis (Maxwell Biosystems).
@@ -131,30 +171,9 @@ class MEAPipeline:
                  n_jobs: int | None = None,
                  chunk_duration: str | None = None,
                  sorter_kwargs: dict | None = None,
-                 unitmatch_merge_units: bool = False,
-                 unitmatch_dry_run: bool = True,
-                 unitmatch_scored_dry_run: bool = True,
-                 unitmatch_output_subdir_name: str = "unitmatch_outputs",
-                 unitmatch_throughput_subdir_name: str = "unitmatch_throughput",
-                 unitmatch_max_candidate_pairs: int = 20000,
-                 unitmatch_oversplit_min_probability: float = 0.80,
-                 unitmatch_oversplit_max_suggestions: int = 2000,
-                 unitmatch_apply_merges: bool = False,
-                 unitmatch_recursive: bool = False,
-                 unitmatch_max_iterations: int = 5,
-                 unitmatch_uncapped_iterations: bool = False,
-                 unitmatch_keep_all_iterations: bool = True,
-                 unitmatch_generate_reports: bool = True,
-                 unitmatch_report_subdir_name: str = "unitmatch_reports",
-                 unitmatch_report_max_heatmap_units: int = 200,
-                 auto_merge_units: bool = False,
-                 auto_merge_presets: list[str] | None = None,
-                 auto_merge_steps_params: list[dict] | None = None,
-                 force_rerun_analyzer: bool = False,
-                 preprocessed_recording=None,
-                 skip_preprocessing: bool = False,
-                 cuda_visible_devices: str | None = None,
-                 output_subdir_after_well: str | None = None):
+                 um_kwargs: dict | None = None,
+                 am_kwargs: dict | None = None,
+                 option_kwargs: dict | None = None):
         
         self.file_path = Path(file_path).resolve()
         self.stream_id = stream_id
@@ -165,55 +184,65 @@ class MEAPipeline:
         self.cleanup_flag = cleanup
         self.force_restart = force_restart
 
+        self.um_kwargs = _default_um_kwargs()
+        if isinstance(um_kwargs, dict):
+            self.um_kwargs.update(um_kwargs)
+        self.am_kwargs = _default_am_kwargs()
+        if isinstance(am_kwargs, dict):
+            self.am_kwargs.update(am_kwargs)
+        self.option_kwargs = _default_option_kwargs()
+        if isinstance(option_kwargs, dict):
+            self.option_kwargs.update(option_kwargs)
+
         # Optional resource hints (used by some SpikeInterface steps).
         self.n_jobs = n_jobs
         self.chunk_duration = chunk_duration
-        self.output_subdir_after_well = self._validate_output_subdir_after_well(output_subdir_after_well)
+        self.output_subdir_after_well = self._validate_output_subdir_after_well(self.option_kwargs.get("output_subdir_after_well"))
 
         # Optional sorter kwargs override (e.g. Kilosort4 batch_size tuning).
         self.sorter_kwargs = sorter_kwargs
 
         # Optional UnitMatch alternative merge path (default off).
-        self.unitmatch_merge_units = bool(unitmatch_merge_units)
-        self.unitmatch_dry_run = bool(unitmatch_dry_run)
-        self.unitmatch_scored_dry_run = bool(unitmatch_scored_dry_run)
+        self.unitmatch_merge_units = bool(self.um_kwargs.get("merge_units"))
+        self.unitmatch_dry_run = bool(self.um_kwargs.get("dry_run"))
+        self.unitmatch_scored_dry_run = bool(self.um_kwargs.get("scored_dry_run"))
         self.unitmatch_output_subdir_name = (
-            self._validate_output_subdir_after_well(unitmatch_output_subdir_name)
+            self._validate_output_subdir_after_well(self.um_kwargs.get("output_subdir_name"))
             or "unitmatch_outputs"
         )
         self.unitmatch_throughput_subdir_name = (
-            self._validate_output_subdir_after_well(unitmatch_throughput_subdir_name)
+            self._validate_output_subdir_after_well(self.um_kwargs.get("throughput_subdir_name"))
             or "unitmatch_throughput"
         )
-        self.unitmatch_max_candidate_pairs = int(unitmatch_max_candidate_pairs)
-        self.unitmatch_oversplit_min_probability = float(unitmatch_oversplit_min_probability)
-        self.unitmatch_oversplit_max_suggestions = int(unitmatch_oversplit_max_suggestions)
-        self.unitmatch_apply_merges = bool(unitmatch_apply_merges)
-        self.unitmatch_recursive = bool(unitmatch_recursive)
-        self.unitmatch_max_iterations = int(unitmatch_max_iterations)
-        self.unitmatch_uncapped_iterations = bool(unitmatch_uncapped_iterations)
-        self.unitmatch_keep_all_iterations = bool(unitmatch_keep_all_iterations)
-        self.unitmatch_generate_reports = bool(unitmatch_generate_reports)
+        self.unitmatch_max_candidate_pairs = int(self.um_kwargs.get("max_candidate_pairs"))
+        self.unitmatch_oversplit_min_probability = float(self.um_kwargs.get("oversplit_min_probability"))
+        self.unitmatch_oversplit_max_suggestions = int(self.um_kwargs.get("oversplit_max_suggestions"))
+        self.unitmatch_apply_merges = bool(self.um_kwargs.get("apply_merges"))
+        self.unitmatch_recursive = bool(self.um_kwargs.get("recursive"))
+        self.unitmatch_max_iterations = int(self.um_kwargs.get("max_iterations"))
+        self.unitmatch_max_spikes_per_unit = int(self.um_kwargs.get("max_spikes_per_unit"))
+        self.unitmatch_keep_all_iterations = bool(self.um_kwargs.get("keep_all_iterations"))
+        self.unitmatch_generate_reports = bool(self.um_kwargs.get("generate_reports"))
         self.unitmatch_report_subdir_name = (
-            self._validate_output_subdir_after_well(unitmatch_report_subdir_name)
+            self._validate_output_subdir_after_well(self.um_kwargs.get("report_subdir_name"))
             or "unitmatch_reports"
         )
-        self.unitmatch_report_max_heatmap_units = int(unitmatch_report_max_heatmap_units)
+        self.unitmatch_report_max_heatmap_units = int(self.um_kwargs.get("report_max_heatmap_units"))
 
         # Optional post-sorting unit merge (default-off).
-        self.auto_merge_units = bool(auto_merge_units)
-        self.auto_merge_presets = auto_merge_presets
-        self.auto_merge_steps_params = auto_merge_steps_params
+        self.auto_merge_units = bool(self.am_kwargs.get("enabled"))
+        self.auto_merge_presets = self.am_kwargs.get("presets")
+        self.auto_merge_steps_params = self.am_kwargs.get("steps_params")
 
         # Allow re-running analyzer without re-running spikesorting.
-        self.force_rerun_analyzer = bool(force_rerun_analyzer)
+        self.force_rerun_analyzer = bool(self.option_kwargs.get("force_rerun_analyzer"))
 
         # Optional preprocessed recording injection path.
-        self.preprocessed_recording = preprocessed_recording
-        self.skip_preprocessing = bool(skip_preprocessing)
+        self.preprocessed_recording = self.option_kwargs.get("preprocessed_recording")
+        self.skip_preprocessing = bool(self.option_kwargs.get("skip_preprocessing"))
 
         # Optional runtime/resource controls (default behavior when unset).
-        self.cuda_visible_devices = cuda_visible_devices
+        self.cuda_visible_devices = self.option_kwargs.get("cuda_visible_devices")
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -684,7 +713,7 @@ class MEAPipeline:
                         apply_merges=self.unitmatch_apply_merges,
                         recursive=self.unitmatch_recursive,
                         max_iterations=self.unitmatch_max_iterations,
-                        uncapped_iterations=self.unitmatch_uncapped_iterations,
+                        max_spikes_per_unit=self.unitmatch_max_spikes_per_unit,
                         keep_all_iterations=self.unitmatch_keep_all_iterations,
                     ),
                 )
@@ -1294,29 +1323,9 @@ class MEARunOptions:
     n_jobs: int | None = None
     chunk_duration: str | None = None
     sorter_kwargs: dict | None = None
-    unitmatch_merge_units: bool = False
-    unitmatch_dry_run: bool = True
-    unitmatch_scored_dry_run: bool = True
-    unitmatch_output_subdir_name: str = "unitmatch_outputs"
-    unitmatch_throughput_subdir_name: str = "unitmatch_throughput"
-    unitmatch_max_candidate_pairs: int = 20000
-    unitmatch_oversplit_min_probability: float = 0.80
-    unitmatch_oversplit_max_suggestions: int = 2000
-    unitmatch_apply_merges: bool = False
-    unitmatch_recursive: bool = False
-    unitmatch_max_iterations: int = 5
-    unitmatch_uncapped_iterations: bool = False
-    unitmatch_keep_all_iterations: bool = True
-    unitmatch_generate_reports: bool = True
-    unitmatch_report_subdir_name: str = "unitmatch_reports"
-    unitmatch_report_max_heatmap_units: int = 200
-    auto_merge_units: bool = False
-    auto_merge_presets: list[str] | None = None
-    auto_merge_steps_params: list[dict] | None = None
-    force_rerun_analyzer: bool = False
-    preprocessed_recording: Any = None
-    skip_preprocessing: bool = False
-    cuda_visible_devices: str | None = None
+    um_kwargs: dict | None = None
+    am_kwargs: dict | None = None
+    option_kwargs: dict | None = None
     reanalyze_bursts: bool = False
     skip_spikesorting: bool = False
     run_analyzer: bool = True
@@ -1397,14 +1406,26 @@ def _apply_resume_from_stage(pipeline: MEAPipeline, resume_from: str | None) -> 
 
 
 def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
-    auto_merge_presets = options.auto_merge_presets
-    auto_merge_steps_params = options.auto_merge_steps_params
+    um_kwargs = _default_um_kwargs()
+    if isinstance(options.um_kwargs, dict):
+        um_kwargs.update(options.um_kwargs)
 
-    if bool(options.auto_merge_units) and (auto_merge_presets is None or auto_merge_steps_params is None):
+    am_kwargs = _default_am_kwargs()
+    if isinstance(options.am_kwargs, dict):
+        am_kwargs.update(options.am_kwargs)
+
+    option_kwargs = _default_option_kwargs()
+    if isinstance(options.option_kwargs, dict):
+        option_kwargs.update(options.option_kwargs)
+
+    auto_merge_presets = am_kwargs.get("presets")
+    auto_merge_steps_params = am_kwargs.get("steps_params")
+
+    if bool(am_kwargs.get("enabled")) and (auto_merge_presets is None or auto_merge_steps_params is None):
         try:
             diffs = [
                 float(x.strip())
-                for x in str(options.auto_merge_template_diff_thresh).split(",")
+                for x in str(am_kwargs.get("template_diff_thresh", "0.05,0.15,0.25")).split(",")
                 if x.strip()
             ]
             auto_merge_presets = ["x_contaminations"] * len(diffs)
@@ -1416,13 +1437,15 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
             auto_merge_presets = None
             auto_merge_steps_params = None
 
+    am_kwargs["presets"] = auto_merge_presets
+    am_kwargs["steps_params"] = auto_merge_steps_params
+
     pipeline = MEAPipeline(
         file_path=options.file_path,
         stream_id=options.stream_id,
         recording_num=options.recording_num,
         output_root=options.output_root,
         checkpoint_root=options.checkpoint_root,
-        output_subdir_after_well=options.output_subdir_after_well,
         sorter=options.sorter,
         docker_image=options.docker_image,
         verbose=bool(options.verbose),
@@ -1431,29 +1454,9 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
         n_jobs=options.n_jobs,
         chunk_duration=options.chunk_duration,
         sorter_kwargs=options.sorter_kwargs,
-        unitmatch_merge_units=bool(options.unitmatch_merge_units),
-        unitmatch_dry_run=bool(options.unitmatch_dry_run),
-        unitmatch_scored_dry_run=bool(options.unitmatch_scored_dry_run),
-        unitmatch_output_subdir_name=str(options.unitmatch_output_subdir_name),
-        unitmatch_throughput_subdir_name=str(options.unitmatch_throughput_subdir_name),
-        unitmatch_max_candidate_pairs=int(options.unitmatch_max_candidate_pairs),
-        unitmatch_oversplit_min_probability=float(options.unitmatch_oversplit_min_probability),
-        unitmatch_oversplit_max_suggestions=int(options.unitmatch_oversplit_max_suggestions),
-        unitmatch_apply_merges=bool(options.unitmatch_apply_merges),
-        unitmatch_recursive=bool(options.unitmatch_recursive),
-        unitmatch_max_iterations=int(options.unitmatch_max_iterations),
-        unitmatch_uncapped_iterations=bool(options.unitmatch_uncapped_iterations),
-        unitmatch_keep_all_iterations=bool(options.unitmatch_keep_all_iterations),
-        unitmatch_generate_reports=bool(options.unitmatch_generate_reports),
-        unitmatch_report_subdir_name=str(options.unitmatch_report_subdir_name),
-        unitmatch_report_max_heatmap_units=int(options.unitmatch_report_max_heatmap_units),
-        auto_merge_units=bool(options.auto_merge_units),
-        auto_merge_presets=auto_merge_presets,
-        auto_merge_steps_params=auto_merge_steps_params,
-        force_rerun_analyzer=bool(options.force_rerun_analyzer),
-        preprocessed_recording=options.preprocessed_recording,
-        skip_preprocessing=bool(options.skip_preprocessing),
-        cuda_visible_devices=options.cuda_visible_devices,
+        um_kwargs=um_kwargs,
+        am_kwargs=am_kwargs,
+        option_kwargs=option_kwargs,
     )
 
     _apply_resume_from_stage(pipeline, options.resume_from)
@@ -1644,12 +1647,13 @@ def main():
         "--unitmatch-max-iterations",
         type=int,
         default=None,
-        help="Maximum recursive UnitMatch iterations (default: 5).",
+        help="Maximum recursive UnitMatch iterations (-1 uncapped, default: 5).",
     )
     parser.add_argument(
-        "--unitmatch-uncapped-iterations",
-        action='store_true',
-        help="Disable max iteration cap and rely on convergence stops.",
+        "--unitmatch-max-spikes-per-unit",
+        type=int,
+        default=None,
+        help="Max spikes per unit for UnitMatch raw-waveform generation (-1 uncapped, default: 100).",
     )
     parser.add_argument(
         "--unitmatch-keep-all-iterations",
@@ -1715,31 +1719,38 @@ def main():
                 recording_num=rec,
                 output_root=resolved["output_dir"],
                 checkpoint_root=resolved["checkpoint_dir"],
-                output_subdir_after_well=resolved.get("output_subdir_after_well"),
                 sorter=sorter,
                 docker_image=resolved["docker_image"],
                 verbose=bool(args.debug),
                 cleanup=bool(resolved["clean_up"]),
                 force_restart=bool(args.force_restart),
                 resume_from=args.resume_from,
-                unitmatch_merge_units=bool(args.unitmatch_merge_units),
-                unitmatch_dry_run=bool(args.unitmatch_dry_run),
-                unitmatch_scored_dry_run=bool(resolved["unitmatch_scored_dry_run"]),
-                unitmatch_output_subdir_name=str(resolved["unitmatch_output_subdir_name"]),
-                unitmatch_throughput_subdir_name=str(resolved["unitmatch_throughput_subdir_name"]),
-                unitmatch_max_candidate_pairs=int(resolved["unitmatch_max_candidate_pairs"]),
-                unitmatch_oversplit_min_probability=float(resolved["unitmatch_oversplit_min_probability"]),
-                unitmatch_oversplit_max_suggestions=int(resolved["unitmatch_oversplit_max_suggestions"]),
-                unitmatch_apply_merges=bool(resolved["unitmatch_apply_merges"]),
-                unitmatch_recursive=bool(resolved["unitmatch_recursive"]),
-                unitmatch_max_iterations=int(resolved["unitmatch_max_iterations"]),
-                unitmatch_uncapped_iterations=bool(resolved["unitmatch_uncapped_iterations"]),
-                unitmatch_keep_all_iterations=bool(resolved["unitmatch_keep_all_iterations"]),
-                unitmatch_generate_reports=bool(args.unitmatch_generate_reports),
-                unitmatch_report_subdir_name=str(args.unitmatch_report_subdir_name),
-                unitmatch_report_max_heatmap_units=int(args.unitmatch_report_max_heatmap_units),
-                auto_merge_units=bool(args.auto_merge_units),
-                force_rerun_analyzer=bool(args.rerun_analyzer),
+                um_kwargs={
+                    "merge_units": bool(args.unitmatch_merge_units),
+                    "dry_run": bool(args.unitmatch_dry_run),
+                    "scored_dry_run": bool(resolved["unitmatch_scored_dry_run"]),
+                    "output_subdir_name": str(resolved["unitmatch_output_subdir_name"]),
+                    "throughput_subdir_name": str(resolved["unitmatch_throughput_subdir_name"]),
+                    "max_candidate_pairs": int(resolved["unitmatch_max_candidate_pairs"]),
+                    "oversplit_min_probability": float(resolved["unitmatch_oversplit_min_probability"]),
+                    "oversplit_max_suggestions": int(resolved["unitmatch_oversplit_max_suggestions"]),
+                    "apply_merges": bool(resolved["unitmatch_apply_merges"]),
+                    "recursive": bool(resolved["unitmatch_recursive"]),
+                    "max_iterations": int(resolved["unitmatch_max_iterations"]),
+                    "max_spikes_per_unit": int(resolved["unitmatch_max_spikes_per_unit"]),
+                    "keep_all_iterations": bool(resolved["unitmatch_keep_all_iterations"]),
+                    "generate_reports": bool(args.unitmatch_generate_reports),
+                    "report_subdir_name": str(args.unitmatch_report_subdir_name),
+                    "report_max_heatmap_units": int(args.unitmatch_report_max_heatmap_units),
+                },
+                am_kwargs={
+                    "enabled": bool(args.auto_merge_units),
+                    "template_diff_thresh": str(args.auto_merge_template_diff_thresh),
+                },
+                option_kwargs={
+                    "force_rerun_analyzer": bool(args.rerun_analyzer),
+                    "output_subdir_after_well": resolved.get("output_subdir_after_well"),
+                },
                 reanalyze_bursts=bool(args.reanalyze_bursts),
                 skip_spikesorting=bool(args.skip_spikesorting),
                 run_analyzer=True,
