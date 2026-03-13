@@ -154,9 +154,9 @@ def main():
     sort_group.add_argument("--unitmatch-recursive", action="store_true",
         help="Recursively rerun UnitMatch merge iterations until convergence or iteration cap")
     sort_group.add_argument("--unitmatch-max-iterations", type=int, default=None,
-        help="Maximum recursive UnitMatch iterations (default: 5)")
-    sort_group.add_argument("--unitmatch-uncapped-iterations", action="store_true",
-        help="Disable iteration cap (uses safety stop conditions)")
+        help="Maximum recursive UnitMatch iterations (-1 uncapped, default: 5)")
+    sort_group.add_argument("--unitmatch-max-spikes-per-unit", type=int, default=None,
+        help="Max spikes per unit for UnitMatch raw-waveform generation (-1 uncapped, default: 100)")
     sort_group.add_argument("--unitmatch-keep-all-iterations", action=argparse.BooleanOptionalAction, default=None,
         help="Keep all per-iteration throughput artifacts (default: enabled)")
     sort_group.add_argument("--unitmatch-generate-reports", action=argparse.BooleanOptionalAction, default=None,
