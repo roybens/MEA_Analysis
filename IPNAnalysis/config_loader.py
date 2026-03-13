@@ -33,7 +33,7 @@ DEFAULTS = {
         "unitmatch_apply_merges": False,
         "unitmatch_recursive": False,
         "unitmatch_max_iterations": 5,
-        "unitmatch_uncapped_iterations": False,
+        "unitmatch_max_spikes_per_unit": 100,
         "unitmatch_keep_all_iterations": False,
         "unitmatch_generate_reports": True,
         "unitmatch_report_subdir_name": "unitmatch_reports",
@@ -138,7 +138,7 @@ def resolve_args(args, config):
         "unitmatch_apply_merges":               _resolve(_bool(args, "unitmatch_apply_merges"),                         _cfg(config, "merging", "unitmatch_apply_merges"),                  DEFAULTS["merging"]["unitmatch_apply_merges"]),
         "unitmatch_recursive":                  _resolve(_bool(args, "unitmatch_recursive"),                            _cfg(config, "merging", "unitmatch_recursive"),                     DEFAULTS["merging"]["unitmatch_recursive"]),
         "unitmatch_max_iterations":             _resolve(getattr(args, "unitmatch_max_iterations", None),               _cfg(config, "merging", "unitmatch_max_iterations"),                DEFAULTS["merging"]["unitmatch_max_iterations"]),
-        "unitmatch_uncapped_iterations":        _resolve(_bool(args, "unitmatch_uncapped_iterations"),                  _cfg(config, "merging", "unitmatch_uncapped_iterations"),           DEFAULTS["merging"]["unitmatch_uncapped_iterations"]),
+        "unitmatch_max_spikes_per_unit":        _resolve(getattr(args, "unitmatch_max_spikes_per_unit", None),         _cfg(config, "merging", "unitmatch_max_spikes_per_unit"),           DEFAULTS["merging"]["unitmatch_max_spikes_per_unit"]),
         "unitmatch_keep_all_iterations":        _resolve(getattr(args, "unitmatch_keep_all_iterations", None),          _cfg(config, "merging", "unitmatch_keep_all_iterations"),           DEFAULTS["merging"]["unitmatch_keep_all_iterations"]),
         "unitmatch_generate_reports":           _resolve(_bool(args, "unitmatch_generate_reports"),                     _cfg(config, "merging", "unitmatch_generate_reports"),              DEFAULTS["merging"]["unitmatch_generate_reports"]),
         "unitmatch_report_subdir_name":         _resolve(getattr(args, "unitmatch_report_subdir_name", None),           _cfg(config, "merging", "unitmatch_report_subdir_name"),            DEFAULTS["merging"]["unitmatch_report_subdir_name"]),
@@ -226,8 +226,8 @@ def build_extra_args(resolved, cli_args):
         extra.append("--unitmatch-recursive")
     if getattr(cli_args, "unitmatch_max_iterations", None) is not None:
         extra.append(f"--unitmatch-max-iterations {int(getattr(cli_args, 'unitmatch_max_iterations'))}")
-    if getattr(cli_args, "unitmatch_uncapped_iterations", False):
-        extra.append("--unitmatch-uncapped-iterations")
+    if getattr(cli_args, "unitmatch_max_spikes_per_unit", None) is not None:
+        extra.append(f"--unitmatch-max-spikes-per-unit {int(getattr(cli_args, 'unitmatch_max_spikes_per_unit'))}")
     keep_all_iters = getattr(cli_args, "unitmatch_keep_all_iterations", None)
     if keep_all_iters is True:
         extra.append("--unitmatch-keep-all-iterations")
