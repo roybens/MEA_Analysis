@@ -107,7 +107,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--unitmatch-max-candidate-pairs", type=int, default=None,
         help="Maximum UnitMatch candidate pairs (-1 unlimited, 0 none, default: 20000).")
     parser.add_argument("--unitmatch-oversplit-min-probability", type=float, default=None,
-        help="Minimum UnitMatch probability for oversplit suggestions (default: 0.80).")
+        help="Minimum UnitMatch probability for oversplit suggestions (default: 0.99).")
     parser.add_argument("--unitmatch-oversplit-max-suggestions", type=int, default=None,
         help="Maximum oversplit suggestions (-1 unlimited, 0 none, default: 2000).")
     parser.add_argument("--unitmatch-apply-merges", action='store_true',
