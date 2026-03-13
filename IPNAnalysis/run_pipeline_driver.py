@@ -111,6 +111,8 @@ def main():
         help="Output directory for all results")
     io_group.add_argument("--checkpoint-dir", type=str, default=None,
         help="Checkpoint directory (default: <output-dir>/checkpoints)")
+    io_group.add_argument("--output-subdir-after-well", type=str, default=None,
+        help="Optional single subdirectory appended under each resolved well output directory")
     io_group.add_argument("--export-to-phy", action="store_true",
         help="Export results to Phy format")
     io_group.add_argument("--clean-up", action="store_true",
@@ -131,6 +133,38 @@ def main():
         help="Docker image name for containerized sorting")
     sort_group.add_argument("--skip-spikesorting", action="store_true",
         help="Run spike detection only, skip full sorting")
+    sort_group.add_argument("--unitmatch-merge-units", action="store_true",
+        help="Run UnitMatch dry-run/merge phase (optional, passed to each well)")
+    sort_group.add_argument("--unitmatch-dry-run", action="store_true",
+        help="When UnitMatch is enabled, run in dry-run mode (passed to each well)")
+    sort_group.add_argument("--unitmatch-scored-dry-run", action=argparse.BooleanOptionalAction, default=None,
+        help="When UnitMatch dry-run is enabled, attempt backend scoring (default: enabled)")
+    sort_group.add_argument("--unitmatch-output-subdir-name", type=str, default=None,
+        help="UnitMatch artifact subdirectory under each well output (default: unitmatch_outputs)")
+    sort_group.add_argument("--unitmatch-throughput-subdir-name", type=str, default=None,
+        help="UnitMatch throughput subdirectory under each well output (default: unitmatch_throughput)")
+    sort_group.add_argument("--unitmatch-max-candidate-pairs", type=int, default=None,
+        help="Max candidate pairs for UnitMatch scoring (-1 unlimited, 0 none, default: 20000)")
+    sort_group.add_argument("--unitmatch-oversplit-min-probability", type=float, default=None,
+        help="Minimum UnitMatch probability for oversplit suggestions (default: 0.80)")
+    sort_group.add_argument("--unitmatch-oversplit-max-suggestions", type=int, default=None,
+        help="Max oversplit suggestions to emit (-1 unlimited, 0 none, default: 2000)")
+    sort_group.add_argument("--unitmatch-apply-merges", action="store_true",
+        help="Apply UnitMatch-selected merges instead of report-only mode")
+    sort_group.add_argument("--unitmatch-recursive", action="store_true",
+        help="Recursively rerun UnitMatch merge iterations until convergence or iteration cap")
+    sort_group.add_argument("--unitmatch-max-iterations", type=int, default=None,
+        help="Maximum recursive UnitMatch iterations (default: 5)")
+    sort_group.add_argument("--unitmatch-uncapped-iterations", action="store_true",
+        help="Disable iteration cap (uses safety stop conditions)")
+    sort_group.add_argument("--unitmatch-keep-all-iterations", action=argparse.BooleanOptionalAction, default=None,
+        help="Keep all per-iteration throughput artifacts (default: enabled)")
+    sort_group.add_argument("--unitmatch-generate-reports", action=argparse.BooleanOptionalAction, default=None,
+        help="Generate static UnitMatch report pack from existing artifacts (default: enabled)")
+    sort_group.add_argument("--unitmatch-report-subdir-name", type=str, default=None,
+        help="UnitMatch report output subdirectory under each well output (default: unitmatch_reports)")
+    sort_group.add_argument("--unitmatch-report-max-heatmap-units", type=int, default=None,
+        help="Maximum units rendered in UnitMatch similarity heatmap (default: 200)")
 
     # --- Plotting (passed to each well) ---
     plot_group = parser.add_argument_group("plotting (passed to each well)")
@@ -155,6 +189,9 @@ def main():
         help="Ignore checkpoints and restart from scratch")
     ctrl_group.add_argument("--reanalyze-bursts", action="store_true",
         help="Re-run burst analysis on existing spike times")
+    ctrl_group.add_argument("--resume-from", "--resume_from", dest="resume_from", type=str, default=None,
+        choices=["preprocessing", "sorting", "merge", "analyzer", "reports"],
+        help="Rewind checkpoint and resume each well from this stage")
     ctrl_group.add_argument("--dry", action="store_true",
         help="Print what would run without any processing")
     ctrl_group.add_argument("--debug", action="store_true",

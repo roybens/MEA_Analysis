@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "MEA_Analysis"
+version = "0.0.0"
+description = "MEA Analysis utilities (packaging shim)"
+readme = "README.md"
+requires-python = ">=3.9"
+
+# Keep dependencies empty here; this repo is used in multiple environments and
+# heavyweight scientific deps are managed externally (conda/pip envs).
+dependencies = []
