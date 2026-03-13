@@ -35,7 +35,7 @@ class UnitMatchConfig:
     apply_merges: bool = False
     recursive: bool = False
     max_iterations: int = 5
-    uncapped_iterations: bool = False
+    max_spikes_per_unit: int = 100
     keep_all_iterations: bool = True
     backend_name: str = "deepunitmatch_clone"
     backend_device: str = "cpu"
@@ -289,6 +289,7 @@ def _ensure_unitmatch_rawwaveforms_from_si(
     sorting: Any,
     recording: Any,
     raw_waveforms_dir: Path,
+    max_spikes_per_unit: int,
     logger: Any,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
@@ -371,7 +372,10 @@ def _ensure_unitmatch_rawwaveforms_from_si(
                 recording_halves[half_idx],
                 sparse=False,
             )
-            ana.compute("random_spikes", method="uniform", max_spikes_per_unit=100)
+            random_spikes_kwargs: dict[str, Any] = {"method": "uniform"}
+            if int(max_spikes_per_unit) >= 0:
+                random_spikes_kwargs["max_spikes_per_unit"] = int(max_spikes_per_unit)
+            ana.compute("random_spikes", **random_spikes_kwargs)
             ana.compute("waveforms", ms_before=ms_before, ms_after=ms_after, dtype="float32", save=False)
             ana.compute("templates")
 
@@ -602,6 +606,7 @@ def _score_pairs_deepunitmatch_clone_only(
     logger: Any,
     backend_device: str,
     backend_clone_root: str | None,
+    max_spikes_per_unit: int,
 ) -> tuple[list[float] | None, list[float] | None, str, dict[str, Any]]:
     clone_root = Path(backend_clone_root) if backend_clone_root else UNITMATCH_CLONE_ROOT
     clone_dir = clone_root / "DeepUnitMatch"
@@ -633,6 +638,7 @@ def _score_pairs_deepunitmatch_clone_only(
             sorting=sorting,
             recording=recording,
             raw_waveforms_dir=raw_dir,
+            max_spikes_per_unit=int(max_spikes_per_unit),
             logger=logger,
         )
         probe["rawwaveforms_generation"] = gen
@@ -1025,6 +1031,7 @@ def run_unitmatch_merge_if_enabled(
                 logger=logger,
                 backend_device=str(config.backend_device),
                 backend_clone_root=config.backend_clone_root,
+                max_spikes_per_unit=int(config.max_spikes_per_unit),
             )
             summary["clone_import"]["import_ok"] = bool(probe.get("import_ok", False))
             summary["clone_import"]["failure_reason"] = probe.get("reason")
@@ -1208,8 +1215,9 @@ def run_unitmatch_merge_with_recursion(
 
     current_sorting = sorting
     iteration = 0
-    max_iterations = max(0, int(config.max_iterations))
-    uncapped = bool(config.uncapped_iterations)
+    max_iterations_raw = int(config.max_iterations)
+    max_iterations = max(0, int(max_iterations_raw))
+    uncapped = bool(max_iterations_raw < 0)
     history: list[dict[str, Any]] = []
     last_signature: tuple[tuple[str, str], ...] | None = None
     final_summary: dict[str, Any] = {}
@@ -1263,7 +1271,7 @@ def run_unitmatch_merge_with_recursion(
     convergence = {
         "recursive_enabled": True,
         "uncapped_iterations": bool(uncapped),
-        "max_iterations": int(max_iterations),
+        "max_iterations": int(max_iterations_raw),
         "keep_all_iterations": bool(config.keep_all_iterations),
         "n_iterations_executed": int(len(history)),
         "history": history,
