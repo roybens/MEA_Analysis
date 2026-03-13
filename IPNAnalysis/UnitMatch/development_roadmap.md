@@ -130,6 +130,35 @@ Under `.../unitmatch/` write:
 
 ## Progress Notes
 
+### 2026-03-12 (Stabilization + policy decisions)
+- Completed: retained current DeepUnitMatch entrypoint strategy via clone testing path (`DeepUnitMatch.testing.test`) as the practical integration API for now.
+- Completed: documented API hardening direction as an adapter-boundary follow-up, not a blocker for current integration.
+- Phase 2 architecture note: `DeepUnitMatch.testing.test` remains a pragmatic integration path but is not treated as stable public API; all direct backend imports/inference should be isolated behind a local adapter boundary in `MEA_Analysis` to reduce upstream break risk.
+- Completed: clarified reporting direction to no GUI in current phase; prioritize low-risk static artifacts only (JSON/CSV + matrix snapshots).
+- Completed: confirmed custom DeepUnitMatch training is deferred to a separate project after inference path and merge policy stabilize.
+- Completed: added recursive rerun cleanup behavior to remove stale `iteration_*` directories before each recursive run.
+- Completed: added reciprocal-consistency merge gating requirement in runner policy:
+  - forward score must meet threshold,
+  - reverse score must be available and meet threshold,
+  - acceptance uses reciprocal minimum score.
+- Completed: updated oversplit policy metadata and artifacts to expose directional scores (`score`, `reverse_score`, `reciprocal_min_score`) and reciprocal gate diagnostics.
+- Completed: implemented low-risk static UnitMatch report pack generation from existing artifacts (no GUI, no re-scoring, no merge mutation).
+- Completed: report outputs now include PNG + CSV artifacts for score distribution, matrix heatmap, per-unit partner summary, merge diagnostics, and iteration convergence.
+- Completed: added automatic fail-open report generation after UnitMatch merge phase in pipeline orchestration.
+- Completed: added standalone post-hoc CLI entrypoint to regenerate static UnitMatch reports from existing outputs.
+
+### Deferred Project: Custom Model Training
+- Scope: train and validate a domain-adapted DeepUnitMatch model for dissociated-neuron data.
+- Required inputs: curated unit-level snippets/waveforms with stable unit identity supervision and session metadata (raw voltage alone is insufficient).
+- Guardrails:
+  - maintain a strict holdout set,
+  - compare against current pretrained baseline,
+  - require offline acceptance metrics before enabling in merge automation.
+- Exit criteria to start this project:
+  - stable inference pipeline,
+  - stable merge policy behavior,
+  - baseline reporting + diagnostics complete.
+
 ### 2026-03-10 (Phase 0 wiring)
 - Completed: created `IPNAnalysis/UnitMatch/` integration module scaffold.
 - Completed: added `IPNAnalysis/UnitMatch/runner.py` with `run_unitmatch_merge_if_enabled(...)` and `UnitMatchConfig`.
@@ -159,7 +188,7 @@ Under `.../unitmatch/` write:
 - Not yet completed in Phase 1: real DeepUnitMatch scoring outputs and score distribution validation.
 
 ### Next
-- Implement Phase 1.5: replace placeholder pair generation with actual DeepUnitMatch scoring adapter.
-- Implement score-bearing report artifacts and validate score distributions/candidate plausibility.
-- Enforce strict no-mutation/no-pass-through guarantees for scored dry-run mode.
-- Define first-pass pair acceptance policy and conflict pruning before enabling real merges.
+- Add focused tests for reciprocal gate behavior (forward-only pass rejection, reverse-below-threshold rejection, symmetric pass acceptance).
+- Complete adapter-boundary migration for DeepUnitMatch backend calls and keep runner behavior/output contracts unchanged.
+- Add adapter-boundary hardening for DeepUnitMatch imports to reduce sensitivity to upstream API changes.
+- Keep custom training work deferred until the above stabilization tasks are complete.

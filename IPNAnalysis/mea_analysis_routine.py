@@ -62,20 +62,26 @@ try:
         from . import helper_functions as helper
         from .scalebury import add_scalebar
         from .config_loader import load_config, resolve_args
-        from .UnitMatch.runner import run_unitmatch_merge_if_enabled, UnitMatchConfig
+        from .UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
+        from .UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
     else:
         from parameter_free_burst_detector import compute_network_bursts
         import helper_functions as helper
         from scalebury import add_scalebar
         from config_loader import load_config, resolve_args
-        from UnitMatch.runner import run_unitmatch_merge_if_enabled, UnitMatchConfig
+        from UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
+        from UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
 except ImportError:
     try:
         from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
         from MEA_Analysis.IPNAnalysis import helper_functions as helper
         from MEA_Analysis.IPNAnalysis.scalebury import add_scalebar
         from MEA_Analysis.IPNAnalysis.config_loader import load_config, resolve_args
-        from MEA_Analysis.IPNAnalysis.UnitMatch.runner import run_unitmatch_merge_if_enabled, UnitMatchConfig
+        from MEA_Analysis.IPNAnalysis.UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
+        from MEA_Analysis.IPNAnalysis.UnitMatch.reporting import (
+            UnitMatchReportConfig,
+            generate_unitmatch_static_report_pack,
+        )
     except ImportError as e:
         raise ImportError(
             "Could not import MEA_Analysis.IPNAnalysis helper modules "
@@ -127,6 +133,20 @@ class MEAPipeline:
                  sorter_kwargs: dict | None = None,
                  unitmatch_merge_units: bool = False,
                  unitmatch_dry_run: bool = True,
+                 unitmatch_scored_dry_run: bool = True,
+                 unitmatch_output_subdir_name: str = "unitmatch_outputs",
+                 unitmatch_throughput_subdir_name: str = "unitmatch_throughput",
+                 unitmatch_max_candidate_pairs: int = 20000,
+                 unitmatch_oversplit_min_probability: float = 0.80,
+                 unitmatch_oversplit_max_suggestions: int = 2000,
+                 unitmatch_apply_merges: bool = False,
+                 unitmatch_recursive: bool = False,
+                 unitmatch_max_iterations: int = 5,
+                 unitmatch_uncapped_iterations: bool = False,
+                 unitmatch_keep_all_iterations: bool = True,
+                 unitmatch_generate_reports: bool = True,
+                 unitmatch_report_subdir_name: str = "unitmatch_reports",
+                 unitmatch_report_max_heatmap_units: int = 200,
                  auto_merge_units: bool = False,
                  auto_merge_presets: list[str] | None = None,
                  auto_merge_steps_params: list[dict] | None = None,
@@ -156,6 +176,29 @@ class MEAPipeline:
         # Optional UnitMatch alternative merge path (default off).
         self.unitmatch_merge_units = bool(unitmatch_merge_units)
         self.unitmatch_dry_run = bool(unitmatch_dry_run)
+        self.unitmatch_scored_dry_run = bool(unitmatch_scored_dry_run)
+        self.unitmatch_output_subdir_name = (
+            self._validate_output_subdir_after_well(unitmatch_output_subdir_name)
+            or "unitmatch_outputs"
+        )
+        self.unitmatch_throughput_subdir_name = (
+            self._validate_output_subdir_after_well(unitmatch_throughput_subdir_name)
+            or "unitmatch_throughput"
+        )
+        self.unitmatch_max_candidate_pairs = int(unitmatch_max_candidate_pairs)
+        self.unitmatch_oversplit_min_probability = float(unitmatch_oversplit_min_probability)
+        self.unitmatch_oversplit_max_suggestions = int(unitmatch_oversplit_max_suggestions)
+        self.unitmatch_apply_merges = bool(unitmatch_apply_merges)
+        self.unitmatch_recursive = bool(unitmatch_recursive)
+        self.unitmatch_max_iterations = int(unitmatch_max_iterations)
+        self.unitmatch_uncapped_iterations = bool(unitmatch_uncapped_iterations)
+        self.unitmatch_keep_all_iterations = bool(unitmatch_keep_all_iterations)
+        self.unitmatch_generate_reports = bool(unitmatch_generate_reports)
+        self.unitmatch_report_subdir_name = (
+            self._validate_output_subdir_after_well(unitmatch_report_subdir_name)
+            or "unitmatch_reports"
+        )
+        self.unitmatch_report_max_heatmap_units = int(unitmatch_report_max_heatmap_units)
 
         # Optional post-sorting unit merge (default-off).
         self.auto_merge_units = bool(auto_merge_units)
@@ -388,12 +431,14 @@ class MEAPipeline:
                 bool(self.skip_preprocessing),
             )
             self.recording = self.preprocessed_recording
-            self._save_checkpoint(
-                ProcessingStage.PREPROCESSING_COMPLETE,
-                failed_stage=None,
-                error=None,
-                preprocessing_source="injected_preprocessed_recording",
-            )
+            # Do not rewind checkpoint progress when resuming from later stages.
+            if int(self.state.get('stage', 0)) < ProcessingStage.PREPROCESSING_COMPLETE.value:
+                self._save_checkpoint(
+                    ProcessingStage.PREPROCESSING_COMPLETE,
+                    failed_stage=None,
+                    error=None,
+                    preprocessing_source="injected_preprocessed_recording",
+                )
             return
 
         # 1. Resume Check
@@ -621,27 +666,82 @@ class MEAPipeline:
                     self.logger.warning(
                         "Both UnitMatch and auto_merge_units requested; using UnitMatch path and skipping auto_merge_units"
                     )
-                merged_sorting, um_summary = run_unitmatch_merge_if_enabled(
+                merged_sorting, um_summary = run_unitmatch_merge_with_recursion(
                     sorting=self.sorting,
+                    recording=self.recording,
                     output_dir=self.output_dir,
                     logger=self.logger,
                     config=UnitMatchConfig(
                         enabled=True,
                         dry_run=self.unitmatch_dry_run,
+                        scored_dry_run=self.unitmatch_scored_dry_run,
                         fail_open=True,
+                        max_candidate_pairs=self.unitmatch_max_candidate_pairs,
+                        output_subdir_name=self.unitmatch_output_subdir_name,
+                        throughput_subdir_name=self.unitmatch_throughput_subdir_name,
+                        oversplit_min_probability=self.unitmatch_oversplit_min_probability,
+                        oversplit_max_suggestions=self.unitmatch_oversplit_max_suggestions,
+                        apply_merges=self.unitmatch_apply_merges,
+                        recursive=self.unitmatch_recursive,
+                        max_iterations=self.unitmatch_max_iterations,
+                        uncapped_iterations=self.unitmatch_uncapped_iterations,
+                        keep_all_iterations=self.unitmatch_keep_all_iterations,
                     ),
                 )
                 self.sorting = merged_sorting
                 self.logger.info("UnitMatch summary: status=%s", um_summary.get("status"))
+
+                artifacts = um_summary.setdefault("artifacts", {})
+                merge_application = um_summary.setdefault("merge_application", {})
+                final_merged_sorting_folder = artifacts.get("final_merged_sorting_folder")
+                persisted_final_merged_sorting = bool(merge_application.get("persisted_final_merged_sorting", False))
+
+                summary_path_s = str(artifacts.get("summary_json") or "")
+                if summary_path_s:
+                    try:
+                        summary_path = Path(summary_path_s)
+                        summary_path.parent.mkdir(parents=True, exist_ok=True)
+                        summary_path.write_text(json.dumps(um_summary, indent=2), encoding="utf-8")
+                    except Exception as summary_sync_exc:
+                        self.logger.warning(
+                            "Failed to sync UnitMatch summary JSON after merge artifact update (%s)",
+                            summary_sync_exc,
+                        )
+
                 self._save_checkpoint(
                     ProcessingStage.MERGE_COMPLETE,
                     merge_phase={
                         "status": str(um_summary.get("status", "unknown")),
                         "mode": "unitmatch",
-                        "applied": bool(str(um_summary.get("status", "")).lower() == "ok"),
+                        "applied": bool(um_summary.get("merge_application", {}).get("applied", False)),
+                        "final_merged_sorting_folder": (
+                            str(final_merged_sorting_folder) if final_merged_sorting_folder is not None else None
+                        ),
+                        "persisted_final_merged_sorting": persisted_final_merged_sorting,
+                        "recursive": bool(self.unitmatch_recursive),
+                        "n_iterations": int(
+                            um_summary.get("iteration_convergence_report", {}).get("n_iterations_executed", 1)
+                        ),
                         "summary": um_summary,
                     },
                 )
+                if self.unitmatch_generate_reports:
+                    try:
+                        generate_unitmatch_static_report_pack(
+                            output_dir=self.output_dir,
+                            logger=self.logger,
+                            config=UnitMatchReportConfig(
+                                throughput_subdir_name=str(self.unitmatch_throughput_subdir_name),
+                                output_subdir_name=str(self.unitmatch_output_subdir_name),
+                                report_subdir_name=str(self.unitmatch_report_subdir_name),
+                                max_heatmap_units=int(self.unitmatch_report_max_heatmap_units),
+                            ),
+                        )
+                    except Exception as report_exc:
+                        self.logger.warning(
+                            "UnitMatch static report generation failed-open; continuing (%s)",
+                            report_exc,
+                        )
             except Exception as e:
                 self.logger.warning("UnitMatch merge path failed; continuing without UnitMatch merge (%s)", e)
                 self._save_checkpoint(
@@ -1190,11 +1290,26 @@ class MEARunOptions:
     verbose: bool = False
     cleanup: bool = False
     force_restart: bool = False
+    resume_from: str | None = None
     n_jobs: int | None = None
     chunk_duration: str | None = None
     sorter_kwargs: dict | None = None
     unitmatch_merge_units: bool = False
     unitmatch_dry_run: bool = True
+    unitmatch_scored_dry_run: bool = True
+    unitmatch_output_subdir_name: str = "unitmatch_outputs"
+    unitmatch_throughput_subdir_name: str = "unitmatch_throughput"
+    unitmatch_max_candidate_pairs: int = 20000
+    unitmatch_oversplit_min_probability: float = 0.80
+    unitmatch_oversplit_max_suggestions: int = 2000
+    unitmatch_apply_merges: bool = False
+    unitmatch_recursive: bool = False
+    unitmatch_max_iterations: int = 5
+    unitmatch_uncapped_iterations: bool = False
+    unitmatch_keep_all_iterations: bool = True
+    unitmatch_generate_reports: bool = True
+    unitmatch_report_subdir_name: str = "unitmatch_reports"
+    unitmatch_report_max_heatmap_units: int = 200
     auto_merge_units: bool = False
     auto_merge_presets: list[str] | None = None
     auto_merge_steps_params: list[dict] | None = None
@@ -1221,6 +1336,64 @@ class MEARunResult:
     pipeline: MEAPipeline
     skipped: bool = False
     reanalyzed_bursts: bool = False
+
+
+def _normalize_resume_from_stage(resume_from: str | None) -> str | None:
+    if resume_from is None:
+        return None
+
+    token = str(resume_from).strip().lower().replace("-", "_")
+    if not token:
+        return None
+
+    aliases = {
+        "preprocess": "preprocessing",
+        "preprocessing": "preprocessing",
+        "sorting": "sorting",
+        "sort": "sorting",
+        "merge": "merge",
+        "analyzer": "analyzer",
+        "analyse": "analyzer",
+        "analysis": "analyzer",
+        "report": "reports",
+        "reports": "reports",
+    }
+    normalized = aliases.get(token)
+    if normalized is None:
+        valid = ", ".join(["preprocessing", "sorting", "merge", "analyzer", "reports"])
+        raise ValueError(f"Invalid resume_from stage '{resume_from}'. Valid stages: {valid}")
+    return normalized
+
+
+def _apply_resume_from_stage(pipeline: MEAPipeline, resume_from: str | None) -> None:
+    stage_name = _normalize_resume_from_stage(resume_from)
+    if stage_name is None:
+        return
+
+    # Resume semantics: set checkpoint to the stage immediately before target execution.
+    resume_checkpoint_stage = {
+        "preprocessing": ProcessingStage.NOT_STARTED,
+        "sorting": ProcessingStage.PREPROCESSING_COMPLETE,
+        "merge": ProcessingStage.SORTING_COMPLETE,
+        "analyzer": ProcessingStage.MERGE_COMPLETE,
+        "reports": ProcessingStage.ANALYZER_COMPLETE,
+    }[stage_name]
+
+    if stage_name in {"merge", "analyzer", "reports"}:
+        pipeline.force_rerun_analyzer = True
+
+    pipeline._save_checkpoint(
+        resume_checkpoint_stage,
+        failed_stage=None,
+        error=None,
+        resume_from=stage_name,
+        resume_forced_rerun_analyzer=bool(pipeline.force_rerun_analyzer),
+    )
+    pipeline.logger.info(
+        "Resume-from requested: %s (checkpoint set to %s)",
+        stage_name,
+        resume_checkpoint_stage.name,
+    )
 
 
 def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
@@ -1260,6 +1433,20 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
         sorter_kwargs=options.sorter_kwargs,
         unitmatch_merge_units=bool(options.unitmatch_merge_units),
         unitmatch_dry_run=bool(options.unitmatch_dry_run),
+        unitmatch_scored_dry_run=bool(options.unitmatch_scored_dry_run),
+        unitmatch_output_subdir_name=str(options.unitmatch_output_subdir_name),
+        unitmatch_throughput_subdir_name=str(options.unitmatch_throughput_subdir_name),
+        unitmatch_max_candidate_pairs=int(options.unitmatch_max_candidate_pairs),
+        unitmatch_oversplit_min_probability=float(options.unitmatch_oversplit_min_probability),
+        unitmatch_oversplit_max_suggestions=int(options.unitmatch_oversplit_max_suggestions),
+        unitmatch_apply_merges=bool(options.unitmatch_apply_merges),
+        unitmatch_recursive=bool(options.unitmatch_recursive),
+        unitmatch_max_iterations=int(options.unitmatch_max_iterations),
+        unitmatch_uncapped_iterations=bool(options.unitmatch_uncapped_iterations),
+        unitmatch_keep_all_iterations=bool(options.unitmatch_keep_all_iterations),
+        unitmatch_generate_reports=bool(options.unitmatch_generate_reports),
+        unitmatch_report_subdir_name=str(options.unitmatch_report_subdir_name),
+        unitmatch_report_max_heatmap_units=int(options.unitmatch_report_max_heatmap_units),
         auto_merge_units=bool(options.auto_merge_units),
         auto_merge_presets=auto_merge_presets,
         auto_merge_steps_params=auto_merge_steps_params,
@@ -1268,6 +1455,8 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
         skip_preprocessing=bool(options.skip_preprocessing),
         cuda_visible_devices=options.cuda_visible_devices,
     )
+
+    _apply_resume_from_stage(pipeline, options.resume_from)
 
     if bool(options.reanalyze_bursts):
         pipeline._run_burst_analysis(
@@ -1384,6 +1573,9 @@ def main():
     ctrl_group = parser.add_argument_group("run control")
     ctrl_group.add_argument("--force-restart", action="store_true",
         help="Ignore checkpoint and restart from scratch")
+    ctrl_group.add_argument("--resume-from", "--resume_from", dest="resume_from", type=str, default=None,
+        choices=["preprocessing", "sorting", "merge", "analyzer", "reports"],
+        help="Resume by rewinding checkpoint to just before this stage and rerunning from there")
     ctrl_group.add_argument("--reanalyze-bursts", action="store_true",
         help="Re-run burst analysis on existing spike times only")
     ctrl_group.add_argument("--debug", action="store_true",
@@ -1401,6 +1593,87 @@ def main():
         "--unitmatch-dry-run",
         action='store_true',
         help="When UnitMatch is enabled, produce UnitMatch reports without applying merges.",
+    )
+    parser.add_argument(
+        "--unitmatch-scored-dry-run",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="When UnitMatch dry-run is enabled, attempt backend scoring (default: enabled).",
+    )
+    parser.add_argument(
+        "--unitmatch-output-subdir-name",
+        type=str,
+        default=None,
+        help="UnitMatch artifact subdirectory under output_dir (default: unitmatch_outputs).",
+    )
+    parser.add_argument(
+        "--unitmatch-throughput-subdir-name",
+        type=str,
+        default=None,
+        help="UnitMatch throughput subdirectory under output_dir (default: unitmatch_throughput).",
+    )
+    parser.add_argument(
+        "--unitmatch-max-candidate-pairs",
+        type=int,
+        default=None,
+        help="Maximum UnitMatch candidate pairs (-1 unlimited, 0 none, default: 20000).",
+    )
+    parser.add_argument(
+        "--unitmatch-oversplit-min-probability",
+        type=float,
+        default=None,
+        help="Minimum UnitMatch probability for oversplit suggestions (default: 0.80).",
+    )
+    parser.add_argument(
+        "--unitmatch-oversplit-max-suggestions",
+        type=int,
+        default=None,
+        help="Maximum oversplit suggestions (-1 unlimited, 0 none, default: 2000).",
+    )
+    parser.add_argument(
+        "--unitmatch-apply-merges",
+        action='store_true',
+        help="Apply conflict-free top UnitMatch suggestions to mutate sorting.",
+    )
+    parser.add_argument(
+        "--unitmatch-recursive",
+        action='store_true',
+        help="Recursively run UnitMatch merge iterations until convergence or cap.",
+    )
+    parser.add_argument(
+        "--unitmatch-max-iterations",
+        type=int,
+        default=None,
+        help="Maximum recursive UnitMatch iterations (default: 5).",
+    )
+    parser.add_argument(
+        "--unitmatch-uncapped-iterations",
+        action='store_true',
+        help="Disable max iteration cap and rely on convergence stops.",
+    )
+    parser.add_argument(
+        "--unitmatch-keep-all-iterations",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Keep all unitmatch_throughput iteration folders (default: enabled).",
+    )
+    parser.add_argument(
+        "--unitmatch-generate-reports",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Generate static UnitMatch report pack from existing artifacts (default: enabled).",
+    )
+    parser.add_argument(
+        "--unitmatch-report-subdir-name",
+        type=str,
+        default="unitmatch_reports",
+        help="UnitMatch report output subdirectory under output_dir (default: unitmatch_reports).",
+    )
+    parser.add_argument(
+        "--unitmatch-report-max-heatmap-units",
+        type=int,
+        default=200,
+        help="Maximum units rendered in UnitMatch similarity heatmap (default: 200).",
     )
     parser.add_argument(
         "--auto-merge-units",
@@ -1448,8 +1721,23 @@ def main():
                 verbose=bool(args.debug),
                 cleanup=bool(resolved["clean_up"]),
                 force_restart=bool(args.force_restart),
+                resume_from=args.resume_from,
                 unitmatch_merge_units=bool(args.unitmatch_merge_units),
                 unitmatch_dry_run=bool(args.unitmatch_dry_run),
+                unitmatch_scored_dry_run=bool(resolved["unitmatch_scored_dry_run"]),
+                unitmatch_output_subdir_name=str(resolved["unitmatch_output_subdir_name"]),
+                unitmatch_throughput_subdir_name=str(resolved["unitmatch_throughput_subdir_name"]),
+                unitmatch_max_candidate_pairs=int(resolved["unitmatch_max_candidate_pairs"]),
+                unitmatch_oversplit_min_probability=float(resolved["unitmatch_oversplit_min_probability"]),
+                unitmatch_oversplit_max_suggestions=int(resolved["unitmatch_oversplit_max_suggestions"]),
+                unitmatch_apply_merges=bool(resolved["unitmatch_apply_merges"]),
+                unitmatch_recursive=bool(resolved["unitmatch_recursive"]),
+                unitmatch_max_iterations=int(resolved["unitmatch_max_iterations"]),
+                unitmatch_uncapped_iterations=bool(resolved["unitmatch_uncapped_iterations"]),
+                unitmatch_keep_all_iterations=bool(resolved["unitmatch_keep_all_iterations"]),
+                unitmatch_generate_reports=bool(args.unitmatch_generate_reports),
+                unitmatch_report_subdir_name=str(args.unitmatch_report_subdir_name),
+                unitmatch_report_max_heatmap_units=int(args.unitmatch_report_max_heatmap_units),
                 auto_merge_units=bool(args.auto_merge_units),
                 force_rerun_analyzer=bool(args.rerun_analyzer),
                 reanalyze_bursts=bool(args.reanalyze_bursts),
