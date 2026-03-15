@@ -155,7 +155,6 @@ def _default_option_kwargs() -> dict[str, Any]:
         "preprocessed_recording": None,
         "skip_preprocessing": False,
         "cuda_visible_devices": None,
-        "output_subdir_after_well": None,
     }
 
 
@@ -171,6 +170,7 @@ class MEAPipeline:
                  n_jobs: int | None = None,
                  chunk_duration: str | None = None,
                  sorter_kwargs: dict | None = None,
+                 output_subdir_after_well: str | None = None,
                  um_kwargs: dict | None = None,
                  am_kwargs: dict | None = None,
                  option_kwargs: dict | None = None):
@@ -197,7 +197,7 @@ class MEAPipeline:
         # Optional resource hints (used by some SpikeInterface steps).
         self.n_jobs = n_jobs
         self.chunk_duration = chunk_duration
-        self.output_subdir_after_well = self._validate_output_subdir_after_well(self.option_kwargs.get("output_subdir_after_well"))
+        self.output_subdir_after_well = self._validate_output_subdir_after_well(output_subdir_after_well)
 
         # Optional sorter kwargs override (e.g. Kilosort4 batch_size tuning).
         self.sorter_kwargs = sorter_kwargs
@@ -1446,6 +1446,7 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
         recording_num=options.recording_num,
         output_root=options.output_root,
         checkpoint_root=options.checkpoint_root,
+        output_subdir_after_well=options.output_subdir_after_well,
         sorter=options.sorter,
         docker_image=options.docker_image,
         verbose=bool(options.verbose),
