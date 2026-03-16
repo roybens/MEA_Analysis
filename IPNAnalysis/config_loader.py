@@ -23,6 +23,10 @@ DEFAULTS = {
         "sorter":           "kilosort4",
         "docker_image":     None,
     },
+    "preprocessing": {
+        "expect_multisegment": None,
+        "multiseg_mode": "none",
+    },
     "merging": {
         "unitmatch_scored_dry_run": True,
         "unitmatch_output_subdir_name": "unitmatch_outputs",
@@ -128,6 +132,9 @@ def resolve_args(args, config):
         # sorting
         "sorter":           _resolve(getattr(args, "sorter", None),          _cfg(config, "sorting", "sorter"),           DEFAULTS["sorting"]["sorter"]),
         "docker_image":     _resolve(getattr(args, "docker", None),          _cfg(config, "sorting", "docker_image"),     DEFAULTS["sorting"]["docker_image"]),
+        # preprocessing topology policy
+        "expect_multisegment": _resolve(getattr(args, "expect_multisegment", None), _cfg(config, "preprocessing", "expect_multisegment"), DEFAULTS["preprocessing"]["expect_multisegment"]),
+        "multiseg_mode": _resolve(getattr(args, "multiseg_mode", None), _cfg(config, "preprocessing", "multiseg_mode"), DEFAULTS["preprocessing"]["multiseg_mode"]),
         # merging (UnitMatch)
         "unitmatch_scored_dry_run":             _resolve(_bool(args, "unitmatch_scored_dry_run"),                       _cfg(config, "merging", "unitmatch_scored_dry_run"),                DEFAULTS["merging"]["unitmatch_scored_dry_run"]),
         "unitmatch_output_subdir_name":         _resolve(getattr(args, "unitmatch_output_subdir_name", None),           _cfg(config, "merging", "unitmatch_output_subdir_name"),            DEFAULTS["merging"]["unitmatch_output_subdir_name"]),
@@ -179,6 +186,10 @@ def build_extra_args(resolved, cli_args):
     # sorting
     if resolved["sorter"]:          extra.append(f"--sorter {resolved['sorter']}")
     if resolved["docker_image"]:    extra.append(f"--docker {resolved['docker_image']}")
+    if resolved["expect_multisegment"] is not None:
+        extra.append(f"--expect-multisegment {resolved['expect_multisegment']}")
+    if resolved["multiseg_mode"] is not None:
+        extra.append(f"--multiseg-mode {resolved['multiseg_mode']}")
 
     # plotting
     if resolved["plot_mode"]:       extra.append(f"--plot-mode {resolved['plot_mode']}")

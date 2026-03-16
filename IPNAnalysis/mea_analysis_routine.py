@@ -64,6 +64,7 @@ try:
         from .config_loader import load_config, resolve_args
         from .UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
         from .UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
+        from .multiseg_utils import prepare_multisegment_recording
     else:
         from parameter_free_burst_detector import compute_network_bursts
         import helper_functions as helper
@@ -71,23 +72,25 @@ try:
         from config_loader import load_config, resolve_args
         from UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
         from UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
+        from multiseg_utils import prepare_multisegment_recording
 except ImportError:
     try:
-        from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
-        from MEA_Analysis.IPNAnalysis import helper_functions as helper
-        from MEA_Analysis.IPNAnalysis.scalebury import add_scalebar
-        from MEA_Analysis.IPNAnalysis.config_loader import load_config, resolve_args
-        from MEA_Analysis.IPNAnalysis.UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
-        from MEA_Analysis.IPNAnalysis.UnitMatch.reporting import (
+        from IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
+        from IPNAnalysis import helper_functions as helper
+        from IPNAnalysis.scalebury import add_scalebar
+        from IPNAnalysis.config_loader import load_config, resolve_args
+        from IPNAnalysis.UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
+        from IPNAnalysis.UnitMatch.reporting import (
             UnitMatchReportConfig,
             generate_unitmatch_static_report_pack,
         )
+        from IPNAnalysis.multiseg_utils import prepare_multisegment_recording
     except ImportError as e:
         raise ImportError(
-            "Could not import MEA_Analysis.IPNAnalysis helper modules "
+            "Could not import IPNAnalysis helper modules "
             "(parameter_free_burst_detector/helper_functions/scalebury/config_loader). "
             "If you are running this file directly, prefer: "
-            "`python -m MEA_Analysis.IPNAnalysis.mea_analysis_routine ...`"
+            "`python -m IPNAnalysis.mea_analysis_routine ...`"
         ) from e
 
 
@@ -155,6 +158,8 @@ def _default_option_kwargs() -> dict[str, Any]:
         "preprocessed_recording": None,
         "skip_preprocessing": False,
         "cuda_visible_devices": None,
+        "expect_multisegment": None,
+        "multiseg_mode": "none",
     }
 
 
@@ -243,6 +248,10 @@ class MEAPipeline:
 
         # Optional runtime/resource controls (default behavior when unset).
         self.cuda_visible_devices = self.option_kwargs.get("cuda_visible_devices")
+
+        # Optional multisegment topology policy + handling mode.
+        self.expect_multisegment = self.option_kwargs.get("expect_multisegment")
+        self.multiseg_mode = str(self.option_kwargs.get("multiseg_mode", "none"))
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -482,6 +491,17 @@ class MEAPipeline:
         # 2. Universal Loading
         rec = self._load_recording_file()
 
+        # 2b. Enforce multisegment policy and optionally transform segment layout.
+        rec, multiseg_info = prepare_multisegment_recording(
+            rec,
+            expect_multisegment=self.expect_multisegment,
+            mode=self.multiseg_mode,
+            logger=self.logger,
+        )
+        self.metadata["num_segments_before_preprocess"] = int(multiseg_info["segments_input"])
+        self.metadata["num_segments_after_multiseg_mode"] = int(multiseg_info["segments_output"])
+        self.metadata["multiseg_mode"] = str(multiseg_info["mode"])
+
         # 3. Time Slicing (Remove last 1s to avoid end-of-file artifacts)
         fs = rec.get_sampling_frequency()
         self.metadata['fs'] = fs
@@ -502,7 +522,7 @@ class MEAPipeline:
         # Local Common Median Reference (Preserves Network Bursts)
         # NOTE: I'm not 100% sure because its a bit annoying to test, but runing this with local_radius (250, 250) may be failing every time.
         # If our intent is to get all channels within 250um, we should set local_radius=(0, 250). According to my cursory understanding of the docs, (250, 250) would create
-        # an annulus excluding the inner 250um radius. 
+        # an annulus excluding the inner 250um radius.
         # -- aw 2026-02-01 20:44:37
         try:
             rec = spre.common_reference(rec, reference='local', operator='median', local_radius=(250, 250))
@@ -1557,6 +1577,20 @@ def main():
         help="Docker image name for containerized sorting")
     sort_group.add_argument("--skip-spikesorting", action="store_true",
         help="Run spike detection only, skip full sorting")
+    sort_group.add_argument(
+        "--expect-multisegment",
+        type=str,
+        choices=["single", "multi", "auto"],
+        default=None,
+        help="Fail-hard topology expectation for preprocessing input segments (single|multi|auto)",
+    )
+    sort_group.add_argument(
+        "--multiseg-mode",
+        type=str,
+        choices=["none", "concatenate"],
+        default=None,
+        help="How to handle multisegment recordings in preprocessing (default: none)",
+    )
 
     # --- Plotting ---
     plot_group = parser.add_argument_group("plotting")
@@ -1751,6 +1785,8 @@ def main():
                 option_kwargs={
                     "force_rerun_analyzer": bool(args.rerun_analyzer),
                     "output_subdir_after_well": resolved.get("output_subdir_after_well"),
+                    "expect_multisegment": resolved.get("expect_multisegment"),
+                    "multiseg_mode": resolved.get("multiseg_mode"),
                 },
                 reanalyze_bursts=bool(args.reanalyze_bursts),
                 skip_spikesorting=bool(args.skip_spikesorting),

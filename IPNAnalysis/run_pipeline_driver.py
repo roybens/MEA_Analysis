@@ -133,6 +133,20 @@ def main():
         help="Docker image name for containerized sorting")
     sort_group.add_argument("--skip-spikesorting", action="store_true",
         help="Run spike detection only, skip full sorting")
+    sort_group.add_argument(
+        "--expect-multisegment",
+        type=str,
+        choices=["single", "multi", "auto"],
+        default=None,
+        help="Fail-hard topology expectation for preprocessing input segments (single|multi|auto)",
+    )
+    sort_group.add_argument(
+        "--multiseg-mode",
+        type=str,
+        choices=["none", "concatenate"],
+        default=None,
+        help="How to handle multisegment recordings in preprocessing (default: none)",
+    )
     sort_group.add_argument("--unitmatch-merge-units", action="store_true",
         help="Run UnitMatch dry-run/merge phase (optional, passed to each well)")
     sort_group.add_argument("--unitmatch-dry-run", action="store_true",
