@@ -17,11 +17,14 @@ def read_well_rec_frame_nos_and_trigger_settings(*, h5_path: Path, stream_id: st
         start_ms = int(np.asarray(rec["start_time"][()]).ravel()[0])
         stop_ms = int(np.asarray(rec["stop_time"][()]).ravel()[0])
         frame_nos = np.asarray(rec["groups"]["routed"]["frame_nos"], dtype=np.int64)
+        sampling_raw = rec["settings"]["sampling"][()]
+        sampling_hz = float(np.asarray(sampling_raw).ravel()[0])
 
     return {
         "start_ms": start_ms,
         "stop_ms": stop_ms,
         "frame_nos": frame_nos,
+        "sampling_hz": sampling_hz,
     }
 
 

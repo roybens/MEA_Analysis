@@ -16,6 +16,26 @@ from .preprocess_multiseg_h5 import (
 	prepare_multisegment_recording,
 	save_checkpoint,
 )
+from .spikesort_multiseg_h5 import (
+	SpikeSortMultisegPlan,
+	UnitMatchArtifactPaths,
+	build_spikesort_multiseg_plan,
+	resolve_unitmatch_artifact_paths,
+	sync_unitmatch_summary_json,
+)
+from .extract_multiseg_wfs import (
+	WaveformMultisegPlan,
+	WaveformSortingSource,
+	build_waveform_multiseg_plan,
+	epochs_to_intervals,
+	filter_spike_train_by_intervals,
+	harmonize_waveform_sorting,
+	load_preprocessed_recording_from_output_dir,
+	load_sorting_from_output_dir,
+	maxwell_epochs_to_segment_local_intervals,
+	resolve_waveform_epoch_marker_paths,
+	resolve_waveform_sorting_source_dir,
+)
 
 __all__ = [
 	"prepare_multisegment_recording",
@@ -34,4 +54,20 @@ __all__ = [
 	"_read_well_rec_frame_nos_and_trigger_settings",
 	"_ensure_maxwell_hdf5_plugin_path",
 	"build_concatenated_recording",
+	"SpikeSortMultisegPlan",
+	"UnitMatchArtifactPaths",
+	"build_spikesort_multiseg_plan",
+	"resolve_unitmatch_artifact_paths",
+	"sync_unitmatch_summary_json",
+	"WaveformMultisegPlan",
+	"WaveformSortingSource",
+	"build_waveform_multiseg_plan",
+	"resolve_waveform_sorting_source_dir",
+	"harmonize_waveform_sorting",
+	"load_preprocessed_recording_from_output_dir",
+	"resolve_waveform_epoch_marker_paths",
+	"load_sorting_from_output_dir",
+	"epochs_to_intervals",
+	"maxwell_epochs_to_segment_local_intervals",
+	"filter_spike_train_by_intervals",
 ]

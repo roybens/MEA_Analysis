@@ -33,24 +33,21 @@ def _as_optional_bool(value: Any) -> bool | None:
     )
 
 
-def _normalize_mode(mode: Any) -> str:
-    token = str(mode if mode is not None else "none").strip().lower()
-    aliases = {
-        "": "none",
-        "off": "none",
-        "disabled": "none",
-        "none": "none",
-        "noop": "none",
-        "concat": "concatenate",
-        "concatenate": "concatenate",
-        "merge_segments": "concatenate",
-    }
-    normalized = aliases.get(token)
-    if normalized is None:
-        raise ValueError(
-            f"Invalid multiseg_mode '{mode}'. Valid values: none, concatenate"
-        )
-    return normalized
+def _coerce_multiseg_mode(mode: Any) -> bool:
+    if mode is None:
+        return False
+    if isinstance(mode, bool):
+        return mode
+
+    token = str(mode).strip().lower()
+    if token in {"", "none", "off", "disabled", "false", "0", "noop"}:
+        return False
+    if token in {"true", "1", "yes", "concat", "concatenate", "merge_segments"}:
+        return True
+
+    raise ValueError(
+        f"Invalid multiseg_mode '{mode}'. Valid values: true, false"
+    )
 
 
 def _concatenate_segments(recording: Any) -> Any:
@@ -71,7 +68,7 @@ def prepare_multisegment_recording(
     recording: Any,
     *,
     expect_multisegment: Any = None,
-    mode: Any = "none",
+    mode: Any = False,
     logger: logging.Logger | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Validate multisegment topology and optionally transform it.
@@ -84,7 +81,7 @@ def prepare_multisegment_recording(
     log = logger or logging.getLogger(__name__)
 
     expected_multi = _as_optional_bool(expect_multisegment)
-    mode_name = _normalize_mode(mode)
+    mode_enabled = _coerce_multiseg_mode(mode)
 
     segments_input = _segment_count(recording)
     actual_multi = segments_input > 1
@@ -99,23 +96,23 @@ def prepare_multisegment_recording(
         )
 
     out_recording = recording
-    if mode_name == "concatenate":
+    if mode_enabled:
         if segments_input <= 1:
-            log.info("multiseg_mode=concatenate requested but input has <=1 segment; no-op")
+            log.info("multiseg_mode=true requested but input has <=1 segment; no-op")
         else:
-            log.info("Applying multiseg_mode=concatenate across %d segments", segments_input)
+            log.info("Applying multiseg_mode=true across %d segments", segments_input)
             out_recording = _concatenate_segments(recording)
 
     segments_output = _segment_count(out_recording)
     info = {
-        "mode": mode_name,
+        "mode": bool(mode_enabled),
         "segments_input": int(segments_input),
         "segments_output": int(segments_output),
         "expected_multi": expected_multi,
     }
     log.info(
         "Multisegment prep summary: mode=%s expected_multi=%s input_segments=%d output_segments=%d",
-        mode_name,
+        bool(mode_enabled),
         expected_multi,
         int(segments_input),
         int(segments_output),

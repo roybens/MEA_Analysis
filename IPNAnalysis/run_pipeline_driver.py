@@ -50,10 +50,10 @@ def setup_driver_logger(log_path=None):
         log_file = os.path.join(log_path, f"run_pipeline_driver_{timestamp}.log")
     open(log_file, 'w').close()  # Clear log file on each run
 
-    logger = logging.getLogger("driver")
+    logger = logging.getLogger("MEA_Analysis.IPNAnalysis.run_pipeline_driver")
     logger.setLevel(logging.DEBUG)
 
-    formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
+    formatter = logging.Formatter('[%(name)s] [%(levelname)s] %(message)s')
 
     fh = logging.FileHandler(log_file)
     fh.setLevel(logging.DEBUG)
@@ -79,7 +79,7 @@ def launch_sorting_subprocess(file_path, rec_name, stream_id, extra_args=""):
     #rec_name = 'rec000' + str(well_id // 6) # each rec contain 6 wells (1 row on 24-well plate)
 
     command = f"python3 {BASE_FILE_PATH}/mea_analysis_routine.py '{file_path}' --rec {rec_name} --well {stream_id} {extra_args}"
-    logger = logging.getLogger("driver")
+    logger = logging.getLogger("MEA_Analysis.IPNAnalysis.run_pipeline_driver")
     logger.info(f"[DRIVER] Launching: {command}")
     
     try:
@@ -143,9 +143,8 @@ def main():
     sort_group.add_argument(
         "--multiseg-mode",
         type=str,
-        choices=["none", "concatenate"],
         default=None,
-        help="How to handle multisegment recordings in preprocessing (default: none)",
+        help="How to handle multisegment recordings in preprocessing (true/false)",
     )
     sort_group.add_argument("--unitmatch-merge-units", action="store_true",
         help="Run UnitMatch dry-run/merge phase (optional, passed to each well)")

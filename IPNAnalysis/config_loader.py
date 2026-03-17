@@ -25,7 +25,15 @@ DEFAULTS = {
     },
     "preprocessing": {
         "expect_multisegment": None,
-        "multiseg_mode": "none",
+        "multiseg_mode": False,
+        "target_phase": None,
+        "run_analyzer": True,
+        "run_reports": True,
+        "multiseg_spikesort_mode": "none",
+        "multiseg_waveforms_mode": "none",
+        "waveform_prefer_merged_sorting": False,
+        "waveform_merged_sorting_dir": None,
+        "phase_output_paths": {},
     },
     "merging": {
         "unitmatch_scored_dry_run": True,
@@ -94,6 +102,19 @@ def _cfg(config, section, key):
     return config.get(section, {}).get(key, None)
 
 
+def _coerce_multiseg_bool(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    token = str(value).strip().lower()
+    if token in {"", "none", "off", "disabled", "false", "0", "noop"}:
+        return False
+    if token in {"true", "1", "yes", "concat", "concatenate", "merge_segments"}:
+        return True
+    raise ValueError("Invalid multiseg_mode value. Use true/false.")
+
+
 # ----------------------------------------------------------
 # Thresholds need deep merge: defaults -> config -> CLI --params
 # ----------------------------------------------------------
@@ -134,7 +155,15 @@ def resolve_args(args, config):
         "docker_image":     _resolve(getattr(args, "docker", None),          _cfg(config, "sorting", "docker_image"),     DEFAULTS["sorting"]["docker_image"]),
         # preprocessing topology policy
         "expect_multisegment": _resolve(getattr(args, "expect_multisegment", None), _cfg(config, "preprocessing", "expect_multisegment"), DEFAULTS["preprocessing"]["expect_multisegment"]),
-        "multiseg_mode": _resolve(getattr(args, "multiseg_mode", None), _cfg(config, "preprocessing", "multiseg_mode"), DEFAULTS["preprocessing"]["multiseg_mode"]),
+        "multiseg_mode": _coerce_multiseg_bool(_resolve(getattr(args, "multiseg_mode", None), _cfg(config, "preprocessing", "multiseg_mode"), DEFAULTS["preprocessing"]["multiseg_mode"])),
+        "target_phase": _resolve(getattr(args, "target_phase", None), _cfg(config, "preprocessing", "target_phase"), DEFAULTS["preprocessing"]["target_phase"]),
+        "run_analyzer": _resolve(getattr(args, "run_analyzer", None), _cfg(config, "preprocessing", "run_analyzer"), DEFAULTS["preprocessing"]["run_analyzer"]),
+        "run_reports": _resolve(getattr(args, "run_reports", None), _cfg(config, "preprocessing", "run_reports"), DEFAULTS["preprocessing"]["run_reports"]),
+        "multiseg_spikesort_mode": _resolve(getattr(args, "multiseg_spikesort_mode", None), _cfg(config, "preprocessing", "multiseg_spikesort_mode"), DEFAULTS["preprocessing"]["multiseg_spikesort_mode"]),
+        "multiseg_waveforms_mode": _resolve(getattr(args, "multiseg_waveforms_mode", None), _cfg(config, "preprocessing", "multiseg_waveforms_mode"), DEFAULTS["preprocessing"]["multiseg_waveforms_mode"]),
+        "waveform_prefer_merged_sorting": _resolve(_bool(args, "waveform_prefer_merged_sorting"), _cfg(config, "preprocessing", "waveform_prefer_merged_sorting"), DEFAULTS["preprocessing"]["waveform_prefer_merged_sorting"]),
+        "waveform_merged_sorting_dir": _resolve(getattr(args, "waveform_merged_sorting_dir", None), _cfg(config, "preprocessing", "waveform_merged_sorting_dir"), DEFAULTS["preprocessing"]["waveform_merged_sorting_dir"]),
+        "phase_output_paths": _resolve(getattr(args, "phase_output_paths", None), _cfg(config, "preprocessing", "phase_output_paths"), DEFAULTS["preprocessing"]["phase_output_paths"]),
         # merging (UnitMatch)
         "unitmatch_scored_dry_run":             _resolve(_bool(args, "unitmatch_scored_dry_run"),                       _cfg(config, "merging", "unitmatch_scored_dry_run"),                DEFAULTS["merging"]["unitmatch_scored_dry_run"]),
         "unitmatch_output_subdir_name":         _resolve(getattr(args, "unitmatch_output_subdir_name", None),           _cfg(config, "merging", "unitmatch_output_subdir_name"),            DEFAULTS["merging"]["unitmatch_output_subdir_name"]),
@@ -189,7 +218,25 @@ def build_extra_args(resolved, cli_args):
     if resolved["expect_multisegment"] is not None:
         extra.append(f"--expect-multisegment {resolved['expect_multisegment']}")
     if resolved["multiseg_mode"] is not None:
-        extra.append(f"--multiseg-mode {resolved['multiseg_mode']}")
+        extra.append(f"--multiseg-mode {'true' if bool(resolved['multiseg_mode']) else 'false'}")
+    if resolved["target_phase"] is not None:
+        extra.append(f"--target-phase {resolved['target_phase']}")
+    if resolved["run_analyzer"] is True:
+        extra.append("--run-analyzer")
+    elif resolved["run_analyzer"] is False:
+        extra.append("--no-run-analyzer")
+    if resolved["run_reports"] is True:
+        extra.append("--run-reports")
+    elif resolved["run_reports"] is False:
+        extra.append("--no-run-reports")
+    if resolved["multiseg_spikesort_mode"] is not None:
+        extra.append(f"--multiseg-spikesort-mode {resolved['multiseg_spikesort_mode']}")
+    if resolved["multiseg_waveforms_mode"] is not None:
+        extra.append(f"--multiseg-waveforms-mode {resolved['multiseg_waveforms_mode']}")
+    if resolved["waveform_prefer_merged_sorting"]:
+        extra.append("--waveform-prefer-merged-sorting")
+    if resolved["waveform_merged_sorting_dir"] is not None:
+        extra.append(f"--waveform-merged-sorting-dir '{resolved['waveform_merged_sorting_dir']}'")
 
     # plotting
     if resolved["plot_mode"]:       extra.append(f"--plot-mode {resolved['plot_mode']}")
