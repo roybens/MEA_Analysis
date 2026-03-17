@@ -40,23 +40,23 @@ class TestPreprocessMultisegH5(unittest.TestCase):
 
     def test_mode_none_preserves_segment_count(self) -> None:
         rec = DummyRecording(n_segments=4)
-        out, info = m.prepare_multisegment_recording(rec, expect_multisegment=None, mode="none")
+        out, info = m.prepare_multisegment_recording(rec, expect_multisegment=None, mode=False)
 
         self.assertIs(out, rec)
         self.assertEqual(info["segments_input"], 4)
         self.assertEqual(info["segments_output"], 4)
-        self.assertEqual(info["mode"], "none")
+        self.assertEqual(info["mode"], False)
 
     def test_mode_concatenate_collapses_to_single_segment(self) -> None:
         rec = DummyRecording(n_segments=5)
         with mock.patch.object(m, "si", DummySI()):
-            out, info = m.prepare_multisegment_recording(rec, expect_multisegment=True, mode="concatenate")
+            out, info = m.prepare_multisegment_recording(rec, expect_multisegment=True, mode=True)
 
         self.assertIsInstance(out, DummyRecording)
         self.assertEqual(out.get_num_segments(), 1)
         self.assertEqual(info["segments_input"], 5)
         self.assertEqual(info["segments_output"], 1)
-        self.assertEqual(info["mode"], "concatenate")
+        self.assertEqual(info["mode"], True)
 
 
 if __name__ == "__main__":

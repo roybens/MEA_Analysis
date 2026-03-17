@@ -62,29 +62,77 @@ try:
         from . import helper_functions as helper
         from .scalebury import add_scalebar
         from .config_loader import load_config, resolve_args
+        from .phase_path_utils import (
+            build_resolved_phase_output_paths,
+            coerce_phase_output_paths,
+            resolve_phase_output_path,
+        )
         from .UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
         from .UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
-        from .multiseg_utils import prepare_multisegment_recording
+        from .multiseg_utils import (
+            build_spikesort_multiseg_plan,
+            build_waveform_multiseg_plan,
+            epochs_to_intervals,
+            maxwell_epochs_to_segment_local_intervals,
+            load_sorting_from_output_dir,
+            resolve_waveform_epoch_marker_paths,
+            resolve_waveform_sorting_source_dir,
+            prepare_multisegment_recording,
+            resolve_unitmatch_artifact_paths,
+            sync_unitmatch_summary_json,
+        )
     else:
         from parameter_free_burst_detector import compute_network_bursts
         import helper_functions as helper
         from scalebury import add_scalebar
         from config_loader import load_config, resolve_args
+        from phase_path_utils import (
+            build_resolved_phase_output_paths,
+            coerce_phase_output_paths,
+            resolve_phase_output_path,
+        )
         from UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
         from UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
-        from multiseg_utils import prepare_multisegment_recording
+        from multiseg_utils import (
+            build_spikesort_multiseg_plan,
+            build_waveform_multiseg_plan,
+            epochs_to_intervals,
+            maxwell_epochs_to_segment_local_intervals,
+            load_sorting_from_output_dir,
+            resolve_waveform_epoch_marker_paths,
+            resolve_waveform_sorting_source_dir,
+            prepare_multisegment_recording,
+            resolve_unitmatch_artifact_paths,
+            sync_unitmatch_summary_json,
+        )
 except ImportError:
     try:
         from IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
         from IPNAnalysis import helper_functions as helper
         from IPNAnalysis.scalebury import add_scalebar
         from IPNAnalysis.config_loader import load_config, resolve_args
+        from IPNAnalysis.phase_path_utils import (
+            build_resolved_phase_output_paths,
+            coerce_phase_output_paths,
+            resolve_phase_output_path,
+        )
         from IPNAnalysis.UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
         from IPNAnalysis.UnitMatch.reporting import (
             UnitMatchReportConfig,
             generate_unitmatch_static_report_pack,
         )
-        from IPNAnalysis.multiseg_utils import prepare_multisegment_recording
+        from IPNAnalysis.multiseg_utils import (
+            build_spikesort_multiseg_plan,
+            build_waveform_multiseg_plan,
+            epochs_to_intervals,
+            maxwell_epochs_to_segment_local_intervals,
+            load_sorting_from_output_dir,
+            resolve_waveform_epoch_marker_paths,
+            resolve_waveform_sorting_source_dir,
+            prepare_multisegment_recording,
+            resolve_unitmatch_artifact_paths,
+            sync_unitmatch_summary_json,
+        )
     except ImportError as e:
         raise ImportError(
             "Could not import IPNAnalysis helper modules "
@@ -158,8 +206,10 @@ def _default_option_kwargs() -> dict[str, Any]:
         "preprocessed_recording": None,
         "skip_preprocessing": False,
         "cuda_visible_devices": None,
-        "expect_multisegment": None,
-        "multiseg_mode": "none",
+        "multiseg_mode": False,
+        "waveform_prefer_merged_sorting": False,
+        "waveform_merged_sorting_dir": None,
+        "phase_output_paths": {},
     }
 
 
@@ -249,9 +299,15 @@ class MEAPipeline:
         # Optional runtime/resource controls (default behavior when unset).
         self.cuda_visible_devices = self.option_kwargs.get("cuda_visible_devices")
 
-        # Optional multisegment topology policy + handling mode.
-        self.expect_multisegment = self.option_kwargs.get("expect_multisegment")
-        self.multiseg_mode = str(self.option_kwargs.get("multiseg_mode", "none"))
+        # Optional multisegment handling mode.
+        self.multiseg_mode = bool(self.option_kwargs.get("multiseg_mode", False))
+        self.waveform_prefer_merged_sorting = bool(
+            self.option_kwargs.get("waveform_prefer_merged_sorting", False)
+        )
+        self.waveform_merged_sorting_dir = self.option_kwargs.get("waveform_merged_sorting_dir")
+        self.phase_output_paths = self._coerce_phase_output_paths(
+            self.option_kwargs.get("phase_output_paths", {})
+        )
 
         # 1. Parse Metadata & Paths
         self.metadata = self._parse_metadata()
@@ -276,6 +332,17 @@ class MEAPipeline:
         # 2. Logger Setup
         log_file = self.output_dir / f"{self.run_id}_{self.stream_id}_pipeline.log"
         self.logger = self._setup_logger(log_file)
+
+        # Resolve and log canonical phase output locations once for traceability.
+        self.resolved_phase_output_paths = self._build_resolved_phase_output_paths()
+        self.metadata["resolved_phase_output_paths"] = self.resolved_phase_output_paths
+        try:
+            self.logger.info(
+                "Resolved phase output paths: %s",
+                json.dumps(self.resolved_phase_output_paths, sort_keys=True),
+            )
+        except Exception:
+            self.logger.debug("Failed to log resolved phase output paths", exc_info=True)
         
         # 3. Checkpointing Setup
         ckpt_root = Path(checkpoint_root) if checkpoint_root else self.output_dir / "checkpoints"
@@ -294,11 +361,11 @@ class MEAPipeline:
 
     # --- Setup Methods ---
     def _setup_logger(self, log_file):
-        logger = logging.getLogger(f"mea_{self.stream_id}")
+        logger = logging.getLogger(f"MEA_Analysis.IPNAnalysis.mea_analysis_routine.{self.stream_id}")
         logger.setLevel(logging.DEBUG if self.verbose else logging.INFO)
         # Prevent duplicate handlers if running in loop
         if not logger.handlers:
-            formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
+            formatter = logging.Formatter('[%(name)s] [%(levelname)s] %(message)s')
             fh = logging.FileHandler(log_file, mode='a') # Append to log per run
             #add a big header
             fh.stream.write("\n" + "="*80 + "\n")
@@ -397,6 +464,57 @@ class MEAPipeline:
 
         return token
 
+    def _coerce_phase_output_paths(self, value):
+        return coerce_phase_output_paths(value)
+
+    def _resolve_phase_output_path(self, *, phase_name, output_name, default_rel_path):
+        return resolve_phase_output_path(
+            output_dir=self.output_dir,
+            phase_output_paths=self.phase_output_paths,
+            phase_name=phase_name,
+            output_name=output_name,
+            default_rel_path=default_rel_path,
+            logger=self.logger,
+        )
+
+    def _resolve_waveform_epoch_marker_paths(self):
+        """Resolve best-effort locations for preprocessing epoch marker JSONs."""
+
+        try:
+            return resolve_waveform_epoch_marker_paths(
+                output_dir=self.output_dir,
+                stream_id=self.stream_id,
+            )
+        except Exception:
+            pass
+
+        stream = str(self.stream_id)
+        local_maxwell = self.output_dir / f"maxwell_contiguous_epochs_{stream}.json"
+        local_concat = self.output_dir / f"concatenation_stitch_epochs_{stream}.json"
+
+        stg1_preprocess_dir = self.output_dir.parent / "stg1_preprocess_outputs"
+        stg1_maxwell = stg1_preprocess_dir / f"maxwell_contiguous_epochs_{stream}.json"
+        stg1_concat = stg1_preprocess_dir / f"concatenation_stitch_epochs_{stream}.json"
+
+        maxwell_path = local_maxwell if local_maxwell.exists() else stg1_maxwell
+        concat_path = local_concat if local_concat.exists() else stg1_concat
+
+        return {
+            "maxwell": maxwell_path,
+            "concat": concat_path,
+        }
+
+    def _build_resolved_phase_output_paths(self):
+        return build_resolved_phase_output_paths(
+            output_dir=self.output_dir,
+            phase_output_paths=self.phase_output_paths,
+            unitmatch_output_subdir_name=self.unitmatch_output_subdir_name,
+            unitmatch_throughput_subdir_name=self.unitmatch_throughput_subdir_name,
+            multiseg_mode=self.multiseg_mode,
+            stream_id=self.stream_id,
+            logger=self.logger,
+        )
+
     # --- Checkpointing Methods ---
     def _load_checkpoint(self):
         if self.checkpoint_file.exists() and not self.force_restart:
@@ -437,6 +555,7 @@ class MEAPipeline:
         self.state['stage'] = stage.value
         self.state['checkpoint_schema_version'] = CHECKPOINT_SCHEMA_VERSION
         self.state['last_updated'] = str(datetime.now())
+        self.state['resolved_phase_output_paths'] = self.resolved_phase_output_paths
         self.state.update(kwargs)
         with open(self.checkpoint_file, 'w') as f: json.dump(self.state, f, indent=2)
         self.logger.info(f"Checkpoint Saved: {stage.name}")
@@ -460,7 +579,11 @@ class MEAPipeline:
 
     # --- Phase 1: Preprocessing ---
     def run_preprocessing(self):
-        binary_folder = self.output_dir / "binary"
+        binary_folder = self._resolve_phase_output_path(
+            phase_name="preprocessing",
+            output_name="binary",
+            default_rel_path="binary",
+        )
 
         # Optional shortcut for callers that provide a preprocessed recording.
         if self.preprocessed_recording is not None:
@@ -494,13 +617,13 @@ class MEAPipeline:
         # 2b. Enforce multisegment policy and optionally transform segment layout.
         rec, multiseg_info = prepare_multisegment_recording(
             rec,
-            expect_multisegment=self.expect_multisegment,
+            expect_multisegment=None,
             mode=self.multiseg_mode,
             logger=self.logger,
         )
         self.metadata["num_segments_before_preprocess"] = int(multiseg_info["segments_input"])
         self.metadata["num_segments_after_multiseg_mode"] = int(multiseg_info["segments_output"])
-        self.metadata["multiseg_mode"] = str(multiseg_info["mode"])
+        self.metadata["multiseg_mode"] = bool(multiseg_info["mode"])
 
         # 3. Time Slicing (Remove last 1s to avoid end-of-file artifacts)
         fs = rec.get_sampling_frequency()
@@ -559,7 +682,11 @@ class MEAPipeline:
 
     # --- Phase 2: Sorting ---
     def run_sorting(self):
-        sorter_folder = self.output_dir / "sorter_output"
+        sorter_folder = self._resolve_phase_output_path(
+            phase_name="spikesorting",
+            output_name="sorter_output",
+            default_rel_path="sorter_output",
+        )
         if self.state['stage'] >= ProcessingStage.SORTING_COMPLETE.value:
             self.logger.info("Resuming: Loading existing sorting.")
             try: self.sorting = si.read_sorter_folder(sorter_folder)
@@ -567,6 +694,20 @@ class MEAPipeline:
             return
         self._save_checkpoint(ProcessingStage.SORTING)
         self.logger.info(f"--- [Phase 2] Spike Sorting ({self.sorter}) ---")
+
+        multiseg_sort_plan = build_spikesort_multiseg_plan(
+            self.recording,
+            mode=self.multiseg_mode,
+        )
+        self.metadata["multiseg_spikesort_mode"] = str(multiseg_sort_plan.mode)
+        self.metadata["multiseg_spikesort_enabled"] = bool(multiseg_sort_plan.enabled)
+        self.metadata["multiseg_spikesort_segments"] = int(multiseg_sort_plan.segment_count)
+        self.logger.info(
+            "Multiseg spikesort plan: mode=%s enabled=%s segments=%d",
+            multiseg_sort_plan.mode,
+            bool(multiseg_sort_plan.enabled),
+            int(multiseg_sort_plan.segment_count),
+        )
         
         import torch
         if torch.cuda.is_available():
@@ -690,7 +831,11 @@ class MEAPipeline:
         except Exception:
             current_stage = ProcessingStage.SORTING_COMPLETE
 
-        analyzer_folder = self.output_dir / "analyzer_output"
+        analyzer_folder = self._resolve_phase_output_path(
+            phase_name="analyzer",
+            output_name="analyzer_output",
+            default_rel_path="analyzer_output",
+        )
         if (
             (not self.force_rerun_analyzer)
             and int(self.state.get('stage', 0)) >= ProcessingStage.ANALYZER_COMPLETE.value
@@ -711,6 +856,10 @@ class MEAPipeline:
 
         if self.unitmatch_merge_units:
             try:
+                effective_unitmatch_output_subdir = str(self.unitmatch_output_subdir_name)
+                effective_unitmatch_throughput_subdir = str(self.unitmatch_throughput_subdir_name)
+                effective_unitmatch_report_subdir = str(self.unitmatch_report_subdir_name)
+
                 if self.auto_merge_units:
                     self.logger.warning(
                         "Both UnitMatch and auto_merge_units requested; using UnitMatch path and skipping auto_merge_units"
@@ -726,8 +875,8 @@ class MEAPipeline:
                         scored_dry_run=self.unitmatch_scored_dry_run,
                         fail_open=True,
                         max_candidate_pairs=self.unitmatch_max_candidate_pairs,
-                        output_subdir_name=self.unitmatch_output_subdir_name,
-                        throughput_subdir_name=self.unitmatch_throughput_subdir_name,
+                        output_subdir_name=effective_unitmatch_output_subdir,
+                        throughput_subdir_name=effective_unitmatch_throughput_subdir,
                         oversplit_min_probability=self.unitmatch_oversplit_min_probability,
                         oversplit_max_suggestions=self.unitmatch_oversplit_max_suggestions,
                         apply_merges=self.unitmatch_apply_merges,
@@ -742,15 +891,22 @@ class MEAPipeline:
 
                 artifacts = um_summary.setdefault("artifacts", {})
                 merge_application = um_summary.setdefault("merge_application", {})
+                um_paths = resolve_unitmatch_artifact_paths(
+                    output_dir=self.output_dir,
+                    output_subdir_name=effective_unitmatch_output_subdir,
+                    throughput_subdir_name=effective_unitmatch_throughput_subdir,
+                    report_subdir_name=effective_unitmatch_report_subdir,
+                )
+                if artifacts.get("final_merged_sorting_folder") is None:
+                    artifacts["final_merged_sorting_folder"] = str(um_paths.final_merged_sorting)
+
                 final_merged_sorting_folder = artifacts.get("final_merged_sorting_folder")
                 persisted_final_merged_sorting = bool(merge_application.get("persisted_final_merged_sorting", False))
 
                 summary_path_s = str(artifacts.get("summary_json") or "")
                 if summary_path_s:
                     try:
-                        summary_path = Path(summary_path_s)
-                        summary_path.parent.mkdir(parents=True, exist_ok=True)
-                        summary_path.write_text(json.dumps(um_summary, indent=2), encoding="utf-8")
+                        sync_unitmatch_summary_json(summary=um_summary, summary_path=summary_path_s)
                     except Exception as summary_sync_exc:
                         self.logger.warning(
                             "Failed to sync UnitMatch summary JSON after merge artifact update (%s)",
@@ -780,9 +936,9 @@ class MEAPipeline:
                             output_dir=self.output_dir,
                             logger=self.logger,
                             config=UnitMatchReportConfig(
-                                throughput_subdir_name=str(self.unitmatch_throughput_subdir_name),
-                                output_subdir_name=str(self.unitmatch_output_subdir_name),
-                                report_subdir_name=str(self.unitmatch_report_subdir_name),
+                                throughput_subdir_name=str(effective_unitmatch_throughput_subdir),
+                                output_subdir_name=str(effective_unitmatch_output_subdir),
+                                report_subdir_name=str(effective_unitmatch_report_subdir),
                                 max_heatmap_units=int(self.unitmatch_report_max_heatmap_units),
                             ),
                         )
@@ -911,7 +1067,11 @@ class MEAPipeline:
 
     # --- Phase 3: Analyzer ---
     def run_analyzer(self):
-        analyzer_folder = self.output_dir / "analyzer_output"
+        analyzer_folder = self._resolve_phase_output_path(
+            phase_name="analyzer",
+            output_name="analyzer_output",
+            default_rel_path="analyzer_output",
+        )
         if (
             (not self.force_rerun_analyzer)
             and self.state['stage'] >= ProcessingStage.ANALYZER_COMPLETE.value
@@ -926,6 +1086,97 @@ class MEAPipeline:
         self._save_checkpoint(ProcessingStage.ANALYZER)
         self.logger.info("--- [Phase 3] Computing Sorting Analyzer ---")
         try:
+            multiseg_wf_plan = build_waveform_multiseg_plan(
+                self.recording,
+                mode=self.multiseg_mode,
+            )
+            self.metadata["multiseg_waveforms_mode"] = str(multiseg_wf_plan.mode)
+            self.metadata["multiseg_waveforms_enabled"] = bool(multiseg_wf_plan.enabled)
+            self.metadata["multiseg_waveforms_segments"] = int(multiseg_wf_plan.segment_count)
+            self.logger.info(
+                "Multiseg waveform plan: mode=%s enabled=%s segments=%d",
+                multiseg_wf_plan.mode,
+                bool(multiseg_wf_plan.enabled),
+                int(multiseg_wf_plan.segment_count),
+            )
+
+            wf_sorting_source = resolve_waveform_sorting_source_dir(
+                output_dir=self.output_dir,
+                merged_sorting_dir=self.waveform_merged_sorting_dir,
+                prefer_merged_sorting=bool(self.waveform_prefer_merged_sorting),
+            )
+            self.metadata["waveform_sorting_source_dir"] = str(wf_sorting_source.source_dir)
+            self.metadata["waveform_sorting_source_kind"] = str(wf_sorting_source.source_kind)
+            self.logger.info(
+                "Waveform sorting source (migration hook): kind=%s dir=%s",
+                wf_sorting_source.source_kind,
+                wf_sorting_source.source_dir,
+            )
+
+            # Optional migration path: allow analyzer to reload sorting from a
+            # waveform-specific source directory. This is default-off to preserve
+            # legacy behavior for existing users.
+            if (
+                wf_sorting_source.source_dir.exists()
+                and str(wf_sorting_source.source_kind) != "default_missing"
+                and (self.waveform_prefer_merged_sorting or self.waveform_merged_sorting_dir is not None)
+            ):
+                try:
+                    self.sorting = load_sorting_from_output_dir(
+                        sorter_output_dir=wf_sorting_source.source_dir,
+                        sorter=self.sorter,
+                    )
+                    self.logger.info(
+                        "Analyzer loaded sorting from waveform source dir: %s",
+                        wf_sorting_source.source_dir,
+                    )
+                except Exception as load_exc:
+                    self.logger.warning(
+                        "Failed loading sorting from waveform source dir (%s); keeping current sorting.",
+                        load_exc,
+                    )
+
+            # Migration hook: consume extracted epoch helper utilities to capture
+            # waveform epoch context from preprocessing markers (best effort).
+            epoch_paths = self._resolve_waveform_epoch_marker_paths()
+            maxwell_epoch_path = epoch_paths.get("maxwell")
+            concat_epoch_path = epoch_paths.get("concat")
+            if maxwell_epoch_path is not None and Path(maxwell_epoch_path).exists():
+                try:
+                    maxwell_epochs = json.loads(Path(maxwell_epoch_path).read_text(encoding="utf-8"))
+                    if isinstance(maxwell_epochs, list):
+                        maxwell_intervals = epochs_to_intervals(maxwell_epochs)
+                        seg0_intervals = maxwell_epochs_to_segment_local_intervals(
+                            maxwell_epochs=maxwell_epochs,
+                            segment_index=0,
+                        )
+                        self.metadata["waveform_maxwell_epoch_count"] = int(len(maxwell_intervals))
+                        self.metadata["waveform_segment0_epoch_count"] = int(len(seg0_intervals))
+                        self.metadata["waveform_maxwell_epoch_source"] = str(maxwell_epoch_path)
+                        self.logger.info(
+                            "Waveform epoch context: maxwell_intervals=%d seg0_intervals=%d source=%s",
+                            len(maxwell_intervals),
+                            len(seg0_intervals),
+                            maxwell_epoch_path,
+                        )
+                except Exception as epoch_exc:
+                    self.logger.warning("Failed parsing waveform maxwell epochs (%s)", epoch_exc)
+
+            if concat_epoch_path is not None and Path(concat_epoch_path).exists():
+                try:
+                    concat_epochs = json.loads(Path(concat_epoch_path).read_text(encoding="utf-8"))
+                    if isinstance(concat_epochs, list):
+                        concat_intervals = epochs_to_intervals(concat_epochs)
+                        self.metadata["waveform_concat_epoch_count"] = int(len(concat_intervals))
+                        self.metadata["waveform_concat_epoch_source"] = str(concat_epoch_path)
+                        self.logger.info(
+                            "Waveform epoch context: concat_intervals=%d source=%s",
+                            len(concat_intervals),
+                            concat_epoch_path,
+                        )
+                except Exception as epoch_exc:
+                    self.logger.warning("Failed parsing waveform concat epochs (%s)", epoch_exc)
+
             if analyzer_folder.exists():
                 shutil.rmtree(analyzer_folder)
 
@@ -989,8 +1240,18 @@ class MEAPipeline:
             q_metrics['loc_x'] = locations[:, 0]
             q_metrics['loc_y'] = locations[:, 1]
             
-            q_metrics.to_excel(self.output_dir / "qm_unfiltered.xlsx")
-            t_metrics.to_excel(self.output_dir / "tm_unfiltered.xlsx")
+            qm_unfiltered_path = self._resolve_phase_output_path(
+                phase_name="reports",
+                output_name="qm_unfiltered",
+                default_rel_path="qm_unfiltered.xlsx",
+            )
+            tm_unfiltered_path = self._resolve_phase_output_path(
+                phase_name="reports",
+                output_name="tm_unfiltered",
+                default_rel_path="tm_unfiltered.xlsx",
+            )
+            q_metrics.to_excel(qm_unfiltered_path)
+            t_metrics.to_excel(tm_unfiltered_path)
             self._plot_probe_locations(q_metrics.index.values, locations, "locations_unfiltered.pdf")
 
             if no_curation:
@@ -1000,9 +1261,24 @@ class MEAPipeline:
                 self.logger.info("Applying curation.")
                 clean_metrics, rejection_log = self._apply_curation_logic(q_metrics, thresholds)
                 clean_units = clean_metrics.index.values
-                clean_metrics.to_excel(self.output_dir / "metrics_curated.xlsx")
-                rejection_log.to_excel(self.output_dir / "rejection_log.xlsx")
-                t_metrics.loc[clean_units].to_excel(self.output_dir / "tm_curated.xlsx")
+                metrics_curated_path = self._resolve_phase_output_path(
+                    phase_name="reports",
+                    output_name="metrics_curated",
+                    default_rel_path="metrics_curated.xlsx",
+                )
+                rejection_log_path = self._resolve_phase_output_path(
+                    phase_name="curation",
+                    output_name="rejection_log",
+                    default_rel_path="rejection_log.xlsx",
+                )
+                tm_curated_path = self._resolve_phase_output_path(
+                    phase_name="reports",
+                    output_name="tm_curated",
+                    default_rel_path="tm_curated.xlsx",
+                )
+                clean_metrics.to_excel(metrics_curated_path)
+                rejection_log.to_excel(rejection_log_path)
+                t_metrics.loc[clean_units].to_excel(tm_curated_path)
 
             if len(clean_units) == 0:
                 self.logger.warning("No units passed curation.")
@@ -1340,6 +1616,7 @@ class MEARunOptions:
     cleanup: bool = False
     force_restart: bool = False
     resume_from: str | None = None
+    target_phase: str | None = None
     n_jobs: int | None = None
     chunk_duration: str | None = None
     sorter_kwargs: dict | None = None
@@ -1394,6 +1671,51 @@ def _normalize_resume_from_stage(resume_from: str | None) -> str | None:
     return normalized
 
 
+def _normalize_target_phase(target_phase: str | None) -> str | None:
+    if target_phase is None:
+        return None
+
+    token = str(target_phase).strip().lower().replace("-", "_")
+    if not token:
+        return None
+
+    aliases = {
+        "preprocess": "preprocessing",
+        "preprocessing": "preprocessing",
+        "sorting": "sorting",
+        "sort": "sorting",
+    }
+    normalized = aliases.get(token)
+    if normalized is None:
+        valid = ", ".join(["preprocessing", "sorting"])
+        raise ValueError(f"Invalid target_phase '{target_phase}'. Valid target phases: {valid}")
+    return normalized
+
+
+def _validate_target_phase_resume_compatibility(
+    *,
+    target_phase: str | None,
+    resume_from: str | None,
+) -> None:
+    normalized_target = _normalize_target_phase(target_phase)
+    normalized_resume = _normalize_resume_from_stage(resume_from)
+    if normalized_target is None or normalized_resume is None:
+        return
+
+    rank = {
+        "preprocessing": 1,
+        "sorting": 2,
+        "merge": 3,
+        "analyzer": 4,
+        "reports": 5,
+    }
+    if rank[normalized_resume] > rank[normalized_target]:
+        raise ValueError(
+            f"Incompatible run controls: resume_from={normalized_resume} is later than "
+            f"target_phase={normalized_target}."
+        )
+
+
 def _apply_resume_from_stage(pipeline: MEAPipeline, resume_from: str | None) -> None:
     stage_name = _normalize_resume_from_stage(resume_from)
     if stage_name is None:
@@ -1426,6 +1748,15 @@ def _apply_resume_from_stage(pipeline: MEAPipeline, resume_from: str | None) -> 
 
 
 def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
+    target_phase = _normalize_target_phase(options.target_phase)
+    _validate_target_phase_resume_compatibility(
+        target_phase=target_phase,
+        resume_from=options.resume_from,
+    )
+
+    if target_phase == "sorting" and bool(options.skip_spikesorting):
+        raise ValueError("target_phase=sorting is incompatible with skip_spikesorting=True")
+
     um_kwargs = _default_um_kwargs()
     if isinstance(options.um_kwargs, dict):
         um_kwargs.update(options.um_kwargs)
@@ -1482,6 +1813,12 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
 
     _apply_resume_from_stage(pipeline, options.resume_from)
 
+    if target_phase is not None:
+        pipeline.logger.info(
+            "Isolated phase target enabled: target_phase=%s",
+            target_phase,
+        )
+
     if bool(options.reanalyze_bursts):
         pipeline._run_burst_analysis(
             plot_mode=options.plot_mode,
@@ -1502,8 +1839,15 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
 
     pipeline.run_preprocessing()
 
+    if target_phase == "preprocessing":
+        return MEARunResult(pipeline=pipeline, skipped=False, reanalyzed_bursts=False)
+
     if not bool(options.skip_spikesorting):
         pipeline.run_sorting()
+
+        if target_phase == "sorting":
+            return MEARunResult(pipeline=pipeline, skipped=False, reanalyzed_bursts=False)
+
         pipeline.run_optional_merge_phase()
 
         if bool(options.run_analyzer):
@@ -1587,9 +1931,37 @@ def main():
     sort_group.add_argument(
         "--multiseg-mode",
         type=str,
-        choices=["none", "concatenate"],
         default=None,
-        help="How to handle multisegment recordings in preprocessing (default: none)",
+        help="How to handle multisegment recordings in preprocessing (true/false)",
+    )
+    sort_group.add_argument(
+        "--multiseg-spikesort-mode",
+        type=str,
+        default=None,
+        help="Optional mode token for multisegment spikesorting hooks (default: none)",
+    )
+    sort_group.add_argument(
+        "--multiseg-waveforms-mode",
+        type=str,
+        default=None,
+        help="Optional mode token for multisegment analyzer/waveform hooks (default: none)",
+    )
+    sort_group.add_argument(
+        "--phase-output-paths-json",
+        type=str,
+        default=None,
+        help="JSON object mapping phase->outputs overrides relative to output_dir",
+    )
+    sort_group.add_argument(
+        "--waveform-prefer-merged-sorting",
+        action="store_true",
+        help="Analyzer migration option: prefer merged sorting artifact when loading waveform source.",
+    )
+    sort_group.add_argument(
+        "--waveform-merged-sorting-dir",
+        type=str,
+        default=None,
+        help="Analyzer migration option: explicit sorting directory for waveform source loading.",
     )
 
     # --- Plotting ---
@@ -1616,8 +1988,23 @@ def main():
     ctrl_group.add_argument("--resume-from", "--resume_from", dest="resume_from", type=str, default=None,
         choices=["preprocessing", "sorting", "merge", "analyzer", "reports"],
         help="Resume by rewinding checkpoint to just before this stage and rerunning from there")
+    ctrl_group.add_argument("--target-phase", dest="target_phase", type=str, default=None,
+        choices=["preprocessing", "sorting"],
+        help="Run only up to this phase (isolated mode): preprocessing or sorting")
     ctrl_group.add_argument("--reanalyze-bursts", action="store_true",
         help="Re-run burst analysis on existing spike times only")
+    ctrl_group.add_argument(
+        "--run-analyzer",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable analyzer phase after sorting (default: true)",
+    )
+    ctrl_group.add_argument(
+        "--run-reports",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable report generation after analyzer (default: true)",
+    )
     ctrl_group.add_argument("--debug", action="store_true",
         help="Enable verbose logging")
 
@@ -1735,6 +2122,10 @@ def main():
     resolved = resolve_args(args, config)
     fixed_y = resolved["fixed_y"]
 
+    phase_output_paths = resolved.get("phase_output_paths")
+    if args.phase_output_paths_json is not None:
+        phase_output_paths = json.loads(str(args.phase_output_paths_json))
+
    
     plot_mode = resolved["plot_mode"]
     plot_debug = resolved["plot_debug"]
@@ -1760,6 +2151,7 @@ def main():
                 cleanup=bool(resolved["clean_up"]),
                 force_restart=bool(args.force_restart),
                 resume_from=args.resume_from,
+                target_phase=args.target_phase,
                 um_kwargs={
                     "merge_units": bool(args.unitmatch_merge_units),
                     "dry_run": bool(args.unitmatch_dry_run),
@@ -1785,13 +2177,15 @@ def main():
                 option_kwargs={
                     "force_rerun_analyzer": bool(args.rerun_analyzer),
                     "output_subdir_after_well": resolved.get("output_subdir_after_well"),
-                    "expect_multisegment": resolved.get("expect_multisegment"),
                     "multiseg_mode": resolved.get("multiseg_mode"),
+                    "waveform_prefer_merged_sorting": bool(resolved.get("waveform_prefer_merged_sorting")),
+                    "waveform_merged_sorting_dir": resolved.get("waveform_merged_sorting_dir"),
+                    "phase_output_paths": phase_output_paths,
                 },
                 reanalyze_bursts=bool(args.reanalyze_bursts),
                 skip_spikesorting=bool(args.skip_spikesorting),
-                run_analyzer=True,
-                run_reports=True,
+                run_analyzer=bool(resolved.get("run_analyzer", True)),
+                run_reports=bool(resolved.get("run_reports", True)),
                 thresholds=thresholds,
                 no_curation=bool(resolved["no_curation"]),
                 export_to_phy=bool(resolved["export_to_phy"]),
