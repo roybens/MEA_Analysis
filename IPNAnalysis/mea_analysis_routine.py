@@ -588,125 +588,187 @@ class MEAPipeline:
                 plt.close(fig)
 
     def _run_burst_analysis(self, ids_list=None, plot_mode='separate', plot_debug=False, raster_sort='none'):
-            self.logger.info("Running Network Burst Analysis...")
-            
-            spike_times = {}
-            
-            # 1. Load Spike Times
-            if self.sorting:
-                fs = self.recording.get_sampling_frequency()
-                if ids_list is None: ids_list = self.analyzer.unit_ids
-                for uid in ids_list:
-                    spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
-                np.save(self.output_dir / "spike_times.npy", spike_times)
+        self.logger.info("Running Network Burst Analysis...")
+
+        spike_times = {}
+
+        # ---------------------------------------------------------
+        # 1. Load spike times
+        # ---------------------------------------------------------
+        if self.sorting:
+            fs = self.recording.get_sampling_frequency()
+            if ids_list is None:
+                ids_list = self.analyzer.unit_ids
+
+            for uid in ids_list:
+                spike_times[uid] = self.sorting.get_unit_spike_train(uid) / fs
+
+            np.save(self.output_dir / "spike_times.npy", spike_times)
+
+        else:
+            npy_spike_file = self.output_dir / "spike_times.npy"
+            if npy_spike_file.exists():
+                spike_times = np.load(npy_spike_file, allow_pickle=True).item()
             else:
-                npy_spike_file = self.output_dir / "spike_times.npy"
-                if npy_spike_file.exists():
-                    spike_times = np.load(npy_spike_file, allow_pickle=True).item()
-                else:
-                    self.logger.error("No spike times found for burst analysis.")
-                    return
+                self.logger.error("No spike times found for burst analysis.")
+                return
 
-            if not spike_times: return
+        if not spike_times:
+            self.logger.warning("Spike times dictionary is empty. Skipping burst analysis.")
+            return
 
-            # 2. Main Analysis Block
-            try:
-                # A. Network Burst Calculation
-                network_data = compute_network_bursts(
-                    SpikeTimes=spike_times,
-                    plot=False
+        # ---------------------------------------------------------
+        # 2. Main analysis block
+        # ---------------------------------------------------------
+        try:
+            # A. Run network burst detector
+            network_data = compute_network_bursts(
+                SpikeTimes=spike_times,
+                plot=False
+            )
+
+            if isinstance(network_data, dict) and "error" in network_data:
+                self.logger.error(f"Burst detector returned error: {network_data['error']}")
+                return
+
+            # B. Save clean JSON
+            network_data_clean = helper.recursive_clean(network_data)
+            network_data_clean["n_units"] = len(spike_times)
+
+            temp_file = self.output_dir / "network_results.tmp.json"
+            final_file = self.output_dir / "network_results.json"
+
+            with open(temp_file, "w") as f:
+                json.dump(network_data_clean, f, indent=2)
+
+            if temp_file.exists():
+                os.replace(temp_file, final_file)
+                self.logger.info(f"Successfully saved: {final_file}")
+
+            # C. Sort units for raster
+            sorted_units = self._sort_units_for_raster(spike_times, raster_sort)
+
+            # D. Build figure
+            ax_network_red = None
+
+            if plot_mode == "separate":
+                fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+                ax_raster, ax_network = axs
+
+                helper.plot_clean_raster(
+                    ax_raster,
+                    spike_times,
+                    sorted_units,
+                    color="gray",
+                    markersize=4,
+                    markeredgewidth=0.5,
+                    alpha=1.0
                 )
 
-                # Clean data in memory
-                network_data_clean = helper.recursive_clean(network_data)
-                network_data_clean['n_units'] = len(spike_times)
-                
-                # Atomic Write (Temp -> Rename) to prevent corruption
-                temp_file = self.output_dir / "network_results.tmp.json"
-                final_file = self.output_dir / "network_results.json"
+                ax_network, ax_network_red = helper.plot_clean_network(
+                    ax_network,
+                    **network_data["plot_data"],
+                    use_twinx=True
+                )
 
-                with open(temp_file, 'w') as f:
-                    json.dump(network_data_clean, f, indent=2)
-                
-                if temp_file.exists():
-                    os.replace(temp_file, final_file)
-                    self.logger.info(f"Successfully saved: {final_file}")
+            elif plot_mode == "merged":
+                fig, ax_raster = plt.subplots(figsize=(12, 5))
 
-                # B. Sort units for raster if requested
-                sorted_units = self._sort_units_for_raster(spike_times, raster_sort)
+                helper.plot_clean_raster(
+                    ax_raster,
+                    spike_times,
+                    sorted_units,
+                    color="gray",
+                    markersize=4,
+                    markeredgewidth=0.5,
+                    alpha=1.0
+                )
 
-                # C. Plotting
-                
+                ax_network = ax_raster.twinx()
 
-                if plot_mode == 'separate':
-                    fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-                    ax_raster, ax_network = axs
-                    helper.plot_clean_raster(
-                        ax_raster,
-                        spike_times,
-                        sorted_units,
-                        color='gray',
-                        markersize=4,
-                        markeredgewidth=0.5,
-                        alpha=1.0
-                    )
-                    helper.plot_clean_network(ax_network, **network_data["plot_data"])
+                ax_network, ax_network_red = helper.plot_clean_network(
+                    ax_network,
+                    **network_data["plot_data"],
+                    use_twinx=False
+                )
 
-                elif plot_mode == 'merged':
-                    fig, ax = plt.subplots(figsize=(12, 5))
-                    ax_raster = ax
-                    ax_network = ax.twinx()
-                    helper.plot_clean_raster(
-                        ax_raster,
-                        spike_times,
-                        sorted_units,
-                        color='gray',
-                        markersize=4,
-                        markeredgewidth=0.5,
-                        alpha=1.0
-                    )
-                    helper.plot_clean_network(
-                        ax_network,
-                        **network_data["plot_data"]
-                    )
-                    ax.spines["right"].set_visible(True)
-                else:
-                    self.logger.warning(f"Unknown plot mode: {plot_mode}")
-                    return
+                ax_raster.spines["right"].set_visible(False)
+                ax_network.spines["right"].set_visible(True)
 
-                plt.tight_layout()
+            else:
+                self.logger.warning(f"Unknown plot mode: {plot_mode}")
+                return
+
+            # ---------------------------------------------------------
+            # 3. Overlay burst hierarchy
+            # ---------------------------------------------------------
+            burstlet_events = network_data["burstlets"]["events"]
+            network_burst_events = network_data["network_bursts"]["events"]
+            superburst_events = network_data["superbursts"]["events"]
+
+            helper.mark_burst_hierarchy(
+                ax_raster=ax_raster,
+                ax_network=ax_network,
+                burstlets=burstlet_events,
+                network_bursts=network_burst_events,
+                superbursts=superburst_events,
+                show_raster_spans=False,      # no raster shading for now
+                show_burstlet_ticks=True,     # black top ticks
+                show_network_ticks=True,      # blue top ticks
+                show_superburst_bars=True,    # purple top bars
+            )
+
+            # ---------------------------------------------------------
+            # 4. Legend
+            # ---------------------------------------------------------
+            from matplotlib.lines import Line2D
+
+            hierarchy_handles = [
+                Line2D([0], [0], color="black", lw=1.2, label="Burstlet ticks"),
+                Line2D([0], [0], color="steelblue", lw=2.0, label="Network burst ticks"),
+                Line2D([0], [0], color="mediumpurple", lw=2.2, label="Superbursts"),
+                Line2D([0], [0], marker='o', color='red', lw=0, markersize=5, label="Network burst centers"),
+            ]
+            ax_raster.legend(handles=hierarchy_handles, loc="upper right", frameon=False, fontsize=8)
+
+            # ---------------------------------------------------------
+            # 5. Layout and save
+            # ---------------------------------------------------------
+            plt.tight_layout()
+            if plot_mode == "separate":
                 plt.subplots_adjust(hspace=0.05)
 
-                if plot_debug:
-                    nb_events = network_data["network_bursts"]["events"]
-                    burst_intervals = [(ev["start"], ev["end"]) for ev in nb_events]
-                    sb_events = network_data["superbursts"]["events"]
-                    sb_intervals = [(ev["start"], ev["end"]) for ev in sb_events]
-                    for start, end in burst_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.1)
-                    for start, end in sb_intervals:
-                        ax_network.axvspan(start, end, color='gray', alpha=0.2)
-            
-                plt.savefig(self.output_dir / "raster_burst_plot.svg")
+            full_svg = self.output_dir / "raster_burst_plot.svg"
+            full_png = self.output_dir / "raster_burst_plot.png"
+            zoom60_svg = self.output_dir / "raster_burst_plot_60s.svg"
+            zoom30_svg = self.output_dir / "raster_burst_plot_30s.svg"
 
-                # 60 s zoom
-                ax_raster.set_xlim(0, 60)
-                ax_network.set_xlim(0, 60)
-                plt.savefig(self.output_dir / "raster_burst_plot_60s.svg")
+            plt.savefig(full_svg)
 
-                # 30 s zoom
-                ax_raster.set_xlim(0, 30)
-                ax_network.set_xlim(0, 30)
-                ax_network.set_xlabel("Time (s)")
-                plt.savefig(self.output_dir / "raster_burst_plot_30s.svg")
+            # 60 s zoom
+            ax_raster.set_xlim(0, 60)
+            ax_network.set_xlim(0, 60)
+            if ax_network_red is not None and ax_network_red is not ax_network:
+                ax_network_red.set_xlim(0, 60)
+            plt.savefig(zoom60_svg)
 
-                plt.savefig(self.output_dir / "raster_burst_plot.png", dpi=300)
-                plt.close(fig)
+            # 30 s zoom
+            ax_raster.set_xlim(0, 30)
+            ax_network.set_xlim(0, 30)
+            if ax_network_red is not None and ax_network_red is not ax_network:
+                ax_network_red.set_xlim(0, 30)
+            ax_network.set_xlabel("Time (s)")
+            plt.savefig(zoom30_svg)
 
-            except Exception as e:
-                self.logger.error(f"Burst analysis error: {e}")
-                traceback.print_exc()
-                raise e
+            plt.savefig(full_png, dpi=300)
+            plt.close(fig)
+
+            self.logger.info("Burst analysis plots saved successfully.")
+
+        except Exception as e:
+            self.logger.error(f"Burst analysis error: {e}")
+            traceback.print_exc()
+            raise
 
     def _sort_units_for_raster(self, spike_times, raster_sort):
         """Returns ordered list of unit keys for raster y-axis."""

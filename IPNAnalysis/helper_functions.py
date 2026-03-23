@@ -252,94 +252,137 @@ def plot_clean_raster(
 def plot_clean_network(
     ax,
     t,
-    signal,
+    participation_signal,
     *,
-    signal_smooth=None,
+    rate_signal=None,
     burst_peak_times=None,
     burst_peak_values=None,
-    baseline=None,
-    threshold=None,
+    participation_baseline=None,
+    participation_threshold=None,
     ylim=None,
-    color="#B22222"
+    use_twinx=True
 ):
     """
-    Clean network activity plot.
+    Plot participation/recruitment and mean firing rate per unit.
 
     Parameters
     ----------
     ax : matplotlib axis
+        Main axis for participation signal.
     t : array-like
-        Time vector (seconds)
-    signal : array-like
-        Network synchrony signal (ws_onset)
+        Time vector (seconds).
+    participation_signal : array-like
+        Smoothed participation / recruitment signal (dimensionless).
+    rate_signal : array-like, optional
+        Smoothed mean firing rate per unit (Hz / unit).
     burst_peak_times : array-like, optional
-        Time of the largest peak per merged network burst
+        Times of network burst peaks.
     burst_peak_values : array-like, optional
-        Amplitude of the largest peak per merged network burst
-    baseline : float, optional
-        Baseline level (for reference)
-    threshold : float, optional
-        Detection threshold (for reference)
+        Peak values (not required for plotting, kept for compatibility).
+    participation_baseline : float, optional
+        Baseline of participation signal.
+    participation_threshold : float, optional
+        Detection threshold in participation space.
+    ylim : tuple, optional
+        Y-limits for main participation axis.
+    use_twinx : bool
+        If True, draw rate_signal on a second y-axis.
     """
 
-    # --- main signal ---
-    ax.plot(
+    # -------------------------------------------------
+    # Main axis = participation / recruitment
+    # -------------------------------------------------
+    part_line, = ax.plot(
         t,
-        signal,
-        color=color,
-        lw=1.5,
-        zorder=2
+        participation_signal,
+        color="tab:orange",
+        lw=1.3,
+        zorder=3,
+        label="Participation / recruitment"
     )
-    if signal_smooth is not None:
-        ax.plot(
-            t,
-            signal_smooth,
-            color="tab:orange",
-            lw=1.0,
-            zorder=3
-        )
-    # --- burst peaks (ONE per network burst) ---
-    if (
-        burst_peak_times is not None
-        and burst_peak_values is not None
-        and len(burst_peak_times) > 0
-    ):
-        ax.plot(
-            burst_peak_times,
-            burst_peak_values,
-            'o',
-            color='red',
-            ms=4,
-            zorder=5
-        )
 
-    # --- reference lines ---
-    if baseline is not None:
-        ax.axhline(
-            baseline,
-            color="#FF6600",
-            ls="--",
-            lw=1,
-            alpha=0.8
-        )
-
-    if threshold is not None:
-        ax.axhline(
-            threshold,
-            color="#C0392B",
-            ls="--",
-            lw=1,
-            alpha=0.8
-        )
-
-    # --- cosmetics ---
-    ax.set_ylabel("Network synchrony")
+    ax.set_ylabel("Participation signal")
     ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
     ax.tick_params(direction="out")
 
     if ylim is not None:
         ax.set_ylim(ylim)
+
+    if participation_baseline is not None:
+        ax.axhline(
+            participation_baseline,
+            color="#FF6600",
+            ls="--",
+            lw=1.0,
+            alpha=0.8,
+            zorder=2
+        )
+
+    if participation_threshold is not None:
+        ax.axhline(
+            participation_threshold,
+            color="#C0392B",
+            ls="--",
+            lw=1.0,
+            alpha=0.8,
+            zorder=2
+        )
+
+    # -------------------------------------------------
+    # Secondary axis = rate signal
+    # -------------------------------------------------
+    ax_rate = ax.twinx() if use_twinx else ax
+    rate_line = None
+
+    if rate_signal is not None:
+        rate_line, = ax_rate.plot(
+            t,
+            rate_signal,
+            color="#B22222",
+            lw=1.0,
+            alpha=0.95,
+            zorder=4,
+            label="Mean firing rate / unit"
+        )
+
+        if burst_peak_times is not None and len(burst_peak_times) > 0:
+            peak_y = np.interp(burst_peak_times, t, participation_signal)
+
+            ax.plot(
+                burst_peak_times,
+                peak_y,
+                'o',
+                color='red',
+                ms=5,
+                zorder=6
+            )
+    if use_twinx and rate_signal is not None:
+        smin = np.nanmin(rate_signal) if len(rate_signal) else 0.0
+        smax = np.nanmax(rate_signal) if len(rate_signal) else 1.0
+
+        if np.isfinite(smin) and np.isfinite(smax):
+            if smax > smin:
+                pad = 0.10 * (smax - smin)
+                ax_rate.set_ylim(smin - pad, smax + pad)
+            else:
+                ax_rate.set_ylim(smin - 1.0, smax + 1.0)
+
+        ax_rate.set_ylabel("Mean firing rate / unit (Hz)", color="#B22222")
+        ax_rate.tick_params(axis="y", colors="#B22222", direction="out")
+        ax_rate.spines["top"].set_visible(False)
+        ax_rate.spines["left"].set_visible(False)
+
+    ax.set_xlabel("Time (s)")
+
+    if use_twinx and rate_line is not None:
+        ax.legend(
+            handles=[part_line, rate_line],
+            loc="upper right",
+            frameon=False,
+            fontsize=8
+        )
+
+    return ax, ax_rate
 
 def plot_raster_with_bursts(ax, spike_times, bursts, sorted_units=None, title_suffix=""):
     """
@@ -486,3 +529,137 @@ def recursive_clean(obj):
     if isinstance(obj, np.ndarray):
         return recursive_clean(obj.tolist())
     return obj
+
+def mark_burst_hierarchy(
+    ax_raster,
+    ax_network,
+    burstlets=None,
+    network_bursts=None,
+    superbursts=None,
+    show_raster_spans=True,
+    show_burstlet_ticks=True,
+    show_network_ticks=True,
+    show_superburst_bars=True,
+):
+    burstlets = burstlets or []
+    network_bursts = network_bursts or []
+    superbursts = superbursts or []
+
+    # ------------------------------------------
+    # Raster context only
+    # ------------------------------------------
+    if show_raster_spans and ax_raster is not None:
+        for ev in superbursts:
+            ax_raster.axvspan(
+                ev["start"], ev["end"],
+                facecolor="mediumpurple",
+                edgecolor="mediumpurple",
+                alpha=0.08,
+                linewidth=0.8,
+                zorder=0
+            )
+
+        for ev in network_bursts:
+            ax_raster.axvspan(
+                ev["start"], ev["end"],
+                facecolor="steelblue",
+                edgecolor="steelblue",
+                alpha=0.10,
+                linewidth=0.8,
+                zorder=1
+            )
+
+    if ax_network is None:
+        return
+
+    ymin, ymax = ax_network.get_ylim()
+    yr = ymax - ymin
+
+    # clearly separated rows above orange trace
+    sb_y0 = ymax - 0.03 * yr
+    sb_y1 = ymax - 0.01 * yr
+
+    nb_y0 = ymax - 0.10 * yr
+    nb_y1 = ymax - 0.075 * yr
+
+    bl_y0 = ymax - 0.17 * yr
+    bl_y1 = ymax - 0.145 * yr
+
+    # ------------------------------------------
+    # Superbursts as top bars/brackets
+    # ------------------------------------------
+    if show_superburst_bars:
+        for ev in superbursts:
+            s, e = ev["start"], ev["end"]
+
+            # end caps
+            ax_network.vlines(
+                [s, e],
+                sb_y0, sb_y1,
+                color="mediumpurple",
+                linewidth=2.2,
+                alpha=0.95,
+                zorder=8
+            )
+            # connecting top bar
+            ax_network.hlines(
+                sb_y1,
+                s, e,
+                color="mediumpurple",
+                linewidth=2.0,
+                alpha=0.95,
+                zorder=8
+            )
+
+
+    # ------------------------------------------
+    # Network bursts as ONE blue center tick each
+    # ------------------------------------------
+    if show_network_ticks and len(network_bursts) > 0:
+        nb_centers = [ev["peak_time"] for ev in network_bursts if "peak_time" in ev]
+
+        ax_network.eventplot(
+            [nb_centers],
+            orientation="horizontal",
+            lineoffsets=[0.5 * (nb_y0 + nb_y1)],
+            linelengths=[nb_y1 - nb_y0],
+            linewidths=2.0,
+            colors="steelblue",
+            alpha=0.95,
+            zorder=7
+        )
+
+    # ------------------------------------------
+    # Burstlets as black ticks
+    # ------------------------------------------
+    if show_burstlet_ticks and len(burstlets) > 0:
+        burstlet_centers = [ev["peak_time"] for ev in burstlets if "peak_time" in ev]
+
+        ax_network.eventplot(
+            [burstlet_centers],
+            orientation="horizontal",
+            lineoffsets=[0.5 * (bl_y0 + bl_y1)],
+            linelengths=[bl_y1 - bl_y0],
+            linewidths=0.8,
+            colors="black",
+            alpha=0.8,
+            zorder=6
+        )
+
+    # ------------------------------------------
+    # Network burst centers as red dots on orange trace
+    # ------------------------------------------
+    if len(network_bursts) > 0 and len(ax_network.lines) > 0:
+        nb_centers = [ev["peak_time"] for ev in network_bursts if "peak_time" in ev]
+        xdata = ax_network.lines[0].get_xdata()
+        ydata = ax_network.lines[0].get_ydata()
+        peak_y = np.interp(nb_centers, xdata, ydata)
+
+        ax_network.plot(
+            nb_centers,
+            peak_y,
+            'o',
+            color='red',
+            ms=4.5,
+            zorder=10
+        )
