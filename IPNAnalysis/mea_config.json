@@ -2,9 +2,10 @@
   "_comment": "MEA Pipeline Config. CLI flags always override these values. Remove _comment keys before use.",
 
   "io": {
-    "_comment": "Set output_dir for all results. checkpoint_dir defaults to <output_dir>/checkpoints if not set.",
+    "_comment": "Set output_dir for all results. checkpoint_dir defaults to <output_dir>/checkpoints if not set. preprocessed_storage_format: zarr or binary.",
     "output_dir": null,
     "checkpoint_dir": null,
+    "preprocessed_storage_format": "zarr",
     "export_to_phy": false,
     "clean_up": false
   },

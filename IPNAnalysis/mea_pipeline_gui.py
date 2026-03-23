@@ -40,6 +40,7 @@ class MEAGui(tk.Tk):
         self.params         = tk.StringVar()
         self.docker         = tk.StringVar()
         self.sorter         = tk.StringVar(value="kilosort4")
+        self.preprocessed_storage_format = tk.StringVar(value="zarr")
 
         self.skip_sorting   = tk.BooleanVar()
         self.force_restart  = tk.BooleanVar()
@@ -91,6 +92,18 @@ class MEAGui(tk.Tk):
 
         self._inline_entry(text_frame, "Sorter", self.sorter, col=0)
         self._inline_entry(text_frame, "Docker image", self.docker, col=2)
+        tk.Label(text_frame, text="Preproc cache", font=("Courier New", 9),
+                 bg=BG, fg=SUBTEXT, width=14, anchor="w").grid(
+            row=1, column=0, sticky="w", padx=(0, 4), pady=(8, 0)
+        )
+        storage_combo = ttk.Combobox(
+            text_frame,
+            textvariable=self.preprocessed_storage_format,
+            values=("zarr", "binary"),
+            state="readonly",
+            width=18,
+        )
+        storage_combo.grid(row=1, column=1, sticky="w", padx=(0, 20), pady=(8, 0))
 
         sep3 = tk.Frame(self, bg=BORDER, height=1)
         sep3.pack(fill="x", padx=20, pady=(10, 0))
@@ -132,6 +145,7 @@ class MEAGui(tk.Tk):
         # Update preview on any change
         for var in [self.data_path, self.output_dir, self.checkpoint_dir,
                     self.reference, self.params, self.docker, self.sorter,
+                    self.preprocessed_storage_format,
                     self.skip_sorting, self.force_restart, self.debug,
                     self.dry_run, self.clean_up, self.export_phy,
                     self.no_curation, self.reanalyze, self.fixed_y]:
@@ -243,6 +257,9 @@ class MEAGui(tk.Tk):
             parts += ["--docker", shlex.quote(self.docker.get().strip())]
         if self.sorter.get().strip() and self.sorter.get().strip() != "kilosort4":
             parts += ["--sorter", self.sorter.get().strip()]
+        storage_format = self.preprocessed_storage_format.get().strip().lower()
+        if storage_format in {"zarr", "binary"} and storage_format != "zarr":
+            parts += ["--preprocessed-storage-format", storage_format]
 
         if self.skip_sorting.get():  parts.append("--skip-spikesorting")
         if self.force_restart.get(): parts.append("--force-restart")

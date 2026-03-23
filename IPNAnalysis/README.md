@@ -52,7 +52,7 @@ The pipeline uses a `recording_map` to efficiently map all recordings to their c
 
 | Stage | Method | Purpose |
 |-------|--------|---------|
-| **Preprocessing** | `run_preprocessing()` | Highpass filter (300 Hz), local common median reference, float32 conversion, binary cache |
+| **Preprocessing** | `run_preprocessing()` | Highpass filter (300 Hz), local common median reference, float32 conversion, cache to Zarr (default) or binary |
 | **Spike Sorting** | `run_sorting()` | Kilosort4 (default), SpikeInterface integration, Docker support for reproducibility |
 | **Analyzer** | `run_analyzer()` | Template computation, quality metrics (firing rate, presence ratio, ISI violations, amplitude) |
 | **Reports** | `generate_reports()` | Waveform visualizations, probe locations, burst analysis, automatic curation |
@@ -91,7 +91,8 @@ The pipeline infers project structure from file paths:
 Output organized as:
 ```
 <output_dir>/<project>/<date>/<chip>/<run_id>/well000/
-  ├── binary/                    (preprocessed recording cache)
+  ├── preprocessed.zarr/         (default preprocessed recording cache)
+  ├── binary/                    (optional preprocessed cache when selected)
   ├── sorter_output/             (kilosort4 outputs)
   ├── analyzer_output/           (waveforms, templates, quality metrics)
   ├── raster_burst_plot.svg      (full recording raster + network burst)
@@ -125,7 +126,7 @@ Edit `mea_config.json` for your project, then pass it to either script via `--co
 
 | Section | Keys |
 |---------|------|
-| `io` | `output_dir`, `checkpoint_dir`, `export_to_phy`, `clean_up` |
+| `io` | `output_dir`, `checkpoint_dir`, `preprocessed_storage_format` (`zarr` or `binary`), `export_to_phy`, `clean_up` |
 | `sorting` | `sorter`, `docker_image` |
 | `filtering` | `reference_file`, `assay_types` (driver only) |
 | `plotting` | `plot_mode`, `raster_sort`, `plot_debug`, `fixed_y` |
@@ -248,6 +249,7 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json --force-
 | input/output | `--config` | Path to config JSON (CLI flags always override) |
 | input/output | `--output-dir` | Output directory for all results |
 | input/output | `--checkpoint-dir` | Checkpoint directory (default: output-dir/checkpoints) |
+| input/output | `--preprocessed-storage-format` | Preprocessing cache format: `zarr` (default) or `binary` |
 | input/output | `--export-to-phy` | Export results to Phy format |
 | input/output | `--clean-up` | Remove intermediate files after processing |
 | filtering | `--reference` | Path to an Excel file mapping run IDs to assay types (see [Reference File](#reference-file)) |
@@ -274,9 +276,11 @@ Same groups and flags as the driver, minus `--dry` and the filtering group, plus
 |-------|----------|-------------|
 | input/output | `--well` | Well ID to process (e.g. well000) — **required** |
 | input/output | `--rec` | Recording name in HDF5 file (default: rec0000) |
+| input/output | `--preprocessed-storage-format` | Preprocessing cache format: `zarr` (default) or `binary` |
 
 ## Notes
 
 - `--well` and `--rec` are always CLI-only — they identify a specific file/recording and are never set in config
 - `--debug`, `--dry`, `--force-restart`, `--reanalyze-bursts`, `--skip-spikesorting` are CLI-only run control flags — they represent one-off decisions and are never set in config
+- When preprocessing is recomputed, the pipeline keeps only the selected cache format (`zarr` or `binary`) and deletes the obsolete alternate cache to avoid mixed stale outputs
 - Everything else can be set in `mea_config.json` and overridden per-run from CLI

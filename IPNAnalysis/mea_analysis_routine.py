@@ -154,6 +154,7 @@ def _default_option_kwargs() -> dict[str, Any]:
         "force_rerun_analyzer": False,
         "preprocessed_recording": None,
         "skip_preprocessing": False,
+        "preprocessed_storage_format": "zarr",
         "cuda_visible_devices": None,
         "output_subdir_after_well": None,
     }
@@ -240,6 +241,9 @@ class MEAPipeline:
         # Optional preprocessed recording injection path.
         self.preprocessed_recording = self.option_kwargs.get("preprocessed_recording")
         self.skip_preprocessing = bool(self.option_kwargs.get("skip_preprocessing"))
+        self.preprocessed_storage_format = self._normalize_preprocessed_storage_format(
+            self.option_kwargs.get("preprocessed_storage_format")
+        )
 
         # Optional runtime/resource controls (default behavior when unset).
         self.cuda_visible_devices = self.option_kwargs.get("cuda_visible_devices")
@@ -388,6 +392,85 @@ class MEAPipeline:
 
         return token
 
+    def _normalize_preprocessed_storage_format(self, value):
+        token = str(value or "zarr").strip().lower()
+        if token not in {"zarr", "binary"}:
+            raise ValueError(
+                "preprocessed_storage_format must be either 'zarr' or 'binary'"
+            )
+        return token
+
+    def _preprocessed_cache_path(self, storage_format):
+        if storage_format == "zarr":
+            return self.output_dir / "preprocessed.zarr"
+        if storage_format == "binary":
+            return self.output_dir / "binary"
+        raise ValueError(f"Unsupported storage format: {storage_format}")
+
+    def _ordered_preprocessed_cache_candidates(self):
+        selected = self.preprocessed_storage_format
+        ordered_formats = [selected]
+        if selected != "zarr":
+            ordered_formats.append("zarr")
+        if selected != "binary":
+            ordered_formats.append("binary")
+
+        seen_paths = set()
+        candidates = []
+        for storage_format in ordered_formats:
+            cache_path = self._preprocessed_cache_path(storage_format)
+            cache_path_key = str(cache_path.resolve()) if cache_path.exists() else str(cache_path)
+            if cache_path_key in seen_paths:
+                continue
+            seen_paths.add(cache_path_key)
+            candidates.append((storage_format, cache_path))
+        return candidates
+
+    def _load_preprocessed_recording_from_cache(self):
+        for storage_format, cache_path in self._ordered_preprocessed_cache_candidates():
+            if not cache_path.exists():
+                continue
+
+            try:
+                recording_obj = self._load_recording_from_cache_path(cache_path)
+            except Exception:
+                continue
+
+            return recording_obj, storage_format, cache_path
+
+        return None, None, None
+
+    def _load_recording_from_cache_path(self, cache_path):
+        try:
+            return si.load(cache_path)
+        except Exception:
+            return si.load_extractor(cache_path)
+
+    def _remove_obsolete_preprocessed_caches(self, keep_format):
+        for storage_format in ("zarr", "binary"):
+            if storage_format == keep_format:
+                continue
+
+            obsolete_path = self._preprocessed_cache_path(storage_format)
+            if not obsolete_path.exists():
+                continue
+
+            self.logger.info(
+                "Removing obsolete %s preprocessing cache at %s",
+                storage_format,
+                obsolete_path,
+            )
+            if obsolete_path.is_dir():
+                shutil.rmtree(obsolete_path, ignore_errors=True)
+            else:
+                try:
+                    obsolete_path.unlink()
+                except Exception:
+                    self.logger.warning(
+                        "Failed to delete obsolete preprocessing cache path: %s",
+                        obsolete_path,
+                    )
+
     # --- Checkpointing Methods ---
     def _load_checkpoint(self):
         if self.checkpoint_file.exists() and not self.force_restart:
@@ -451,7 +534,8 @@ class MEAPipeline:
 
     # --- Phase 1: Preprocessing ---
     def run_preprocessing(self):
-        binary_folder = self.output_dir / "binary"
+        selected_storage_format = self.preprocessed_storage_format
+        selected_cache_path = self._preprocessed_cache_path(selected_storage_format)
 
         # Optional shortcut for callers that provide a preprocessed recording.
         if self.preprocessed_recording is not None:
@@ -467,15 +551,29 @@ class MEAPipeline:
                     failed_stage=None,
                     error=None,
                     preprocessing_source="injected_preprocessed_recording",
+                    preprocessing_cache_format=None,
+                    preprocessing_cache_path=None,
                 )
             return
 
         # 1. Resume Check
-        if self.state['stage'] >= ProcessingStage.PREPROCESSING_COMPLETE.value and binary_folder.exists():
-            self.logger.info("Resuming: Loading preprocessed data from binary cache.")
-            try: self.recording = si.load(binary_folder)
-            except: self.recording = si.load_extractor(binary_folder)
-            return 
+        if self.state['stage'] >= ProcessingStage.PREPROCESSING_COMPLETE.value:
+            resumed_recording, resumed_format, resumed_cache_path = self._load_preprocessed_recording_from_cache()
+            if resumed_recording is not None:
+                self.logger.info(
+                    "Resuming: Loading preprocessed data from %s cache at %s",
+                    resumed_format,
+                    resumed_cache_path,
+                )
+                if resumed_format != selected_storage_format:
+                    self.logger.info(
+                        "Requested preprocessing format is %s, but resumed from existing %s cache",
+                        selected_storage_format,
+                        resumed_format,
+                    )
+                self.recording = resumed_recording
+                return
+
         self._save_checkpoint(ProcessingStage.PREPROCESSING)
         self.logger.info("--- [Phase 1] Preprocessing ---")
         
@@ -518,24 +616,46 @@ class MEAPipeline:
             self.logger.info("Converting to float32 to preserve signal fidelity...")
             rec = spre.astype(rec, 'float32')
 
-        # 5. Save to BINARY
-        if binary_folder.exists():
-            shutil.rmtree(binary_folder)
+        # 5. Save preprocessing cache using selected format.
+        if selected_cache_path.exists():
+            shutil.rmtree(selected_cache_path)
         
-        self.logger.info(f"Saving binary recording to {binary_folder}...")
-        
-        rec.save(
-            folder=binary_folder, 
-            format='binary', 
-            overwrite=True, 
-            n_jobs=(int(self.n_jobs) if self.n_jobs is not None else 16), 
-            chunk_duration=(str(self.chunk_duration) if self.chunk_duration is not None else '1s'), 
-            progress_bar=self.verbose
+        self.logger.info(
+            "Saving %s preprocessed recording to %s...",
+            selected_storage_format,
+            selected_cache_path,
         )
+
+        save_kwargs = {
+            "folder": selected_cache_path,
+            "overwrite": True,
+            "n_jobs": (int(self.n_jobs) if self.n_jobs is not None else 16),
+            "chunk_duration": (str(self.chunk_duration) if self.chunk_duration is not None else '1s'),
+            "progress_bar": self.verbose,
+        }
+
+        if selected_storage_format == "zarr":
+            rec.save(
+                format="zarr",
+                **save_kwargs,
+            )
+        else:
+            rec.save(
+                format="binary",
+                **save_kwargs,
+            )
+
+        # 6. Reload from selected cache (memory-mapped backing store).
+        self.recording = self._load_recording_from_cache_path(selected_cache_path)
+
+        # 7. Keep only the canonical cache format generated in this run.
+        self._remove_obsolete_preprocessed_caches(selected_storage_format)
         
-        # 6. Reload from Binary (Memory Map)
-        self.recording = si.load(binary_folder)
-        self._save_checkpoint(ProcessingStage.PREPROCESSING_COMPLETE)
+        self._save_checkpoint(
+            ProcessingStage.PREPROCESSING_COMPLETE,
+            preprocessing_cache_format=selected_storage_format,
+            preprocessing_cache_path=str(selected_cache_path),
+        )
 
     # --- Phase 2: Sorting ---
     def run_sorting(self):
@@ -1299,6 +1419,7 @@ class MEAPipeline:
         if self.cleanup_flag:
             self.logger.info("Cleaning up temp files...")
             shutil.rmtree(self.output_dir / "binary", ignore_errors=True)
+            shutil.rmtree(self.output_dir / "preprocessed.zarr", ignore_errors=True)
             shutil.rmtree(self.output_dir / "sorter_output", ignore_errors=True)
         self.recording = None
         self.sorting = None
@@ -1313,6 +1434,7 @@ class MEARunOptions:
     recording_num: str = "rec0000"
     output_root: str | Path | None = None
     checkpoint_root: str | Path | None = None
+    preprocessed_storage_format: str = "zarr"
     output_subdir_after_well: str | None = None
     sorter: str = "kilosort4"
     docker_image: str | None = None
@@ -1417,6 +1539,9 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
     option_kwargs = _default_option_kwargs()
     if isinstance(options.option_kwargs, dict):
         option_kwargs.update(options.option_kwargs)
+    option_kwargs["preprocessed_storage_format"] = str(
+        options.preprocessed_storage_format or "zarr"
+    )
 
     auto_merge_presets = am_kwargs.get("presets")
     auto_merge_steps_params = am_kwargs.get("steps_params")
@@ -1543,6 +1668,8 @@ def main():
         help="Checkpoint directory (default: <output-dir>/checkpoints)")
     io_group.add_argument("--output-subdir-after-well", type=str, default=None,
         help="Optional single subdirectory appended under the resolved well output directory")
+    io_group.add_argument("--preprocessed-storage-format", type=str, choices=["zarr", "binary"], default=None,
+        help="Storage format for preprocessed recording cache (default: zarr)")
     io_group.add_argument("--export-to-phy", action="store_true",
         help="Export results to Phy format")
     io_group.add_argument("--clean-up", action="store_true",
@@ -1719,6 +1846,7 @@ def main():
                 recording_num=rec,
                 output_root=resolved["output_dir"],
                 checkpoint_root=resolved["checkpoint_dir"],
+                preprocessed_storage_format=str(resolved["preprocessed_storage_format"]),
                 sorter=sorter,
                 docker_image=resolved["docker_image"],
                 verbose=bool(args.debug),

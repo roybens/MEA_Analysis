@@ -113,6 +113,8 @@ def main():
         help="Checkpoint directory (default: <output-dir>/checkpoints)")
     io_group.add_argument("--output-subdir-after-well", type=str, default=None,
         help="Optional single subdirectory appended under each resolved well output directory")
+    io_group.add_argument("--preprocessed-storage-format", type=str, choices=["zarr", "binary"], default=None,
+        help="Storage format for preprocessed recording cache (default: zarr)")
     io_group.add_argument("--export-to-phy", action="store_true",
         help="Export results to Phy format")
     io_group.add_argument("--clean-up", action="store_true",
