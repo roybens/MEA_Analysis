@@ -30,3 +30,4 @@ NetworkAnalysis/ActivityQuality/*.csv
 kilosort4_output/
 Connections/pyuoi/*
 Connections/pyuoi/
+logs/
