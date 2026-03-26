@@ -687,8 +687,6 @@ class MEAPipeline:
             )
             return
 
-            self._save_checkpoint(ProcessingStage.MERGE)
-
         if self.unitmatch_merge_units:
             try:
                 if self.auto_merge_units:
