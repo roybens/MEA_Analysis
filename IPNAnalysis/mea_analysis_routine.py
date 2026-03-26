@@ -995,8 +995,13 @@ class MEAPipeline:
             self._run_burst_analysis(clean_units,plot_mode=plot_mode, plot_debug=plot_debug, raster_sort=raster_sort, fixed_y=fixed_y)
 
             if export_phy:
-                si.export_to_phy(self.analyzer.select_units(clean_units), 
-                            output_folder=self.output_dir/"phy_output", remove_if_exists=True, copy_binary=False)
+                si.export_to_phy(
+                    self.analyzer.select_units(clean_units),
+                    output_folder=self.output_dir / "phy_output",
+                    remove_if_exists=True,
+                    copy_binary=False,
+                    compute_pc_features = False # cannot generate pc features without original binary file 
+                )
 
             self._save_checkpoint(ProcessingStage.REPORTS_COMPLETE, n_units=len(clean_units),failed_stage=None, error=None)
         except Exception as e:
@@ -1010,6 +1015,107 @@ class MEAPipeline:
             self.logger.error(err["traceback"])
             self._save_checkpoint(ProcessingStage.ANALYZER_COMPLETE, error=err)
             raise
+    # NEW  allows export-to-phy to be a standalone feature 
+    def run_export_to_phy(self, thresholds=None):
+        phy_folder = self.output_dir / "phy_output"
+        analyzer_folder = self.output_dir / "analyzer_output"
+
+        if not analyzer_folder.exists():
+            self.logger.error(
+                "Cannot export to Phy: analyzer_output not found at %s. "
+                "Run the full pipeline first.", analyzer_folder
+            )
+            return False
+
+        if self.analyzer is None:
+            self.logger.info("Loading analyzer from disk for Phy export...")
+            self.analyzer = si.load_sorting_analyzer(analyzer_folder)
+            self.sorting = self.analyzer.sorting
+
+        # Try to attach recording for PCA computation.
+        # Priority: 1) already have recording in memory, 2) binary folder, 3) original h5
+        compute_pc_features = False
+        if self.recording is not None:
+            self.logger.info("Using in-memory recording for PCA.")
+            compute_pc_features = True
+        else:
+            binary_folder = self.output_dir / "binary"
+            if binary_folder.exists():
+                self.logger.info("Loading binary recording for PCA...")
+                try:
+                    self.recording = si.load(binary_folder)
+                    self.analyzer = si.load_sorting_analyzer(
+                        analyzer_folder, load_recording=True
+                    )
+                    compute_pc_features = True
+                except Exception as e:
+                    self.logger.warning("Could not load binary for PCA (%s)", e)
+            
+            if not compute_pc_features and self.file_path.exists():
+                self.logger.info("Attempting to load original .h5 for PCA: %s", self.file_path)
+                try:
+                    raw_rec = si.read_maxwell(
+                        str(self.file_path),
+                        stream_id=self.stream_id,
+                        rec_name=self.recording_num,
+                    )
+
+                    # Match the preprocessing chain used during the original pipeline run
+                    # so the dtype/properties are compatible with the stored analyzer.
+                    if raw_rec.get_dtype().kind == 'u':
+                        raw_rec = spre.unsigned_to_signed(raw_rec)
+                    raw_rec = spre.highpass_filter(raw_rec, freq_min=300)
+                    try:
+                        raw_rec = spre.common_reference(raw_rec, reference='local', operator='median', local_radius=(250, 250))
+                    except Exception:
+                        raw_rec = spre.common_reference(raw_rec, reference='global', operator='median')
+                    raw_rec.annotate(is_filtered=True)
+                    if raw_rec.get_dtype() != 'float32':
+                        raw_rec = spre.astype(raw_rec, 'float32')
+
+                    self.analyzer = si.load_sorting_analyzer(analyzer_folder)
+                    self.analyzer.set_temporary_recording(raw_rec)
+                    compute_pc_features = True
+                    self.logger.info(
+                        "Successfully attached preprocessed .h5 recording (stream=%s, rec=%s) for PCA.",
+                        self.stream_id,
+                        self.recording_num,
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        "Could not load raw .h5 for PCA (%s) — exporting without PC features.", e
+                    )
+
+        if not compute_pc_features:
+            self.logger.info("Exporting to Phy without PC features.")
+
+        try:
+            q_metrics = self.analyzer.get_extension("quality_metrics").get_data()
+            locations = self.analyzer.get_extension("unit_locations").get_data()
+            q_metrics['loc_x'] = locations[:, 0]
+            q_metrics['loc_y'] = locations[:, 1]
+            clean_metrics, _ = self._apply_curation_logic(q_metrics, thresholds)
+            clean_units = clean_metrics.index.values
+        except Exception as e:
+            self.logger.warning(
+                "Could not re-apply curation for Phy export (%s); exporting all units.", e
+            )
+            clean_units = self.analyzer.unit_ids
+
+        if len(clean_units) == 0:
+            self.logger.warning("No units passed curation — skipping Phy export.")
+            return False
+
+        self.logger.info("Exporting %d units to Phy at %s...", len(clean_units), phy_folder)
+        si.export_to_phy(
+            self.analyzer.select_units(clean_units),
+            output_folder=phy_folder,
+            remove_if_exists=True,
+            copy_binary=False,
+            compute_pc_features=compute_pc_features,
+        )
+        self.logger.info("Phy export complete.")
+        return True
 
     def _apply_curation_logic(self, metrics, user_thresholds):
         defaults = {'presence_ratio': 0.75, 'rp_contamination': 0.15, 'firing_rate': 0.05, 
@@ -1468,6 +1574,15 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
             raster_sort=options.raster_sort,
             fixed_y=bool(options.fixed_y),
         )
+        # NEW: generate phy_output if requested
+        if bool(options.export_to_phy):
+            phy_folder = pipeline.output_dir / "phy_output"
+            if not phy_folder.exists():
+                pipeline.run_export_to_phy(thresholds=options.thresholds)
+            else:
+                pipeline.logger.info(
+                    "phy_output already exists — skipping. Delete the folder to force regeneration."
+                )
         current_stage = ProcessingStage(pipeline.state['stage'])
         pipeline._save_checkpoint(
             current_stage,
