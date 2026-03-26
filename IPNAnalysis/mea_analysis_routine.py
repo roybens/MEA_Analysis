@@ -957,7 +957,7 @@ class MEAPipeline:
             raise
 
     # --- Phase 4: Reports & Curation ---
-    def generate_reports(self, thresholds=None, no_curation=False, export_phy=False,plot_mode="merged", plot_debug=False, raster_sort=None, fixed_y=False):
+    def generate_reports(self, thresholds=None, no_curation=False, export_phy=False,plot_mode="separate", plot_debug=False, raster_sort=None, fixed_y=False):
         if self.state['stage'] == ProcessingStage.REPORTS_COMPLETE.value: return
 
         self.logger.info("--- [Phase 4] Reports & Curation ---")
