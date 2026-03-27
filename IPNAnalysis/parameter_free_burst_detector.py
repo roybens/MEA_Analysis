@@ -4,13 +4,13 @@ from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 
 def compute_network_bursts(
-    ax_raster=None, ax_macro=None, SpikeTimes=None,
+    SpikeTimes=None,
     isi_threshold=0.1, bin_ms=10, gamma=1.0,
     smoothing_min_ms=20, min_burstlet_participation=0.20,
     min_absolute_rate_Hz=0.5, min_burst_density_Hz=1.0,
     min_relative_height=0.1, extent_frac=0.30,
     burstlet_merge_gap_s=0.1, network_merge_gap_s=1.0,
-    superburst_min_duration_s=2.5, plot=False, verbose=True
+    superburst_min_duration_s=2.5, verbose=True
 ):
     # ---------------------------------------------------------
     # 0. Sanity & Signal Initialization
@@ -174,14 +174,6 @@ def compute_network_bursts(
             "peak_synchrony": stats([ev["peak_synchrony"] for ev in events])
         }
 
-    if plot and ax_macro is not None:
-        ax_macro.plot(t_centers, ws_smooth, color="tab:blue", lw=2)
-        ax_macro.plot(t_centers, ws_sharp, color="tab:orange", lw=1)
-        ax_macro.axhline(relative_threshold_val, color="red", ls="--", alpha=0.6, label="Detect Thresh")
-        ax_macro.axhline(merge_floor, color="green", ls=":", alpha=0.6, label="Merge Floor")
-        for b in network_bursts: ax_macro.axvspan(b["start"], b["end"], color="tab:blue", alpha=0.25)
-        for s in superbursts: ax_macro.axvspan(s["start"], s["end"], color="purple", alpha=0.3)
-
     # ---------------------------------------------------------
     # 8. Registered Diagnostics
     # ---------------------------------------------------------
@@ -209,3 +201,34 @@ def compute_network_bursts(
             
         }
     }
+
+
+def plot_network_bursts(ax, results):
+    """
+    Plot the output of :func:`compute_network_bursts` onto *ax*.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    results : dict
+        The dictionary returned by :func:`compute_network_bursts`.
+    """
+    for key in ("plot_data", "diagnostics", "network_bursts", "superbursts"):
+        if key not in results:
+            raise KeyError(f"plot_network_bursts: results dict is missing required key '{key}'. "
+                           "Pass the dict returned by compute_network_bursts().")
+    pd = results["plot_data"]
+    for sub in ("t", "signal", "signal_smooth", "threshold"):
+        if sub not in pd:
+            raise KeyError(f"plot_network_bursts: results['plot_data'] is missing required key '{sub}'.")
+    diag = results["diagnostics"]
+
+    ax.plot(pd["t"], pd["signal_smooth"], color="tab:blue", lw=2)
+    ax.plot(pd["t"], pd["signal"], color="tab:orange", lw=1)
+    ax.axhline(pd["threshold"], color="red", ls="--", alpha=0.6, label="Detect Thresh")
+    ax.axhline(diag["merge_floor"], color="green", ls=":", alpha=0.6, label="Merge Floor")
+    for b in results["network_bursts"]["events"]:
+        ax.axvspan(b["start"], b["end"], color="tab:blue", alpha=0.25)
+    for s in results["superbursts"]["events"]:
+        ax.axvspan(s["start"], s["end"], color="purple", alpha=0.3)

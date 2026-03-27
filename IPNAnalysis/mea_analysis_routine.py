@@ -1144,7 +1144,6 @@ class MEAPipeline:
                 # A. Network Burst Calculation
                 network_data = compute_network_bursts(
                     SpikeTimes=spike_times,
-                    plot=False
                 )
 
                 # Clean data in memory
