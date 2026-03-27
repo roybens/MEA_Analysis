@@ -58,14 +58,14 @@ if not __package__:
 # - When executed as a script, prefer local (same-folder) imports.
 try:
     if __package__:
-        from .parameter_free_burst_detector import compute_network_bursts
+        from .parameter_free_burst_detector import compute_network_bursts, plot_network_bursts
         from . import helper_functions as helper
         from .scalebury import add_scalebar
         from .config_loader import load_config, resolve_args
         from .UnitMatch.runner import run_unitmatch_merge_with_recursion, UnitMatchConfig
         from .UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
     else:
-        from parameter_free_burst_detector import compute_network_bursts
+        from parameter_free_burst_detector import compute_network_bursts, plot_network_bursts
         import helper_functions as helper
         from scalebury import add_scalebar
         from config_loader import load_config, resolve_args
@@ -73,7 +73,7 @@ try:
         from UnitMatch.reporting import UnitMatchReportConfig, generate_unitmatch_static_report_pack
 except ImportError:
     try:
-        from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts
+        from MEA_Analysis.IPNAnalysis.parameter_free_burst_detector import compute_network_bursts, plot_network_bursts
         from MEA_Analysis.IPNAnalysis import helper_functions as helper
         from MEA_Analysis.IPNAnalysis.scalebury import add_scalebar
         from MEA_Analysis.IPNAnalysis.config_loader import load_config, resolve_args
@@ -1164,8 +1164,16 @@ class MEAPipeline:
                 # B. Sort units for raster if requested
                 sorted_units = self._sort_units_for_raster(spike_times, raster_sort)
 
+                # Pre-extract burst/superburst intervals unconditionally so they are
+                # available for both the plot_debug overlays and the fixed_y replot block
+                # (previously defined only inside `if plot_debug:`, causing a NameError
+                # when fixed_y=True and plot_debug=False).
+                nb_events = network_data["network_bursts"]["events"]
+                burst_intervals = [(ev["start"], ev["end"]) for ev in nb_events]
+                sb_events = network_data["superbursts"]["events"]
+                sb_intervals = [(ev["start"], ev["end"]) for ev in sb_events]
+
                 # C. Plotting
-                
 
                 if plot_mode == 'separate':
                     fig, axs = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
@@ -1179,7 +1187,7 @@ class MEAPipeline:
                         markeredgewidth=0.5,
                         alpha=1.0
                     )
-                    helper.plot_clean_network(ax_network, **network_data["plot_data"])
+                    plot_network_bursts(ax_network, network_data)
 
 
                 elif plot_mode == 'merged':
@@ -1195,10 +1203,7 @@ class MEAPipeline:
                         markeredgewidth=0.5,
                         alpha=1.0
                     )
-                    helper.plot_clean_network(
-                        ax_network,
-                        **network_data["plot_data"]
-                    )
+                    plot_network_bursts(ax_network, network_data)
                     ax.spines["right"].set_visible(True)
                 else:
                     self.logger.warning(f"Unknown plot mode: {plot_mode}")
@@ -1208,10 +1213,6 @@ class MEAPipeline:
                 plt.subplots_adjust(hspace=0.05)
 
                 if plot_debug:
-                    nb_events = network_data["network_bursts"]["events"]
-                    burst_intervals = [(ev["start"], ev["end"]) for ev in nb_events]
-                    sb_events = network_data["superbursts"]["events"]
-                    sb_intervals = [(ev["start"], ev["end"]) for ev in sb_events]
                     for start, end in burst_intervals:
                         ax_network.axvspan(start, end, color='gray', alpha=0.1)
                     for start, end in sb_intervals:
@@ -1254,7 +1255,7 @@ class MEAPipeline:
                         fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
                         ax_raster2, ax_network2 = axs2
                         helper.plot_clean_raster(ax_raster2, spike_times, color='gray', markersize=4, markeredgewidth=0.5, alpha=1.0)
-                        helper.plot_clean_network(ax_network2, **network_data["plot_data"])
+                        plot_network_bursts(ax_network2, network_data)
                         ax_network2.set_ylim(0, global_max)
                         plt.tight_layout()
                         plt.subplots_adjust(hspace=0.05)
