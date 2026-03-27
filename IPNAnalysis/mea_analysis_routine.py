@@ -1147,8 +1147,10 @@ class MEAPipeline:
                     plot=False
                 )
 
-                # Clean data in memory
+                # Clean data in memory; plot_data holds large numpy arrays only
+                # needed for in-memory plotting — exclude it from the saved JSON.
                 network_data_clean = helper.recursive_clean(network_data)
+                network_data_clean.pop("plot_data", None)
                 network_data_clean['n_units'] = len(spike_times)
                 
                 # Atomic Write (Temp -> Rename) to prevent corruption
