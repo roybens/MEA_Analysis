@@ -216,8 +216,11 @@ def plot_network_bursts(ax, results):
     """
     for key in ("plot_data", "diagnostics", "network_bursts", "superbursts"):
         if key not in results:
-            raise KeyError(f"plot_network_bursts: results dict is missing required key '{key}'. "
-                           "Pass the dict returned by compute_network_bursts().")
+            raise KeyError(
+                f"plot_network_bursts: results dict is missing required key '{key}'. "
+                f"Got keys: {list(results.keys())}. "
+                "Pass the dict returned by compute_network_bursts()."
+            )
     pd = results["plot_data"]
     for sub in ("t", "signal", "signal_smooth", "threshold"):
         if sub not in pd:
