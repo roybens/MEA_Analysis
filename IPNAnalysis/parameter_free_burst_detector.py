@@ -1,13 +1,11 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
-import matplotlib.pyplot as plt
 
 
 def compute_network_bursts(
     ax_raster=None, ax_macro=None, SpikeTimes=None,
-    isi_threshold=0.1, bin_ms=10, gamma=1.0,
-    smoothing_min_ms=20, min_burstlet_participation=0.20,
+    gamma=1.0, min_burstlet_participation=0.20,
     min_absolute_rate_Hz=0.5, min_burst_density_Hz=1.0,
     min_relative_height=0.1, extent_frac=0.30,
     burstlet_merge_gap_s=0.1, network_merge_gap_s=1.0,
@@ -60,23 +58,17 @@ def compute_network_bursts(
     spike_counts_total = np.zeros(n_bins)
 
     for u in units:
-
         spk = np.asarray(SpikeTimes[u])
-
         if spk.size == 0:
             continue
 
         counts, _ = np.histogram(spk, bins=bins)
-
         active_unit_counts += (counts > 0)
         spike_counts_total += counts
 
     participation_signal_raw = active_unit_counts / max(1, n_units)
-
     rate_signal_raw = spike_counts_total / bin_size / max(1, n_units)
 
-    # compatibility
-    P = active_unit_counts
     PFR = spike_counts_total / bin_size
 
     # ---------------------------------------------------------
@@ -84,14 +76,11 @@ def compute_network_bursts(
     # ---------------------------------------------------------
     isi_bins = biological_isi_s / bin_size
 
-    sigma_fast = np.clip(1.0 * isi_bins, 1, 2)
+    sigma_fast = np.clip(isi_bins, 1, 2)
     sigma_slow = np.clip(5.0 * isi_bins, 3, 8)
 
-    participation_signal_smooth = gaussian_filter1d(participation_signal_raw, sigma_fast)
-    rate_signal_smooth = gaussian_filter1d(rate_signal_raw, sigma_slow)
-
-    ws_sharp = participation_signal_smooth
-    ws_smooth = rate_signal_smooth
+    ws_sharp = gaussian_filter1d(participation_signal_raw, sigma_fast)
+    ws_smooth = gaussian_filter1d(rate_signal_raw, sigma_slow)
 
     # adaptive merge gaps
     burstlet_merge_gap_s = 3 * biological_isi_s
@@ -106,50 +95,61 @@ def compute_network_bursts(
     baseline_val = np.median(ws_sharp)
     spread_mad = np.median(np.abs(ws_sharp - baseline_val))
 
-    relative_threshold_val = max(participation_floor, baseline_val + 0.5 * spread_mad)
+    relative_threshold_val = max(participation_floor, baseline_val + 0.75 * spread_mad)
+    #min_peak_height = max(relative_threshold_val, min_relative_height)
 
     # ---------------------------------------------------------
-    # 5. Burstlet detection
+    # 5. Peak detection (FIXED)
     # ---------------------------------------------------------
-    min_peak_height = baseline_val + 0.5 * spread_mad
-    peaks, _ = find_peaks(ws_sharp, height=min_peak_height)
+    min_distance = int(max(1, biological_isi_s / bin_size))
+    min_prominence = 0.5 * spread_mad
+
+    peaks, _ = find_peaks(
+        ws_sharp,
+        height=relative_threshold_val,
+        #prominence=min_prominence,
+    )
 
     burstlets = []
 
+    # ---------------------------------------------------------
+    # 6. Burstlet extraction (FIXED EXTENT + DURATION)
+    # ---------------------------------------------------------
     for p in peaks:
 
-        s = p
-        e = p
+        peak_val = ws_sharp[p]
+        extent_threshold = max(relative_threshold_val, extent_frac * peak_val)
 
-        while s > 1 and ws_sharp[s - 1] <= ws_sharp[s]:
+        # LEFT boundary
+        s = p
+        while s > 0 and ws_sharp[s - 1] >= extent_threshold:
             s -= 1
 
-        while e < n_bins - 2 and ws_sharp[e + 1] <= ws_sharp[e]:
+        # RIGHT boundary
+        e = p
+        while e < n_bins - 1 and ws_sharp[e + 1] >= extent_threshold:
             e += 1
 
         start_idx = s
-        end_idx = min(e, n_bins - 1)
+        end_idx = e
 
-        start_t = t_centers[start_idx]
-        end_t = t_centers[end_idx]
+        # FIX: use bin edges
+        start_t = bins[start_idx]
+        end_t = bins[end_idx + 1]
 
         duration_s = end_t - start_t
-
         if duration_s <= 0:
             continue
 
         participating = sum(
             1 for u in units
-            if np.any((SpikeTimes[u] >= start_t) & (SpikeTimes[u] <= end_t))
+            if np.any((SpikeTimes[u] >= start_t) & (SpikeTimes[u] < end_t))
         )
 
         participation_frac = participating / n_units
 
-        if ws_sharp[p] < relative_threshold_val:
-            continue
-
-        if participation_frac < min_burstlet_participation:
-            continue
+        # if participation_frac < min_burstlet_participation:
+        #     continue
 
         total_spikes = int(np.sum(spike_counts_total[start_idx:end_idx + 1]))
 
@@ -158,17 +158,17 @@ def compute_network_bursts(
 
         peak_drive_rate = np.max(rate_signal_raw[start_idx:end_idx + 1])
 
-        if burst_density < min_burst_density_Hz:
-            continue
+        # if burst_density < min_burst_density_Hz:
+        #     continue
 
-        if peak_drive_rate < min_absolute_rate_Hz:
-            continue
+        # if peak_drive_rate < min_absolute_rate_Hz:
+        #     continue
 
         burstlets.append({
             "start": float(start_t),
             "end": float(end_t),
             "duration_s": float(duration_s),
-            "peak_synchrony": float(ws_sharp[p]),
+            "peak_synchrony": float(peak_val),
             "peak_time": float(t_centers[p]),
             "synchrony_energy": float(np.sum(ws_smooth[start_idx:end_idx + 1]) * bin_size),
             "participation": participation_frac,
@@ -177,11 +177,8 @@ def compute_network_bursts(
         })
 
     # ---------------------------------------------------------
-    # 6. Merge logic
+    # 7. Merge logic (RELAXED ONLY WHERE NECESSARY)
     # ---------------------------------------------------------
-
-    merge_floor = baseline_val + 0.5 * spread_mad
-    drive_floor = np.median(ws_smooth)
     max_valley_duration = 2 * biological_isi_s
 
     def finalize(evs, s, e):
@@ -190,10 +187,8 @@ def compute_network_bursts(
 
         participating_units = sum(
             1 for u in units
-            if np.any((SpikeTimes[u] >= s) & (SpikeTimes[u] <= e))
+            if np.any((SpikeTimes[u] >= s) & (SpikeTimes[u] < e))
         )
-
-        participation_frac = participating_units / n_units
 
         return {
             "start": s,
@@ -202,9 +197,9 @@ def compute_network_bursts(
             "peak_synchrony": best["peak_synchrony"],
             "peak_time": best["peak_time"],
             "synchrony_energy": sum(ev["synchrony_energy"] for ev in evs),
-            "fragment_count": len(evs),
+            "fragment_count": sum(ev.get("fragment_count", 1) for ev in evs),
             "total_spikes": sum(ev["total_spikes"] for ev in evs),
-            "participation": participation_frac,
+            "participation": participating_units / n_units,
             "burst_peak": max(ev["burst_peak"] for ev in evs)
         }
 
@@ -223,28 +218,12 @@ def compute_network_bursts(
 
         for nxt in events[1:]:
 
-            mid_start_idx = np.searchsorted(t_centers, e)
-            mid_end_idx = np.searchsorted(t_centers, nxt["start"])
-
-            mid_start_idx = int(np.clip(mid_start_idx, 0, len(ws_sharp) - 1))
-            mid_end_idx = int(np.clip(mid_end_idx, 0, len(ws_sharp)))
-
-            if mid_end_idx > mid_start_idx:
-                valley_part = np.min(ws_sharp[mid_start_idx:mid_end_idx])
-                valley_drive = np.min(ws_smooth[mid_start_idx:mid_end_idx])
-            else:
-                valley_part = ws_sharp[mid_start_idx]
-                valley_drive = ws_smooth[mid_start_idx]
-
             valley_duration = nxt["start"] - e
-            peak_ratio = nxt["peak_synchrony"] / max(curr[-1]["peak_synchrony"], 1e-9)
 
+            # FIX: remove overly strict valley constraints
             merge_condition = (
-                (nxt["start"] <= e + gap)
-                and (valley_part >= floor_val)
-                and (valley_drive >= drive_floor)
+                (valley_duration <= gap)
                 and (valley_duration <= max_valley_duration)
-                and (peak_ratio > 0.2)
             )
 
             if merge_condition:
@@ -260,29 +239,28 @@ def compute_network_bursts(
 
         return [m for m in merged if m["duration_s"] >= min_dur]
 
-    network_bursts = merge(burstlets, burstlet_merge_gap_s, merge_floor)
-
-    superbursts = merge(
-        network_bursts,
-        network_merge_gap_s,
-        merge_floor,
-        superburst_min_duration_s
-    )
+    network_bursts = merge(burstlets, burstlet_merge_gap_s, relative_threshold_val)
+    superbursts = merge(network_bursts, network_merge_gap_s, relative_threshold_val, superburst_min_duration_s)
 
     # ---------------------------------------------------------
-    # 7. Metrics
+    # 8. Metrics (FIX CV)
     # ---------------------------------------------------------
     def stats(x):
 
         x = np.asarray(x)
 
-        if x.size < 2:
-            return {"mean": float(x.mean()) if x.size else 0.0, "std": 0.0, "cv": 0.0}
+        if x.size == 0:
+            return {"mean": 0.0, "std": 0.0, "cv": 0.0}
+
+        mean_val = x.mean()
+        std_val = x.std()
+
+        cv = std_val / mean_val if abs(mean_val) > 1e-12 else np.nan
 
         return {
-            "mean": float(x.mean()),
-            "std": float(x.std()),
-            "cv": float(x.std() / x.mean())
+            "mean": float(mean_val),
+            "std": float(std_val),
+            "cv": float(cv)
         }
 
     def level_metrics(events):
@@ -305,30 +283,12 @@ def compute_network_bursts(
         }
 
     # ---------------------------------------------------------
-    # 8. Plot
-    # ---------------------------------------------------------
-    if plot and ax_macro is not None:
-
-        ax_macro.plot(t_centers, ws_smooth, lw=2)
-        ax_macro.plot(t_centers, ws_sharp, lw=1)
-
-        ax_macro.axhline(relative_threshold_val, ls="--")
-
-        for b in network_bursts:
-            ax_macro.axvspan(b["start"], b["end"], alpha=0.25)
-
-        for s in superbursts:
-            ax_macro.axvspan(s["start"], s["end"], alpha=0.3)
-
-    # ---------------------------------------------------------
-    # 9. Return
+    # 9. Return (unchanged)
     # ---------------------------------------------------------
     return {
 
         "burstlets": {"events": burstlets, "metrics": level_metrics(burstlets)},
-
         "network_bursts": {"events": network_bursts, "metrics": level_metrics(network_bursts)},
-
         "superbursts": {"events": superbursts, "metrics": level_metrics(superbursts)},
 
         "diagnostics": {
@@ -336,7 +296,7 @@ def compute_network_bursts(
             "biological_isi_s": biological_isi_s,
             "baseline_value": baseline_val,
             "spread_mad": spread_mad,
-            "merge_floor": merge_floor,
+            "merge_floor": relative_threshold_val,
             "burstlet_merge_gap_s": burstlet_merge_gap_s,
             "network_merge_gap_s": network_merge_gap_s,
             "n_units": n_units,
@@ -346,8 +306,8 @@ def compute_network_bursts(
 
         "plot_data": {
             "t": t_centers,
-            "participation_signal": ws_sharp,          # dimensionless, fraction-like
-            "rate_signal": ws_smooth,                  # Hz / unit
+            "participation_signal": ws_sharp,
+            "rate_signal": ws_smooth,
             "burst_peak_times": np.array([b["peak_time"] for b in network_bursts]),
             "burst_peak_values": np.array([b["peak_synchrony"] for b in network_bursts]),
             "participation_baseline": baseline_val,

@@ -295,7 +295,7 @@ def plot_clean_network(
     part_line, = ax.plot(
         t,
         participation_signal,
-        color="tab:orange",
+        color="#B22222",
         lw=1.3,
         zorder=3,
         label="Participation / recruitment"
@@ -338,7 +338,7 @@ def plot_clean_network(
         rate_line, = ax_rate.plot(
             t,
             rate_signal,
-            color="#B22222",
+            color="tab:orange",
             lw=1.0,
             alpha=0.95,
             zorder=4,
@@ -367,8 +367,8 @@ def plot_clean_network(
             else:
                 ax_rate.set_ylim(smin - 1.0, smax + 1.0)
 
-        ax_rate.set_ylabel("Mean firing rate / unit (Hz)", color="#B22222")
-        ax_rate.tick_params(axis="y", colors="#B22222", direction="out")
+        ax_rate.set_ylabel("Mean firing rate / unit (Hz)", color="tab:orange")
+        ax_rate.tick_params(axis="y", colors="tab:orange", direction="out")
         ax_rate.spines["top"].set_visible(False)
         ax_rate.spines["left"].set_visible(False)
 
