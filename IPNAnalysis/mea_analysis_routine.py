@@ -716,6 +716,7 @@ class MEAPipeline:
                 show_burstlet_ticks=True,     # black top ticks
                 show_network_ticks=True,      # blue top ticks
                 show_superburst_bars=True,    # purple top bars
+                min_superburst_duration_s=2.5
             )
 
             # ---------------------------------------------------------
