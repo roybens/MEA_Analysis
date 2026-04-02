@@ -201,7 +201,8 @@ def compute_network_bursts(
             "fragment_count": sum(ev.get("fragment_count", 1) for ev in evs),
             "total_spikes": sum(ev["total_spikes"] for ev in evs),
             "participation": participating_units / n_units,
-            "burst_peak": max(ev["burst_peak"] for ev in evs)
+            "burst_peak": max(ev["burst_peak"] for ev in evs),
+            "n_sub_events": len(evs)
         }
     def get_valley_min(prev, nxt, ws_sharp, t_centers):
         valley_mask = (t_centers >= prev["end"]) & (t_centers <= nxt["start"])
@@ -255,6 +256,7 @@ def compute_network_bursts(
 
     network_bursts = merge(burstlets, burstlet_merge_gap_s,relative_threshold_val)
     superbursts = merge(network_bursts, network_merge_gap_s,relative_threshold_val)
+    superbursts = [sb for sb in superbursts if sb["n_sub_events"] >= 2]
 
     # ---------------------------------------------------------
     # 8. Metrics (FIX CV)
