@@ -17,6 +17,7 @@ import traceback
 import logging
 import argparse
 import configparser
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
@@ -33,6 +34,9 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf as pdf
 
 from spikeinterface.sortingcomponents.peak_detection import detect_peaks
+
+
+_LOGGER_SETUP_LOCK = threading.Lock()
 
 # Scientific Libraries
 import spikeinterface.full as si
@@ -285,19 +289,37 @@ class MEAPipeline:
 
     # --- Setup Methods ---
     def _setup_logger(self, log_file):
-        logger = logging.getLogger(f"mea_{self.stream_id}")
+        run_token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(self.run_id or "unknown"))
+        pattern_token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(self.relative_pattern or "unknown"))
+        logger = logging.getLogger(f"mea.{pattern_token}.{self.stream_id}.{run_token}")
         logger.setLevel(logging.DEBUG if self.verbose else logging.INFO)
-        # Prevent duplicate handlers if running in loop
-        if not logger.handlers:
-            formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
-            fh = logging.FileHandler(log_file, mode='a') # Append to log per run
-            #add a big header
-            fh.stream.write("\n" + "="*80 + "\n")
-            fh.setFormatter(formatter)
-            logger.addHandler(fh)
-            ch = logging.StreamHandler(sys.stdout)
-            ch.setFormatter(formatter)
-            logger.addHandler(ch)
+        logger.propagate = False
+
+        formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
+        with _LOGGER_SETUP_LOCK:
+            has_file_handler = any(
+                isinstance(h, logging.FileHandler)
+                and Path(getattr(h, "baseFilename", "")).resolve() == Path(log_file).resolve()
+                for h in logger.handlers
+            )
+            has_stdout_handler = any(
+                isinstance(h, logging.StreamHandler)
+                and not isinstance(h, logging.FileHandler)
+                and getattr(h, "stream", None) is sys.stdout
+                for h in logger.handlers
+            )
+
+            if not has_file_handler:
+                fh = logging.FileHandler(log_file, mode='a') # Append to log per run
+                #add a big header
+                fh.stream.write("\n" + "="*80 + "\n")
+                fh.setFormatter(formatter)
+                logger.addHandler(fh)
+
+            if not has_stdout_handler:
+                ch = logging.StreamHandler(sys.stdout)
+                ch.setFormatter(formatter)
+                logger.addHandler(ch)
         return logger
 
     def _apply_runtime_controls(self):

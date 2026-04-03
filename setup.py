@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from setuptools import setup
+from setuptools import find_packages, setup
 
 
 # This repository is both the VCS root and the top-level Python package directory.
@@ -12,10 +12,13 @@ setup(
     version="0.0.0",
     packages=[
         "MEA_Analysis",
-        "MEA_Analysis.IPNAnalysis",
+        *[
+            pkg
+            for pkg in find_packages(where=".")
+            if pkg == "IPNAnalysis" or pkg.startswith("IPNAnalysis.")
+        ],
     ],
     package_dir={
         "MEA_Analysis": ".",
-        "MEA_Analysis.IPNAnalysis": "IPNAnalysis",
     },
 )
