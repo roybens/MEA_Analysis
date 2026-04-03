@@ -16,11 +16,6 @@ from .backends.deepunitmatch_adapter import (
     preprocess_waveforms,
 )
 
-
-UNITMATCH_CLONE_ROOT = Path("/home/adamm/dev/pkgs/UnitMatch/UnitMatchPy")
-DEEPUNITMATCH_CLONE_DIR = UNITMATCH_CLONE_ROOT / "DeepUnitMatch"
-
-
 @dataclass
 class UnitMatchConfig:
     enabled: bool = False
@@ -37,9 +32,8 @@ class UnitMatchConfig:
     max_iterations: int = 5
     max_spikes_per_unit: int = 100
     keep_all_iterations: bool = True
-    backend_name: str = "deepunitmatch_clone"
+    backend_name: str = "deepunitmatch_installed"
     backend_device: str = "cpu"
-    backend_clone_root: str | None = None
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -595,7 +589,7 @@ def _matrix_directional_scores_for_pairs(
     return scores, reverse_scores, missing
 
 
-def _score_pairs_deepunitmatch_clone_only(
+def _score_pairs_deepunitmatch_installed(
     *,
     pairs: list[tuple[str, str]],
     sorting: Any,
@@ -605,18 +599,13 @@ def _score_pairs_deepunitmatch_clone_only(
     throughput_iteration_dir: Path,
     logger: Any,
     backend_device: str,
-    backend_clone_root: str | None,
     max_spikes_per_unit: int,
 ) -> tuple[list[float] | None, list[float] | None, str, dict[str, Any]]:
-    clone_root = Path(backend_clone_root) if backend_clone_root else UNITMATCH_CLONE_ROOT
-    clone_dir = clone_root / "DeepUnitMatch"
-    availability = check_backend_availability(clone_root)
+    availability = check_backend_availability()
     probe: dict[str, Any] = {
         "module": "DeepUnitMatch",
-        "strategy": "deepunitmatch_clone_inference",
-        "clone_root": str(clone_root),
-        "clone_dir": str(clone_dir),
-        "clone_present": bool(availability.diagnostics.get("clone_present", False)),
+        "strategy": "deepunitmatch_installed_inference",
+        "import_target": str(availability.import_target),
         "import_ok": bool(availability.available),
         "reason": None,
     }
@@ -670,7 +659,6 @@ def _score_pairs_deepunitmatch_clone_only(
             channel_pos=channel_pos,
             matrix_unit_ids=matrix_unit_ids,
             prep_dir=prep_dir,
-            clone_root=clone_root,
         )
         probe["preprocess_diagnostics"] = prep_diag
         if processed_dir is None:
@@ -679,7 +667,6 @@ def _score_pairs_deepunitmatch_clone_only(
 
         infer_result = infer_similarity_matrix(
             processed_dir=processed_dir,
-            clone_root=clone_root,
             device=str(backend_device),
         )
         probe["inference_diagnostics"] = infer_result.diagnostics
@@ -713,7 +700,7 @@ def _score_pairs_deepunitmatch_clone_only(
         probe["reason"] = "ok" if missing < len(pairs) else "no_pair_id_overlap"
         if missing >= len(pairs):
             return None, None, "", probe
-        return scores, reverse_scores, "DeepUnitMatch.adapter_clone_inference", probe
+        return scores, reverse_scores, "DeepUnitMatch.adapter_installed_inference", probe
     except Exception as exc:
         probe["reason"] = "deepunitmatch_runtime_error"
         probe["message"] = str(exc)
@@ -936,8 +923,6 @@ def run_unitmatch_merge_if_enabled(
     config: UnitMatchConfig,
     iteration_index: int = 0,
 ) -> tuple[Any, dict[str, Any]]:
-    clone_root_cfg = Path(str(config.backend_clone_root)) if config.backend_clone_root else UNITMATCH_CLONE_ROOT
-    clone_dir_cfg = clone_root_cfg / "DeepUnitMatch"
     out_dir = Path(output_dir) / str(config.output_subdir_name)
     throughput_root = Path(output_dir) / str(config.throughput_subdir_name)
     iteration_dir = throughput_root / f"iteration_{int(max(0, iteration_index))}"
@@ -963,10 +948,9 @@ def run_unitmatch_merge_if_enabled(
         "n_oversplit_suggestions": 0,
         "n_scored_pairs": 0,
         "n_selected_non_conflicting_pairs": 0,
-        "clone_import": {
-            "clone_root": str(clone_root_cfg),
-            "clone_dir": str(clone_dir_cfg),
-            "clone_present": bool(clone_root_cfg.exists() and clone_dir_cfg.exists()),
+        "backend_import": {
+            "backend_name": str(config.backend_name),
+            "import_target": "DeepUnitMatch",
             "import_ok": False,
             "failure_reason": None,
         },
@@ -1021,7 +1005,7 @@ def run_unitmatch_merge_if_enabled(
             summary["status"] = "candidates_only"
             summary["message"] = "Scoring disabled; wrote unscored candidate pairs"
         else:
-            scores, reverse_scores, backend, probe = _score_pairs_deepunitmatch_clone_only(
+            scores, reverse_scores, backend, probe = _score_pairs_deepunitmatch_installed(
                 pairs=pairs,
                 sorting=sorting,
                 recording=recording,
@@ -1030,11 +1014,10 @@ def run_unitmatch_merge_if_enabled(
                 throughput_iteration_dir=iteration_dir,
                 logger=logger,
                 backend_device=str(config.backend_device),
-                backend_clone_root=config.backend_clone_root,
                 max_spikes_per_unit=int(config.max_spikes_per_unit),
             )
-            summary["clone_import"]["import_ok"] = bool(probe.get("import_ok", False))
-            summary["clone_import"]["failure_reason"] = probe.get("reason")
+            summary["backend_import"]["import_ok"] = bool(probe.get("import_ok", False))
+            summary["backend_import"]["failure_reason"] = probe.get("reason")
             summary["deepunitmatch_scoring_diagnostics"] = probe
 
             if scores is None:
@@ -1061,7 +1044,7 @@ def run_unitmatch_merge_if_enabled(
                 summary["n_scored_pairs"] = int(len(rows))
                 summary["score_statistics"] = _score_stats(scores)
                 summary["status"] = "scored_ok"
-                summary["message"] = "Scored dry-run completed with DeepUnitMatch clone inference"
+                summary["message"] = "Scored dry-run completed with installed DeepUnitMatch backend"
 
         _write_candidates_csv(candidates_path, rows)
         summary["artifacts"]["candidates_csv"] = str(candidates_path)
@@ -1159,12 +1142,12 @@ def run_unitmatch_merge_if_enabled(
         summary["merge_application"] = merge_result
 
         logger.info(
-            "UnitMatch dry-run: units=%d candidate_pairs=%d scored=%s clone_import_ok=%s reason=%s",
+            "UnitMatch dry-run: units=%d candidate_pairs=%d scored=%s backend_import_ok=%s reason=%s",
             len(unit_ids),
             len(rows),
             bool(summary["status"] == "scored_ok"),
-            bool(summary["clone_import"].get("import_ok")),
-            summary["clone_import"].get("failure_reason"),
+            bool(summary["backend_import"].get("import_ok")),
+            summary["backend_import"].get("failure_reason"),
         )
 
         if hasattr(merged_sorting, "get_num_units"):
