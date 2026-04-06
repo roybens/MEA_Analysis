@@ -53,6 +53,7 @@ python IPNAnalysis/mea_analysis_routine.py /data/exp/run_001/Network/data.raw.h5
 - [SpikeInterface](https://github.com/SpikeInterface/spikeinterface)
 - Kilosort4 (GPU recommended, ≥ 8 GB VRAM)
 - See `requirements.txt` for full list
+  - use pip install requirements.txt for install dependencies
 
 ## Docker
 
