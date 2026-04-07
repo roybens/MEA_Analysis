@@ -333,7 +333,7 @@ def plot_clean_network(
         )
 
     # --- cosmetics ---
-    ax.set_ylabel("Network synchrony")
+    ax.set_ylabel("Network synchrony (# active units)")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.tick_params(direction="out")
