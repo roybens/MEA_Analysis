@@ -93,16 +93,38 @@ def compute_network_bursts(
         participation_frac = participating / len(units)
         
         # Detection Gating
-        if ws_sharp[p] < relative_threshold_val: continue
-        if participation_frac < min_burstlet_participation: continue
-        
+        if ws_sharp[p] < relative_threshold_val:
+            if verbose:
+                print(f"  [burstlet filter] peak@{t_centers[p]:.3f}s rejected: "
+                      f"synchrony {ws_sharp[p]:.3f} < threshold {relative_threshold_val:.3f}")
+            continue
+        if participation_frac < min_burstlet_participation:
+            if verbose:
+                print(f"  [burstlet filter] peak@{t_centers[p]:.3f}s rejected: "
+                      f"participation {participation_frac:.3f} < {min_burstlet_participation:.3f}")
+            continue
+
         # Metric Calculations
         total_spikes = int(np.sum(PFR[start_idx:end_idx+1]) * bin_size)
         denom = (duration_s * max(1, participating))
         burst_density = total_spikes / denom if denom > 0 else 0
-        peak_rate_hz_per_unit = np.max(P[start_idx:end_idx+1]) / bin_size / len(units)
+        # Normalize by participating units (not all units) so large silent populations
+        # don't deflate the metric and incorrectly reject genuine bursts.
+        # max(1, participating) guards against division-by-zero; if participating==0
+        # the candidate was already rejected by the participation filter above.
+        peak_rate_hz_per_unit = np.max(P[start_idx:end_idx+1]) / bin_size / max(1, participating)
 
-        if burst_density < min_burst_density_Hz or peak_rate_hz_per_unit < min_absolute_rate_Hz: continue
+        # Require BOTH metrics to be poor before rejecting.  Using OR is too
+        # aggressive: a long-duration burst can have lower spike density while
+        # retaining strong peak synchrony, and a short burst may have high density
+        # but modest peak rate.  Either metric alone being high is sufficient
+        # evidence of a genuine burst.
+        if burst_density < min_burst_density_Hz and peak_rate_hz_per_unit < min_absolute_rate_Hz:
+            if verbose:
+                print(f"  [burstlet filter] peak@{t_centers[p]:.3f}s rejected: "
+                      f"density {burst_density:.3f} < {min_burst_density_Hz} AND "
+                      f"peak_rate {peak_rate_hz_per_unit:.3f} < {min_absolute_rate_Hz}")
+            continue
 
         burstlets.append({
             "start": float(start_t), "end": float(end_t), "duration_s": float(duration_s),
