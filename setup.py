@@ -13,9 +13,13 @@ setup(
     packages=[
         "MEA_Analysis",
         "MEA_Analysis.IPNAnalysis",
+        "MEA_Analysis.IPNAnalysis.pipeline",
+        "MEA_Analysis.IPNAnalysis.driver",
     ],
     package_dir={
         "MEA_Analysis": ".",
         "MEA_Analysis.IPNAnalysis": "IPNAnalysis",
+        "MEA_Analysis.IPNAnalysis.pipeline": "IPNAnalysis/pipeline",
+        "MEA_Analysis.IPNAnalysis.driver": "IPNAnalysis/driver",
     },
 )
