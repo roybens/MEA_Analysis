@@ -624,7 +624,6 @@ class MEAPipeline:
             # A. Run network burst detector
             network_data = compute_network_bursts(
                 SpikeTimes=spike_times,
-                plot=False
             )
 
             if isinstance(network_data, dict) and "error" in network_data:
