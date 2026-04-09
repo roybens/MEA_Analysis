@@ -255,8 +255,10 @@ class MEAPipeline:
         
         # Define Directory Structure: Output / Pattern / Well
         self.relative_pattern = self.metadata.get('relative_pattern', 'UnknownPattern')
-        self.output_root = Path(output_root)
-        base_output_dir = Path(output_root) / self.relative_pattern / self.stream_id
+        # Default output_root: "AnalyzedData" sibling of the recording file directory
+        effective_output_root = Path(output_root) if output_root is not None else (self.file_path.parent / "AnalyzedData")
+        self.output_root = effective_output_root
+        base_output_dir = effective_output_root / self.relative_pattern / self.stream_id
         self.output_dir = (
             base_output_dir / self.output_subdir_after_well
             if self.output_subdir_after_well is not None
