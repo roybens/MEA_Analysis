@@ -30,6 +30,7 @@ NetworkAnalysis/ActivityQuality/*.csv
 kilosort4_output/
 Connections/pyuoi/*
 Connections/pyuoi/
+logs/
 # --- Python packaging / install artifacts ---
 build/
 dist/

@@ -836,7 +836,7 @@ class MEAPlotter:
                     gdata[y].values[main_mask],
                     color=color,
                     alpha=0.6,
-                    s=15,
+                    s=10,
                     edgecolor="black",
                     linewidth=0.25,
                     zorder=2
