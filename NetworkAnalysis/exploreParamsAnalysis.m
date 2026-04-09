@@ -42,6 +42,12 @@ outDir = append(opDir, '/Network_outputs/');
 parameters = {'Gaussian', 'BinSize', 'Threshold', 'StartStopThreshold', 'MinPeakDistance'};
 parameterValues = {gaussianSigma, binSize, thresholdBurst, thresholdStartStop, minPeakDistance};
 
+% Define a color map for neuron sources (NeuronSource values from the ref sheet).
+% Keys are NeuronSource labels; values are hex color strings.
+% The order of keys controls the legend order in the output plots.
+% Example: genoColors = containers.Map({'MxWT','FxHET','MxHEMI'}, {'#4C72B0','#D55E00','#A63226'});
+genoColors = containers.Map('KeyType', 'char', 'ValueType', 'any');
+
 % Define variable parameters for each main parameter
 variableParams = {
     [0, 0.02, 1],  ... Gaussian sigma variations
@@ -69,7 +75,7 @@ parfor i = 1:numel(parameters)
 
 
     % Call Compare_NetworkParameters function with the current parameter
-    Compare_NetworkParameters(dataDir, refDir, outDir, parameters{i}, parameterValues{i}, 'VarParameter',variableParams{i}, 'BaseParameters', base_parameters);
+    Compare_NetworkParameters(dataDir, refDir, outDir, parameters{i}, parameterValues{i}, 'VarParameter',variableParams{i}, 'BaseParameters', base_parameters, 'GenoColors', genoColors);
     
 
 end
