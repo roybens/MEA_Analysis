@@ -66,11 +66,14 @@ function [bursts,burstTimeVariables] = gaussianFiringRateBurstDetector(networkDa
                     meanBurstDuration =NaN;
                     covSpikesPerBurst =NaN ;
                     covBurstDuration = NaN;
+                    meanParticipationRatio = NaN;
+                    covParticipationRatio = NaN;
                     IBIStrings = {''};
                     BurstPeakStrings = {''};
                     AbsBurstPeakStrings = {''};
                     BurstDurationStrings = {''};
                     spikesPerBurstStrings = {''};
+                    participationPerBurstStrings = {''};
                     baselineFiringRate = mean(networkAct.firingRate);
                     else
                     % Initialize the spikesPerBurst array to zeros 
@@ -115,6 +118,28 @@ function [bursts,burstTimeVariables] = gaussianFiringRateBurstDetector(networkDa
                     AbsBurstPeakStrings = {strjoin(arrayfun(@num2str, AbsBP, 'UniformOutput', false), ',')};
                     BurstDurationStrings = {strjoin(arrayfun(@num2str, bursts, 'UniformOutput', false), ',')};
                     spikesPerBurstStrings = {strjoin(arrayfun(@num2str, spikesPerBurst, 'UniformOutput', false), ',')};
+                    % Compute participation ratio per burst (fraction of unique electrodes active)
+                    totalChannels = length(unique(ch));
+                    if totalChannels > 0
+                        participationPerBurst = zeros(size(edges, 1), 1);
+                        for i = 1:size(edges, 1)
+                            chInBurst = ch(inBurstWindows(i, :));
+                            participationPerBurst(i) = length(unique(chInBurst)) / totalChannels;
+                        end
+                        meanParticipationRatio = mean(participationPerBurst);
+                        stdParticipationRatio = std(participationPerBurst);
+                        if meanParticipationRatio > 0
+                            covParticipationRatio = (stdParticipationRatio / meanParticipationRatio) * 100;
+                        else
+                            covParticipationRatio = NaN;
+                        end
+                        participationPerBurstStrings = {strjoin(arrayfun(@num2str, participationPerBurst, 'UniformOutput', false), ',')};
+                    else
+                        participationPerBurst = NaN(size(edges, 1), 1);
+                        meanParticipationRatio = NaN;
+                        covParticipationRatio = NaN;
+                        participationPerBurstStrings = {''};
+                    end
                     end
                     else
                     spikesPerBurst = NaN;
@@ -126,11 +151,14 @@ function [bursts,burstTimeVariables] = gaussianFiringRateBurstDetector(networkDa
                     meanBurstDuration =NaN;
                     covSpikesPerBurst =NaN ;
                     covBurstDuration = NaN;
+                    meanParticipationRatio = NaN;
+                    covParticipationRatio = NaN;
                     IBIStrings = {''};
                     BurstPeakStrings = {''};
                     AbsBurstPeakStrings = {''};
                     BurstDurationStrings = {''};
                     spikesPerBurstStrings = {''};
+                    participationPerBurstStrings = {''};
                     baselineFiringRate = mean(networkAct.firingRate);
                 end
                bursts = table(...
@@ -140,9 +168,10 @@ function [bursts,burstTimeVariables] = gaussianFiringRateBurstDetector(networkDa
                     meanSpikesPerBurst, covSpikesPerBurst, ...
                     meanAbsBP, covAbsBP, ...
                     meanBurstDuration, covBurstDuration, ...
+                    meanParticipationRatio, covParticipationRatio, ...
                     baselineFiringRate, ...
                     IBIStrings, BurstPeakStrings, AbsBurstPeakStrings, ...
-                    BurstDurationStrings, spikesPerBurstStrings, ...
+                    BurstDurationStrings, spikesPerBurstStrings, participationPerBurstStrings, ...
                     'VariableNames', { ...
                         'mean_IBI', 'cov_IBI', ...
                         'mean_Burst_Peak', 'cov_Burst_Peak', ...
@@ -150,9 +179,10 @@ function [bursts,burstTimeVariables] = gaussianFiringRateBurstDetector(networkDa
                         'mean_Spike_per_Burst', 'cov_Spike_per_Burst', ...
                         'mean_Burst_Peak_Abs', 'cov_Burst_Peak_Abs', ...
                         'mean_BurstDuration', 'cov_BurstDuration', ...
+                        'mean_ParticipationRatio', 'cov_ParticipationRatio', ...
                         'BaselineFiringRate', ...
                         'IBI_Distribution', 'Burst_Peak_Distribution', 'Abs_Burst_Peak_Distribution', ...
-                        'Burst_Duration_Distribution', 'SpikesPerBurst_Distribution' ...
+                        'Burst_Duration_Distribution', 'SpikesPerBurst_Distribution', 'ParticipationRatio_Distribution' ...
                     });
                burstTimeVariables =struct();
                burstTimeVariables.chWithinBurst = chWithinBurst;
