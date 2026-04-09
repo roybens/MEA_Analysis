@@ -3,13 +3,11 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
 
-def compute_network_bursts(
-    ax_raster=None, ax_macro=None, SpikeTimes=None,
+def compute_network_bursts(SpikeTimes=None,
     gamma=1.0, min_burstlet_participation=0.20,
     min_absolute_rate_Hz=0.5, min_burst_density_Hz=1.0,
     min_relative_height=0.1, extent_frac=0.30,
-   network_merge_gap_min = 0.75,
-    superburst_min_duration_s=2.5, plot=False, verbose=True
+   network_merge_gap_min = 0.75,verbose=True
 ):
 
     # ---------------------------------------------------------
@@ -213,8 +211,7 @@ def compute_network_bursts(
             return None
         return float(np.min(valley_vals))
     
-
-    def merge(events, gap, floor_val, min_dur=0):
+    def merge_strict(events, gap, floor_val, min_dur=0):
 
         if not events:
             return []
@@ -231,14 +228,16 @@ def compute_network_bursts(
 
             valley_duration = nxt["start"] - e
             valley_min = get_valley_min(curr[-1], nxt, ws_sharp, t_centers)
+
             if valley_min is None:
-                valley_not_too_deep = (valley_duration <= bin_size)
+                valley_ok = (valley_duration <= bin_size)
             else:
-                valley_not_too_deep = (valley_min >= floor_val)
-            # FIX: remove overly strict valley constraints
+                # STRICT: must stay in burst regime
+                valley_ok = (valley_min >= floor_val)
+
             merge_condition = (
                 (valley_duration <= gap)
-                and valley_not_too_deep
+                and valley_ok
             )
 
             if merge_condition:
@@ -253,10 +252,70 @@ def compute_network_bursts(
         merged.append(finalize(curr, s, e))
 
         return [m for m in merged if m["duration_s"] >= min_dur]
+    
 
-    network_bursts = merge(burstlets, burstlet_merge_gap_s,relative_threshold_val)
-    superbursts = merge(network_bursts, network_merge_gap_s,relative_threshold_val)
-    superbursts = [sb for sb in superbursts if sb["n_sub_events"] >= 2]
+    def merge_clustered(events, gap, baseline_val, threshold_val, min_dur=0):
+
+        if not events:
+            return []
+
+        events = sorted(events, key=lambda x: x["start"])
+
+        merged = []
+        curr = [events[0]]
+
+        s = events[0]["start"]
+        e = events[0]["end"]
+
+        for nxt in events[1:]:
+
+            valley_duration = nxt["start"] - e
+            valley_min = get_valley_min(curr[-1], nxt, ws_sharp, t_centers)
+
+            if valley_min is None:
+                valley_ok = (valley_duration <= bin_size)
+            else:
+                # RELAXED: allow dip below burst threshold but not to silence
+                valley_ok = (
+                    valley_min > baseline_val and
+                    valley_min < threshold_val
+                )
+
+            merge_condition = (
+                (valley_duration <= gap)
+                and valley_ok
+            )
+
+            if merge_condition:
+                curr.append(nxt)
+                e = max(e, nxt["end"])
+            else:
+                merged.append(finalize(curr, s, e))
+                curr = [nxt]
+                s = nxt["start"]
+                e = nxt["end"]
+
+        merged.append(finalize(curr, s, e))
+
+        return [
+            m for m in merged
+            if m["duration_s"] >= min_dur and m["n_sub_events"] >= 2
+        ]
+    
+    
+    network_bursts = merge_strict(
+        burstlets,
+        burstlet_merge_gap_s,
+        relative_threshold_val
+    )
+
+    superbursts = merge_clustered(
+        network_bursts,
+        network_merge_gap_s,
+        baseline_val,
+        relative_threshold_val,
+    )
+    #superbursts = [sb for sb in superbursts if sb["n_sub_events"] >= 2]
 
     # ---------------------------------------------------------
     # 8. Metrics (FIX CV)
