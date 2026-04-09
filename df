@@ -1,0 +1,78 @@
+[33mcommit 559819dad1f60b3d89354e69241b361d211526f0[m
+Author: mandarmp <mandarmpatil@outlook.com>
+Date:   Thu Jan 8 11:22:32 2026 -0800
+
+    Burst Detection Improvement
+
+[1mdiff --git a/IPNAnalysis/mea_analysis_routine.py b/IPNAnalysis/mea_analysis_routine.py[m
+[1m--- a/IPNAnalysis/mea_analysis_routine.py[m
+[1m+++ b/IPNAnalysis/mea_analysis_routine.py[m
+[36m@@ -608,10 +582,1 @@[m
+[31m-            with open(self.output_dir / "network_results.json", 'w') as f:[m
+[31m-                class NpEncoder(json.JSONEncoder):[m
+[31m-                    def default(self, obj):[m
+[31m-                        if isinstance(obj, np.integer): return int(obj)[m
+[31m-                        if isinstance(obj, np.floating): return float(obj)[m
+[31m-                        if isinstance(obj, np.ndarray): return obj.tolist()[m
+[31m-                        return super(NpEncoder, self).default(obj)[m
+[31m-                json.dump(network_data, f, cls=NpEncoder, indent=2)[m
+[31m-        except Exception as e:[m
+[31m-            self.logger.error(f"Burst analysis error: {e}")[m
+[32m+            # 1. Load Spike Times[m
+
+[33mcommit 935ed1e112ce6eb484ced417847b8000a80ca5ab[m
+Author: mandarmp <mandarmpatil@outlook.com>
+Date:   Sun Dec 28 19:44:35 2025 -0800
+
+    Fixes for Class based and added Reanalyze bursts feature
+
+[1mdiff --git a/IPNAnalysis/mea_analysis_routine.py b/IPNAnalysis/mea_analysis_routine.py[m
+[1m--- a/IPNAnalysis/mea_analysis_routine.py[m
+[1m+++ b/IPNAnalysis/mea_analysis_routine.py[m
+[36m@@ -642,3 +475,10 @@[m
+[31m-            except Exception as e:[m
+[31m-                self.logger.error(f"Burst Analysis Failed: {e}")[m
+[31m-                self.logger.error(traceback.format_exc())[m
+[32m+            with open(self.output_dir / "network_results.json", 'w') as f:[m
+[32m+                class NpEncoder(json.JSONEncoder):[m
+[32m+                    def default(self, obj):[m
+[32m+                        if isinstance(obj, np.integer): return int(obj)[m
+[32m+                        if isinstance(obj, np.floating): return float(obj)[m
+[32m+                        if isinstance(obj, np.ndarray): return obj.tolist()[m
+[32m+                        return super(NpEncoder, self).default(obj)[m
+[32m+                json.dump(network_data, f, cls=NpEncoder, indent=2)[m
+[32m+        except Exception as e:[m
+[32m+            self.logger.error(f"Burst analysis error: {e}")[m
+
+[33mcommit 1efd6e71872d66aa747347386676827f5faba330[m
+Author: mandarmp <mandarmpatil@outlook.com>
+Date:   Tue Dec 23 17:33:08 2025 -0800
+
+     Refactor: class based implementation of the 2D MEA and merging With and without spikesorting
+
+[1mdiff --git a/IPNAnalysis/mea_analysis_routine.py b/IPNAnalysis/mea_analysis_routine.py[m
+[1m--- a/IPNAnalysis/mea_analysis_routine.py[m
+[1m+++ b/IPNAnalysis/mea_analysis_routine.py[m
+[36m@@ -1368,4 +642,3 @@[m
+[31m-        # === Resource cleanup ===[m
+[31m-        del recording_chunk[m
+[31m-        del sorting_obj[m
+[31m-        del sorting_analyzer[m
+[32m+            except Exception as e:[m
+[32m+                self.logger.error(f"Burst Analysis Failed: {e}")[m
+[32m+                self.logger.error(traceback.format_exc())[m
+
+[33mcommit fdcce92cf1f90a1ce473e2584311abedf49ccb06[m
+Author: mandarmp <mandarmpatil@outlook.com>
+Date:   Wed Oct 22 13:41:34 2025 -0700
+
+    Subproces run for resource management, exporttophy and clear file flags
+
+[1mdiff --git a/IPNAnalysis/mea_analysis_pipeline.py b/IPNAnalysis/mea_analysis_routine.py[m
+[1m--- a/IPNAnalysis/mea_analysis_pipeline.py[m
+[1m+++ b/IPNAnalysis/mea_analysis_routine.py[m
+[36m@@ -1158,0 +1222,4 @@[m
+[32m+        # === Resource cleanup ===[m
+[32m+        del recording_chunk[m
+[32m+        del sorting_obj[m
+[32m+        del sorting_analyzer[m

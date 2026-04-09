@@ -22,10 +22,11 @@
   },
 
   "plotting": {
-    "_comment": "plot_mode: separate | merged. raster_sort: none | firing_rate | location_y | unit_id.",
+    "_comment": "plot_mode: separate | merged. raster_sort: none | firing_rate | location_y | unit_id. fixed_y: use fixed y-axis limits (run once without it first).",
     "plot_mode": "separate",
-    "raster_sort": "none",
-    "plot_debug": false
+    "raster_sort": "firing_rate",
+    "plot_debug": false,
+    "fixed_y": false
   },
 
   "curation": {
