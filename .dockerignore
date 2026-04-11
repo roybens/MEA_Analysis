@@ -1,4 +1,26 @@
-# Ignore large files and data
+# Large data / results — mount these at runtime instead
+AnalyzedData/
+df/
 
-AnalyzedData/*
+# Git history (not needed inside the image)
+.git/
+.gitmodules
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Notebooks / scratch files that aren't part of the pipeline
+**/*.ipynb
+
+# Dev tooling
+.venv/
+venv/
+*.env
 
