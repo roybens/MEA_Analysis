@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -27,7 +27,11 @@ WORKDIR /
 
 # install Python deps
 COPY dockers/spikesorter/requirements.txt /requirements.txt
+# Install PyTorch with CUDA support first; the default PyPI index only ships
+# CPU-only wheels, so kilosort's transitive torch dep would silently run on CPU.
+# torch 2.9.1 ships cu126 wheels (CUDA 12.6 is ABI-compatible with 12.8 drivers).
 RUN pip3 install --upgrade pip setuptools wheel && \
+    pip3 install torch==2.9.1 --extra-index-url https://download.pytorch.org/whl/cu126 && \
     pip3 install -r /requirements.txt && \
     pip3 cache purge
 

@@ -18,6 +18,9 @@ cuda-python==12.8.0
 spikeinterface==0.103.0
 kilosort==4.1.1
 probeinterface==0.3.0
+# torch is installed via --extra-index-url https://download.pytorch.org/whl/cu126
+# in the Dockerfile to get the CUDA-enabled wheel. Listed here for version pinning.
+torch==2.9.1
 
 # -------------------------
 # VIS + STORAGE
