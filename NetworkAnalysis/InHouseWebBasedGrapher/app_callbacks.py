@@ -1,7 +1,7 @@
 from dash import dcc, html, callback_context
 from dash.dependencies import Input, Output, State, ALL
 from data_processing import parse_contents, parse_mat
-from plot_functions import plot_activity_graphs, plot_isi_graph, plot_bar_with_p_values
+from plot_functions import plot_metrics_graphs, plot_isi_graph
 import io, zipfile, base64
 import re
 default_colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
@@ -289,12 +289,7 @@ def register_callbacks(app):
 
         for metric in selected_metrics:
             print(f"Column '{metric}' dtype: {df[metric].dtype}")
-            if 'activity' in filename.lower():
-                images, svg_bytes_list, png_bytes_list = plot_activity_graphs(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
-            elif 'networks' in filename.lower():
-                images, svg_bytes_list, png_bytes_list = plot_bar_with_p_values(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
-            else:
-                raise(TypeError("No file of name activity or network found"))
+            images, svg_bytes_list, png_bytes_list = plot_metrics_graphs(df, selected_divs, [metric], ordered_genotypes, selected_colors_dict)
             graphs.extend(images)
             for i, svg_data in enumerate(svg_bytes_list):
                 all_svg_bytes_list.append((f"{metric}_plot.svg", svg_data))
