@@ -8,6 +8,10 @@ IPNAnalysis/sorting/*
 IPNAnalysis/Electrodes/*
 AnalyzedData/*
 AxonReconPipeline/data/*
+AxonReconPipeline/data/reconsraw/
+AxonReconPipeline/data/temp_data/
+AxonReconPipeline/data_csvs/
+AxonReconPipeline/toy_data_for_development/
 **.mat
 .vscode
 **.pkl
@@ -31,6 +35,8 @@ kilosort4_output/
 Connections/pyuoi/*
 Connections/pyuoi/
 logs/
+AxonReconAnalysis/_1_spikesort/__ref__/logs/
+*.err
 # --- Python packaging / install artifacts ---
 build/
 dist/
@@ -44,4 +50,3 @@ pip-wheel-metadata/
 .ruff_cache/
 __pycache__/
 *.py[cod]
-
