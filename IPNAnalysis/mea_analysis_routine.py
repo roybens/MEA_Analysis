@@ -1136,6 +1136,9 @@ class MEAPipeline:
             spike_times_file = self.output_dir / "spike_times.npy"
             if spike_times_file.exists():
                 spike_times = np.load(spike_times_file, allow_pickle=True).item()
+                if not spike_times:
+                    self.logger.error("No spike times found in saved spike_times.npy file.")
+                    return
                 if ids_list is not None:
                     spike_times = {uid: spike_times[uid] for uid in ids_list if uid in spike_times}
                 if not spike_times:
