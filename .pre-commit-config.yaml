@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: strip-jupyter-notebook-outputs
+        name: Strip Jupyter notebook outputs
+        entry: python3 scripts/strip_notebook_outputs.py
+        language: system
+        files: \.ipynb$
+        pass_filenames: true
