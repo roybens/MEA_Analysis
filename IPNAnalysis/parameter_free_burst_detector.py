@@ -3,11 +3,14 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
 
-def compute_network_bursts(SpikeTimes=None,
-    gamma=1.0, min_burstlet_participation=0.20,
-    min_absolute_rate_Hz=0.5, min_burst_density_Hz=1.0,
-    min_relative_height=0.1, extent_frac=0.30,
-   network_merge_gap_min = 0.75,verbose=True
+def compute_network_bursts(
+    SpikeTimes=None,
+    extent_frac=0.30,
+    network_merge_gap_min=0.75,
+    threshold_mad_scale=0.75,
+    min_burstlet_participation=0.0,
+    min_burst_density_Hz=0.0,
+    min_absolute_rate_Hz=0.0,
 ):
 
     # ---------------------------------------------------------
@@ -93,13 +96,12 @@ def compute_network_bursts(SpikeTimes=None,
     baseline_val = np.median(ws_sharp)
     spread_mad = np.median(np.abs(ws_sharp - baseline_val))
 
-    relative_threshold_val = max(participation_floor, baseline_val + 0.75 * spread_mad)
-    #min_peak_height = max(relative_threshold_val, min_relative_height)
+    relative_threshold_val = max(participation_floor, baseline_val + threshold_mad_scale * spread_mad)
 
     # ---------------------------------------------------------
     # 5. Peak detection (FIXED)
     # ---------------------------------------------------------
-    min_distance = int(max(1, biological_isi_s / bin_size))
+    #min_distance = int(max(1, biological_isi_s / bin_size))
     min_prominence = max(0.5 * spread_mad, 0.02)
 
 
@@ -147,8 +149,8 @@ def compute_network_bursts(SpikeTimes=None,
 
         participation_frac = participating / n_units
 
-        # if participation_frac < min_burstlet_participation:
-        #     continue
+        if min_burstlet_participation > 0 and participation_frac < min_burstlet_participation:
+            continue
 
         total_spikes = int(np.sum(spike_counts_total[start_idx:end_idx + 1]))
 
@@ -157,11 +159,11 @@ def compute_network_bursts(SpikeTimes=None,
 
         peak_drive_rate = np.max(rate_signal_raw[start_idx:end_idx + 1])
 
-        # if burst_density < min_burst_density_Hz:
-        #     continue
+        if min_burst_density_Hz > 0 and burst_density < min_burst_density_Hz:
+            continue
 
-        # if peak_drive_rate < min_absolute_rate_Hz:
-        #     continue
+        if min_absolute_rate_Hz > 0 and peak_drive_rate < min_absolute_rate_Hz:
+            continue
 
         burstlets.append({
             "start": float(start_t),
@@ -178,7 +180,7 @@ def compute_network_bursts(SpikeTimes=None,
     # ---------------------------------------------------------
     # 7. Merge logic (RELAXED ONLY WHERE NECESSARY)
     # ---------------------------------------------------------
-    max_valley_duration = 2 * biological_isi_s
+    #max_valley_duration = 2 * biological_isi_s
 
     def finalize(evs, s, e):
 
