@@ -101,6 +101,7 @@ def compute_network_bursts(
     # ---------------------------------------------------------
     # 5. Peak detection (FIXED)
     # ---------------------------------------------------------
+    #min_distance = int(max(1, biological_isi_s / bin_size))
     min_prominence = max(0.5 * spread_mad, 0.02)
 
 
@@ -179,6 +180,8 @@ def compute_network_bursts(
     # ---------------------------------------------------------
     # 7. Merge logic (RELAXED ONLY WHERE NECESSARY)
     # ---------------------------------------------------------
+    #max_valley_duration = 2 * biological_isi_s
+
     def finalize(evs, s, e):
 
         best = max(evs, key=lambda x: x["peak_synchrony"])
