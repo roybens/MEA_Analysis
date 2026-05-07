@@ -1,4 +1,6 @@
 # MEA_Analysis
+The latest pipeline is migrated to https://github.com/BenShalomLab/MEA-Analysis.git
+
 
 End-to-end pipeline for neuronal spike sorting and network burst analysis on **Maxwell Biosystems MEA** recordings.
 
