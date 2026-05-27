@@ -1132,8 +1132,16 @@ class MEAPipeline:
 
             np.save(self.output_dir / "spike_times.npy", spike_times)
         else:
-            self.logger.error("No spike times found for burst analysis.")
-            return
+            # Spike-detection-only path (--skip-spikesorting): self.sorting is None,
+            # but _spike_detection_only has written spike_times.npy. Load it here so
+            # the burst-analysis + raster plotting still runs.
+            spike_times_path = self.output_dir / "spike_times.npy"
+            if spike_times_path.exists():
+                self.logger.info("Loading spike times from %s", spike_times_path)
+                spike_times = np.load(spike_times_path, allow_pickle=True).item()
+            else:
+                self.logger.error("No spike times found for burst analysis.")
+                return
 
         if not spike_times:
             self.logger.warning("Spike times dictionary is empty. Skipping burst analysis.")
