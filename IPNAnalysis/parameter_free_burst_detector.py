@@ -20,7 +20,10 @@ def compute_network_bursts(
     if not units:
         return {"error": "no_units"}
 
-    all_spikes = np.sort(np.concatenate([SpikeTimes[u] for u in units if len(SpikeTimes[u]) > 0]))
+    non_empty = [SpikeTimes[u] for u in units if len(SpikeTimes[u]) > 0]
+    if not non_empty:
+        return {"error": "no_spikes"}
+    all_spikes = np.sort(np.concatenate(non_empty))
     if all_spikes.size == 0:
         return {"error": "no_spikes"}
 
