@@ -175,7 +175,7 @@ def main():
     plot_group.add_argument("--plot-debug", action="store_true",
         help="Overlay burst and superburst intervals on raster plot")
     plot_group.add_argument("--fixed-y", action="store_true",
-        help="Use fixed y-axis limits for raster plots — run once without it first to generate summary")
+        help="Use fixed y-axis limits for raster plots; by default this reuses existing outputs without rerunning sorting")
     # --- Curation (passed to each well) ---
     cur_group = parser.add_argument_group("curation (passed to each well)")
     cur_group.add_argument("--no-curation", action="store_true",

@@ -258,7 +258,7 @@ python run_pipeline_driver.py /data/experiment --config mea_config.json --force-
 | plotting | `--plot-mode` | `separate` or `merged` (default: separate) |
 | plotting | `--raster-sort` | `none`, `firing_rate`, `location_y`, `unit_id` |
 | plotting | `--plot-debug` | Overlay burst/superburst intervals on plot |
-| plotting | `--fixed-y` | Use fixed y-axis limits across wells by scanning existing `network_results.json` data for project-wide y-max; if spike times are missing, regenerate fixed-y plots from existing `network_results.json` when available |
+| plotting | `--fixed-y` | Use fixed y-axis limits across wells by scanning existing `network_results.json`; defaults to reanalyze/replot from existing outputs (no sorting rerun) unless `--force-restart` or `--resume-from` is used |
 | curation | `--no-curation` | Skip automatic unit curation |
 | curation | `--params` | JSON string or file with quality thresholds |
 | run control | `--force-restart` | Ignore checkpoints, restart from scratch |
@@ -279,5 +279,5 @@ Same groups and flags as the driver, minus `--dry` and the filtering group, plus
 
 - `--well` and `--rec` are always CLI-only — they identify a specific file/recording and are never set in config
 - `--debug`, `--dry`, `--force-restart`, `--reanalyze-bursts`, `--skip-spikesorting` are CLI-only run control flags — they represent one-off decisions and are never set in config
-- `--fixed-y` now derives project-wide y-max directly from existing `network_results.json` files and, if `spike_times.npy` is absent, attempts to regenerate fixed-y plots from the well’s existing `network_results.json`
+- `--fixed-y` derives project-wide y-max from existing `network_results.json` files and defaults to existing-data reanalysis/replot mode (no preprocessing/sorting rerun), unless `--force-restart` or `--resume-from` is provided
 - Everything else can be set in `mea_config.json` and overridden per-run from CLI

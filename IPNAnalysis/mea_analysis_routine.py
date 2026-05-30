@@ -1704,7 +1704,28 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
 
     _apply_resume_from_stage(pipeline, options.resume_from)
 
-    if bool(options.reanalyze_bursts):
+    auto_reanalyze_for_fixed_y = (
+        bool(options.fixed_y)
+        and not bool(options.reanalyze_bursts)
+        and not bool(options.force_restart)
+        and options.resume_from is None
+    )
+    if auto_reanalyze_for_fixed_y:
+        pipeline.logger.info(
+            "Fixed-y requested; using existing outputs to regenerate plots without rerunning preprocessing/sorting."
+        )
+
+    should_reanalyze_bursts = bool(options.reanalyze_bursts) or auto_reanalyze_for_fixed_y
+
+    if should_reanalyze_bursts:
+        network_results_path = pipeline.output_dir / "network_results.json"
+        spike_times_path = pipeline.output_dir / "spike_times.npy"
+        if not network_results_path.exists() and not spike_times_path.exists():
+            raise RuntimeError(
+                "Fixed-y/reanalyze mode requires existing outputs in the well output directory "
+                "(expected spike_times.npy or network_results.json). "
+                "Run once without --fixed-y, or use --force-restart to run the full pipeline."
+            )
         pipeline._run_burst_analysis(
             plot_mode=options.plot_mode,
             plot_debug=bool(options.plot_debug),
@@ -1809,7 +1830,7 @@ def main():
     plot_group.add_argument("--plot-debug", action="store_true",
         help="Overlay burst and superburst intervals on raster plot")
     plot_group.add_argument("--fixed-y", action="store_true",
-        help="Use fixed y-axis limits for raster plots — run once without it first to generate summary")
+        help="Use fixed y-axis limits for raster plots; by default this reuses existing outputs without rerunning sorting")
     # --- Curation ---
     cur_group = parser.add_argument_group("curation")
     cur_group.add_argument("--no-curation", action="store_true",
@@ -1952,8 +1973,16 @@ def main():
     rec = args.rec or "rec0000"
 
     try:
+        should_reanalyze_bursts = bool(args.reanalyze_bursts) or (
+            bool(fixed_y)
+            and not bool(args.force_restart)
+            and args.resume_from is None
+        )
+
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
+        elif should_reanalyze_bursts and fixed_y:
+            print("Fixed-y requested: reusing existing outputs (no preprocessing/sorting rerun).")
 
         result = run_mea_pipeline(
             MEARunOptions(
@@ -1994,7 +2023,7 @@ def main():
                     "force_rerun_analyzer": bool(args.rerun_analyzer),
                     "output_subdir_after_well": resolved.get("output_subdir_after_well"),
                 },
-                reanalyze_bursts=bool(args.reanalyze_bursts),
+                reanalyze_bursts=should_reanalyze_bursts,
                 skip_spikesorting=bool(args.skip_spikesorting),
                 run_analyzer=True,
                 run_reports=True,
