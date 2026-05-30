@@ -243,7 +243,7 @@ def plot_clean_raster(
 
         y_offset += 1
 
-    ax.set_ylabel("Unit Index")
+    ax.set_ylabel("Channels")
     ax.set_ylim(-1, y_offset)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -263,12 +263,12 @@ def plot_clean_network(
     use_twinx=True
 ):
     """
-    Plot participation/recruitment and mean firing rate per unit.
+    Plot mean firing rate per unit and participation/recruitment.
 
     Parameters
     ----------
     ax : matplotlib axis
-        Main axis for participation signal.
+        Main axis for mean firing rate signal.
     t : array-like
         Time vector (seconds).
     participation_signal : array-like
@@ -284,58 +284,17 @@ def plot_clean_network(
     participation_threshold : float, optional
         Detection threshold in participation space.
     ylim : tuple, optional
-        Y-limits for main participation axis.
+        Y-limits for participation axis.
     use_twinx : bool
-        If True, draw rate_signal on a second y-axis.
+        If True, draw participation signal on a second y-axis.
     """
 
     # -------------------------------------------------
-    # Main axis = participation / recruitment
+    # Main axis = mean firing rate / unit (left axis)
     # -------------------------------------------------
-    part_line, = ax.plot(
-        t,
-        participation_signal,
-        color="#B22222",
-        lw=1.3,
-        zorder=3,
-        label="Participation / recruitment"
-    )
-
-    ax.set_ylabel("Participation signal")
-    ax.spines["top"].set_visible(False)
-    ax.tick_params(direction="out")
-
-    if ylim is not None:
-        ax.set_ylim(ylim)
-
-    if participation_baseline is not None:
-        ax.axhline(
-            participation_baseline,
-            color="#FF6600",
-            ls="--",
-            lw=1.0,
-            alpha=0.8,
-            zorder=2
-        )
-
-    if participation_threshold is not None:
-        ax.axhline(
-            participation_threshold,
-            color="#C0392B",
-            ls="--",
-            lw=1.0,
-            alpha=0.8,
-            zorder=2
-        )
-
-    # -------------------------------------------------
-    # Secondary axis = rate signal
-    # -------------------------------------------------
-    ax_rate = ax.twinx() if use_twinx else ax
     rate_line = None
-
     if rate_signal is not None:
-        rate_line, = ax_rate.plot(
+        rate_line, = ax.plot(
             t,
             rate_signal,
             color="tab:orange",
@@ -345,17 +304,69 @@ def plot_clean_network(
             label="Mean firing rate / unit"
         )
 
-        if burst_peak_times is not None and len(burst_peak_times) > 0:
-            peak_y = np.interp(burst_peak_times, t, participation_signal)
+    if rate_signal is not None:
+        ax.set_ylabel("Mean firing rate / unit (Hz)", color="tab:orange")
+        ax.tick_params(axis="y", colors="tab:orange", direction="out")
+    else:
+        ax.set_ylabel("Mean firing rate / unit (Hz)")
+        ax.tick_params(axis="y", direction="out")
+    ax.spines["top"].set_visible(False)
+    ax.tick_params(direction="out")
 
-            ax.plot(
-                burst_peak_times,
-                peak_y,
-                'o',
-                color='red',
-                ms=5,
-                zorder=6
-            )
+    # -------------------------------------------------
+    # Secondary axis = participation / recruitment (right axis)
+    # -------------------------------------------------
+    ax_part = ax.twinx() if use_twinx else ax
+    part_line, = ax_part.plot(
+        t,
+        participation_signal,
+        color="#B22222",
+        lw=1.3,
+        zorder=3,
+        label="Participation / recruitment"
+    )
+
+    ax_part.set_ylabel("Participation signal", color="#B22222")
+    if use_twinx:
+        ax_part.tick_params(axis="y", colors="#B22222", direction="out")
+        ax_part.spines["left"].set_visible(False)
+        ax_part.spines["right"].set_visible(True)
+
+    if ylim is not None:
+        ax_part.set_ylim(ylim)
+
+    if participation_baseline is not None:
+        ax_part.axhline(
+            participation_baseline,
+            color="#FF6600",
+            ls="--",
+            lw=1.0,
+            alpha=0.8,
+            zorder=2
+        )
+
+    if participation_threshold is not None:
+        ax_part.axhline(
+            participation_threshold,
+            color="#C0392B",
+            ls="--",
+            lw=1.0,
+            alpha=0.8,
+            zorder=2
+        )
+
+    if burst_peak_times is not None and len(burst_peak_times) > 0:
+        peak_y = np.interp(burst_peak_times, t, participation_signal)
+
+        ax_part.plot(
+            burst_peak_times,
+            peak_y,
+            'o',
+            color='red',
+            ms=5,
+            zorder=6
+        )
+
     if use_twinx and rate_signal is not None:
         smin = np.nanmin(rate_signal) if len(rate_signal) else 0.0
         smax = np.nanmax(rate_signal) if len(rate_signal) else 1.0
@@ -363,26 +374,32 @@ def plot_clean_network(
         if np.isfinite(smin) and np.isfinite(smax):
             if smax > smin:
                 pad = 0.10 * (smax - smin)
-                ax_rate.set_ylim(smin - pad, smax + pad)
+                ax.set_ylim(smin - pad, smax + pad)
             else:
-                ax_rate.set_ylim(smin - 1.0, smax + 1.0)
-
-        ax_rate.set_ylabel("Mean firing rate / unit (Hz)", color="tab:orange")
-        ax_rate.tick_params(axis="y", colors="tab:orange", direction="out")
-        ax_rate.spines["top"].set_visible(False)
-        ax_rate.spines["left"].set_visible(False)
-
-    ax.set_xlabel("Time (s)")
+                ax.set_ylim(smin - 1.0, smax + 1.0)
+    if not use_twinx:
+        ax_part.tick_params(axis="y", direction="out")
+        ax_part.set_ylabel("Participation signal")
 
     if use_twinx and rate_line is not None:
-        ax.legend(
-            handles=[part_line, rate_line],
+        ax_part.legend(
+            handles=[rate_line, part_line],
+            loc="upper right",
+            frameon=False,
+            fontsize=8
+        )
+    elif rate_line is None:
+        ax_part.legend(
+            handles=[part_line],
             loc="upper right",
             frameon=False,
             fontsize=8
         )
 
-    return ax, ax_rate
+    ax_part.spines["top"].set_visible(False)
+    ax.set_xlabel("Time (s)")
+
+    return ax, ax_part
 
 def plot_raster_with_bursts(ax, spike_times, bursts, sorted_units=None, title_suffix=""):
     """
