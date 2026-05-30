@@ -1157,28 +1157,53 @@ class MEAPipeline:
         # 2. Main analysis block
         # ---------------------------------------------------------
         try:
-            # A. Run network burst detector
-            network_data = compute_network_bursts(
-                SpikeTimes=spike_times,
-            )
-
-            if isinstance(network_data, dict) and "error" in network_data:
-                self.logger.error(f"Burst detector returned error: {network_data['error']}")
-                return
-
-            # B. Save clean JSON
-            network_data_clean = helper.recursive_clean(network_data)
-            network_data_clean["n_units"] = len(spike_times)
-
-            temp_file = self.output_dir / "network_results.tmp.json"
+            network_data = None
             final_file = self.output_dir / "network_results.json"
 
-            with open(temp_file, "w") as f:
-                json.dump(network_data_clean, f, indent=2)
+            if fixed_y and final_file.exists():
+                try:
+                    with open(final_file, "r") as f:
+                        existing_network_data = json.load(f)
+                    if isinstance(existing_network_data, dict) and "plot_data" in existing_network_data:
+                        network_data = existing_network_data
+                        self.logger.info(
+                            "Fixed-y enabled; reusing existing network results from %s (no burst re-analysis).",
+                            final_file,
+                        )
+                    else:
+                        self.logger.warning(
+                            "Existing %s missing plot_data; recomputing burst analysis.",
+                            final_file,
+                        )
+                except Exception as exc:
+                    self.logger.warning(
+                        "Failed to load existing network results %s; recomputing burst analysis: %s",
+                        final_file,
+                        exc,
+                    )
 
-            if temp_file.exists():
-                os.replace(temp_file, final_file)
-                self.logger.info(f"Successfully saved: {final_file}")
+            if network_data is None:
+                # A. Run network burst detector
+                network_data = compute_network_bursts(
+                    SpikeTimes=spike_times,
+                )
+
+                if isinstance(network_data, dict) and "error" in network_data:
+                    self.logger.error(f"Burst detector returned error: {network_data['error']}")
+                    return
+
+                # B. Save clean JSON
+                network_data_clean = helper.recursive_clean(network_data)
+                network_data_clean["n_units"] = len(spike_times)
+
+                temp_file = self.output_dir / "network_results.tmp.json"
+
+                with open(temp_file, "w") as f:
+                    json.dump(network_data_clean, f, indent=2)
+
+                if temp_file.exists():
+                    os.replace(temp_file, final_file)
+                    self.logger.info(f"Successfully saved: {final_file}")
 
             # C. Build raster data to include all recording channels
             raster_spike_times, channel_order = self._build_channel_raster_spike_times(spike_times)
