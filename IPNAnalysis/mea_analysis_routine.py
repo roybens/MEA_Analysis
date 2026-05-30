@@ -1322,24 +1322,10 @@ class MEAPipeline:
             raise e
 
     def _save_fixed_y_plots(self, spike_times, network_data, raster_sort="none", default_order=None):
-        summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
-        if not summary_file.exists():
-            self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
+        global_max = self._compute_fixed_y_max_from_existing_data(current_network_data=network_data)
+        if global_max is None:
+            self.logger.error("Unable to determine fixed y-max from existing network results data.")
             return
-
-        with open(summary_file, 'r') as f:
-            summary = json.load(f)
-        # Flatten all values and find global max
-        all_maxima = [
-            v for date in summary.values()
-            for chip in date.values()
-            for v in chip.values()
-        ]
-        if not all_maxima:
-            self.logger.error(f"y-max summary file is empty: {summary_file}")
-            return
-
-        global_max = max(all_maxima)
         self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
 
         fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
@@ -1381,6 +1367,54 @@ class MEAPipeline:
         plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
         plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
         plt.close(fig2)
+
+    def _extract_fixed_y_max(self, network_data):
+        if not isinstance(network_data, dict):
+            return None
+        plot_data = network_data.get("plot_data")
+        if not isinstance(plot_data, dict):
+            return None
+
+        for key in ("rate_signal", "participation_signal"):
+            signal = plot_data.get(key)
+            if signal is None:
+                continue
+            arr = np.asarray(signal, dtype=float)
+            if arr.size == 0:
+                continue
+            finite = arr[np.isfinite(arr)]
+            if finite.size == 0:
+                continue
+            max_val = float(np.nanmax(finite))
+            if max_val > 0:
+                return max_val
+        return None
+
+    def _compute_fixed_y_max_from_existing_data(self, current_network_data=None):
+        all_maxima = []
+        current_max = self._extract_fixed_y_max(current_network_data)
+        if current_max is not None:
+            all_maxima.append(current_max)
+
+        project_root = self.output_root / self.project_name
+        search_root = project_root if project_root.exists() else self.output_root
+        current_results_path = (self.output_dir / "network_results.json").resolve()
+
+        for results_path in search_root.rglob("network_results.json"):
+            try:
+                if current_network_data is not None and results_path.resolve() == current_results_path:
+                    continue
+                with open(results_path, "r") as f:
+                    payload = json.load(f)
+                y_max = self._extract_fixed_y_max(payload)
+                if y_max is not None:
+                    all_maxima.append(y_max)
+            except Exception as exc:
+                self.logger.debug("Skipping unreadable network results file %s: %s", results_path, exc)
+
+        if not all_maxima:
+            return None
+        return max(all_maxima)
 
     def _replot_fixed_y_from_saved_results(self, raster_sort="none"):
         network_results_path = self.output_dir / "network_results.json"
