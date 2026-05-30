@@ -1400,6 +1400,7 @@ class MEAPipeline:
         if not isinstance(plot_data, dict):
             return None
 
+        maxima = []
         for key in ("rate_signal", "participation_signal"):
             signal = plot_data.get(key)
             if signal is None:
@@ -1412,8 +1413,10 @@ class MEAPipeline:
                 continue
             max_val = float(np.nanmax(finite))
             if max_val > 0:
-                return max_val
-        return None
+                maxima.append(max_val)
+        if not maxima:
+            return None
+        return max(maxima)
 
     def _compute_fixed_y_max_from_existing_data(self, current_network_data=None):
         all_maxima = []
