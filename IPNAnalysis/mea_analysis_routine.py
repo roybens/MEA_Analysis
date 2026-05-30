@@ -1140,7 +1140,13 @@ class MEAPipeline:
                 self.logger.info("Loading spike times from %s", spike_times_path)
                 spike_times = np.load(spike_times_path, allow_pickle=True).item()
             else:
-                self.logger.error("No spike times found for burst analysis.")
+                if fixed_y:
+                    self.logger.warning(
+                        "No spike times found for burst analysis; attempting fixed-y replot from existing network results."
+                    )
+                    self._replot_fixed_y_from_saved_results(raster_sort=raster_sort)
+                else:
+                    self.logger.error("No spike times found for burst analysis.")
                 return
 
         if not spike_times:
@@ -1151,31 +1157,61 @@ class MEAPipeline:
         # 2. Main analysis block
         # ---------------------------------------------------------
         try:
-            # A. Run network burst detector
-            network_data = compute_network_bursts(
-                SpikeTimes=spike_times,
-            )
-
-            if isinstance(network_data, dict) and "error" in network_data:
-                self.logger.error(f"Burst detector returned error: {network_data['error']}")
-                return
-
-            # B. Save clean JSON
-            network_data_clean = helper.recursive_clean(network_data)
-            network_data_clean["n_units"] = len(spike_times)
-
-            temp_file = self.output_dir / "network_results.tmp.json"
+            network_data = None
             final_file = self.output_dir / "network_results.json"
 
-            with open(temp_file, "w") as f:
-                json.dump(network_data_clean, f, indent=2)
+            if fixed_y and final_file.exists():
+                try:
+                    with open(final_file, "r") as f:
+                        existing_network_data = json.load(f)
+                    if isinstance(existing_network_data, dict) and "plot_data" in existing_network_data:
+                        network_data = existing_network_data
+                        self.logger.info(
+                            "Fixed-y enabled; reusing existing network results from %s (no burst re-analysis).",
+                            final_file,
+                        )
+                    else:
+                        self.logger.warning(
+                            "Existing %s missing plot_data; recomputing burst analysis.",
+                            final_file,
+                        )
+                except Exception as exc:
+                    self.logger.warning(
+                        "Failed to load existing network results %s; recomputing burst analysis: %s",
+                        final_file,
+                        exc,
+                    )
 
-            if temp_file.exists():
-                os.replace(temp_file, final_file)
-                self.logger.info(f"Successfully saved: {final_file}")
+            if network_data is None:
+                # A. Run network burst detector
+                network_data = compute_network_bursts(
+                    SpikeTimes=spike_times,
+                )
 
-            # C. Sort units for raster
-            sorted_units = self._sort_units_for_raster(spike_times, raster_sort)
+                if isinstance(network_data, dict) and "error" in network_data:
+                    self.logger.error(f"Burst detector returned error: {network_data['error']}")
+                    return
+
+                # B. Save clean JSON
+                network_data_clean = helper.recursive_clean(network_data)
+                network_data_clean["n_units"] = len(spike_times)
+
+                temp_file = self.output_dir / "network_results.tmp.json"
+
+                with open(temp_file, "w") as f:
+                    json.dump(network_data_clean, f, indent=2)
+
+                if temp_file.exists():
+                    os.replace(temp_file, final_file)
+                    self.logger.info(f"Successfully saved: {final_file}")
+
+            # C. Build raster data to include all recording channels
+            raster_spike_times, channel_order = self._build_channel_raster_spike_times(spike_times)
+            sorted_units = self._sort_units_for_raster(
+                raster_spike_times,
+                raster_sort,
+                default_order=(channel_order if raster_sort == 'none' else None),
+            )
 
             # D. Build figure
             ax_network_red = None
@@ -1186,7 +1222,7 @@ class MEAPipeline:
 
                 helper.plot_clean_raster(
                     ax_raster,
-                    spike_times,
+                    raster_spike_times,
                     sorted_units,
                     color="gray",
                     markersize=4,
@@ -1205,7 +1241,7 @@ class MEAPipeline:
 
                 helper.plot_clean_raster(
                     ax_raster,
-                    spike_times,
+                    raster_spike_times,
                     sorted_units,
                     color="gray",
                     markersize=4,
@@ -1295,45 +1331,14 @@ class MEAPipeline:
 
             self.logger.info("Burst analysis plots saved successfully.")
 
-            # Fixed Y Logic 
+            # Fixed Y Logic
             if fixed_y:
-                summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
-                if not summary_file.exists():
-                    self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
-                else:
-                    with open(summary_file, 'r') as f:
-                        summary = json.load(f)
-                    # Flatten all values and find global max
-                    all_maxima = [
-                        v for date in summary.values()
-                        for chip in date.values()
-                        for v in chip.values()
-                    ]
-                    global_max = max(all_maxima)
-                    self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
-
-                    # Replot with fixed y
-                    fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-                    ax_raster2, ax_network2 = axs2
-                    helper.plot_clean_raster(ax_raster2, spike_times, color='gray', markersize=4, markeredgewidth=0.5, alpha=1.0)
-                    helper.plot_clean_network(ax_network2, **network_data["plot_data"])
-                    ax_network2.set_ylim(0, global_max)
-                    plt.tight_layout()
-                    plt.subplots_adjust(hspace=0.05)
-                    for start, end in sb_intervals: 
-                        ax_network2.axvspan(start, end, color='gray', alpha=0.3)
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.svg")
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.png", dpi=300)
-                    ax_raster2.set_xlim(0, 60)
-                    ax_network2.set_xlim(0, 60)
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_60s.svg")
-                    ax_raster2.set_xlim(0, 30)
-                    ax_network2.set_xlim(0, 30)
-                    ax_network2.set_xlabel("Time (s)")
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
-        
-                    plt.close(fig2)
+                self._save_fixed_y_plots(
+                    spike_times=raster_spike_times,
+                    network_data=network_data,
+                    raster_sort=raster_sort,
+                    default_order=(channel_order if raster_sort == 'none' else None),
+                )
                 
 
         except Exception as e:
@@ -1341,10 +1346,215 @@ class MEAPipeline:
             traceback.print_exc()
             raise e
 
-    def _sort_units_for_raster(self, spike_times, raster_sort):
+    def _save_fixed_y_plots(self, spike_times, network_data, raster_sort="none", default_order=None):
+        global_max = self._compute_fixed_y_max_from_existing_data(current_network_data=network_data)
+        if global_max is None:
+            self.logger.error("Unable to determine fixed y-max from existing network results data.")
+            return
+        self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
+
+        fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        ax_raster2, ax_network2 = axs2
+        sorted_units = self._sort_units_for_raster(
+            spike_times,
+            raster_sort,
+            default_order=default_order,
+        ) if spike_times else None
+        helper.plot_clean_raster(
+            ax_raster2,
+            spike_times,
+            sorted_units,
+            color='gray',
+            markersize=4,
+            markeredgewidth=0.5,
+            alpha=1.0
+        )
+        helper.plot_clean_network(ax_network2, **network_data["plot_data"])
+        ax_network2.set_ylim(0, global_max)
+        plt.tight_layout()
+        plt.subplots_adjust(hspace=0.05)
+
+        superburst_events = network_data.get("superbursts", {}).get("events", [])
+        for ev in superburst_events:
+            start = ev.get("start")
+            end = ev.get("end")
+            if start is not None and end is not None:
+                ax_network2.axvspan(start, end, color='gray', alpha=0.3)
+
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.svg")
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.png", dpi=300)
+        ax_raster2.set_xlim(0, 60)
+        ax_network2.set_xlim(0, 60)
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_60s.svg")
+        ax_raster2.set_xlim(0, 30)
+        ax_network2.set_xlim(0, 30)
+        ax_network2.set_xlabel("Time (s)")
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
+        plt.close(fig2)
+
+    def _extract_fixed_y_max(self, network_data):
+        if not isinstance(network_data, dict):
+            return None
+        plot_data = network_data.get("plot_data")
+        if not isinstance(plot_data, dict):
+            return None
+
+        maxima = []
+        for key in ("rate_signal", "participation_signal"):
+            signal = plot_data.get(key)
+            if signal is None:
+                continue
+            arr = np.asarray(signal, dtype=float)
+            if arr.size == 0:
+                continue
+            finite = arr[np.isfinite(arr)]
+            if finite.size == 0:
+                continue
+            max_val = float(np.nanmax(finite))
+            if max_val > 0:
+                maxima.append(max_val)
+        if not maxima:
+            return None
+        return max(maxima)
+
+    def _compute_fixed_y_max_from_existing_data(self, current_network_data=None):
+        all_maxima = []
+        current_max = self._extract_fixed_y_max(current_network_data)
+        if current_max is not None:
+            all_maxima.append(current_max)
+
+        project_root = self.output_root / self.project_name
+        search_root = project_root if project_root.exists() else self.output_root
+        current_results_path = (self.output_dir / "network_results.json").resolve()
+
+        for results_path in search_root.rglob("network_results.json"):
+            try:
+                if current_network_data is not None and results_path.resolve() == current_results_path:
+                    continue
+                with open(results_path, "r") as f:
+                    payload = json.load(f)
+                y_max = self._extract_fixed_y_max(payload)
+                if y_max is not None:
+                    all_maxima.append(y_max)
+            except Exception as exc:
+                self.logger.debug("Skipping unreadable network results file %s: %s", results_path, exc)
+
+        if not all_maxima:
+            return None
+        return max(all_maxima)
+
+    def _replot_fixed_y_from_saved_results(self, raster_sort="none"):
+        network_results_path = self.output_dir / "network_results.json"
+        if not network_results_path.exists():
+            self.logger.error(
+                "Cannot generate fixed-y plots without spike times: missing %s",
+                network_results_path,
+            )
+            return
+
+        try:
+            with open(network_results_path, "r") as f:
+                network_data = json.load(f)
+        except Exception as exc:
+            self.logger.error("Failed to load %s: %s", network_results_path, exc)
+            return
+
+        if "plot_data" not in network_data:
+            self.logger.error("network_results.json has no plot_data; cannot regenerate fixed-y plots.")
+            return
+
+        spike_times = {}
+        spike_times_path = self.output_dir / "spike_times.npy"
+        if spike_times_path.exists():
+            try:
+                self.logger.info("Loading spike times from %s for fixed-y replot", spike_times_path)
+                spike_times = np.load(spike_times_path, allow_pickle=True).item()
+            except Exception as exc:
+                self.logger.warning("Failed to load spike times from %s: %s", spike_times_path, exc)
+                spike_times = {}
+        else:
+            self.logger.info("No spike_times.npy found; generating fixed-y plots with network trace only.")
+
+        raster_spike_times, channel_order = self._build_channel_raster_spike_times(spike_times)
+        self._save_fixed_y_plots(
+            spike_times=raster_spike_times,
+            network_data=network_data,
+            raster_sort=raster_sort,
+            default_order=(channel_order if raster_sort == 'none' else None),
+        )
+
+    def _build_channel_raster_spike_times(self, spike_times):
+        """Build raster spike-times over all recording channels, keeping no-spike channels empty."""
+        if self.recording is None:
+            return spike_times, None
+
+        try:
+            channel_order = list(self.recording.get_channel_ids())
+        except Exception as exc:
+            self.logger.warning("Could not load recording channel IDs for raster plotting: %s", exc)
+            return spike_times, None
+
+        if not channel_order:
+            return spike_times, None
+
+        channel_spike_lists = {ch: [] for ch in channel_order}
+        channel_id_set = set(channel_order)
+
+        # Case 1: keys are already channels (e.g., spike-detection-only mode)
+        if all(uid in channel_id_set for uid in spike_times.keys()):
+            for ch, times in spike_times.items():
+                if ch in channel_spike_lists and times is not None and len(times) > 0:
+                    channel_spike_lists[ch].append(np.asarray(times))
+        else:
+            # Case 2: keys are sorted unit IDs — map units to nearest physical channel
+            unit_to_channel = {}
+            if self.analyzer is not None:
+                try:
+                    unit_ids = np.asarray(self.analyzer.unit_ids)
+                    unit_locations = np.asarray(self.analyzer.get_extension("unit_locations").get_data())
+                    channel_locations = np.asarray(self.recording.get_channel_locations())
+
+                    if unit_locations.ndim == 2 and channel_locations.ndim == 2:
+                        n_dim = min(unit_locations.shape[1], channel_locations.shape[1], 2)
+                        if n_dim >= 1:
+                            unit_loc_xy = unit_locations[:, :n_dim]
+                            channel_loc_xy = channel_locations[:, :n_dim]
+
+                            for uid in spike_times.keys():
+                                idx_matches = np.where(unit_ids == uid)[0]
+                                if idx_matches.size == 0:
+                                    continue
+                                unit_idx = int(idx_matches[0])
+                                unit_loc = unit_loc_xy[unit_idx]
+                                distances = np.sum((channel_loc_xy - unit_loc) ** 2, axis=1)
+                                nearest_idx = int(np.argmin(distances))
+                                unit_to_channel[uid] = channel_order[nearest_idx]
+                except Exception as exc:
+                    self.logger.warning(
+                        "Failed mapping sorted units to recording channels for raster plot: %s",
+                        exc,
+                    )
+
+            for uid, times in spike_times.items():
+                ch = unit_to_channel.get(uid)
+                if ch in channel_spike_lists and times is not None and len(times) > 0:
+                    channel_spike_lists[ch].append(np.asarray(times))
+
+        channel_spike_times = {}
+        for ch in channel_order:
+            traces = channel_spike_lists[ch]
+            if traces:
+                channel_spike_times[ch] = np.sort(np.concatenate(traces))
+            else:
+                channel_spike_times[ch] = np.array([])
+
+        return channel_spike_times, channel_order
+
+    def _sort_units_for_raster(self, spike_times, raster_sort, default_order=None):
         """Returns ordered list of unit keys for raster y-axis."""
         if raster_sort == 'none':
-            return None  # plot_clean_raster handles default ordering itself
+            return list(default_order) if default_order is not None else None
 
         if raster_sort == 'firing_rate':
             return sorted(spike_times.keys(), key=lambda uid: len(spike_times[uid]))
@@ -1522,7 +1732,28 @@ def run_mea_pipeline(options: MEARunOptions) -> MEARunResult:
 
     _apply_resume_from_stage(pipeline, options.resume_from)
 
-    if bool(options.reanalyze_bursts):
+    auto_reanalyze_for_fixed_y = (
+        bool(options.fixed_y)
+        and not bool(options.reanalyze_bursts)
+        and not bool(options.force_restart)
+        and options.resume_from is None
+    )
+    if auto_reanalyze_for_fixed_y:
+        pipeline.logger.info(
+            "Fixed-y requested; using existing outputs to regenerate plots without rerunning preprocessing/sorting."
+        )
+
+    should_reanalyze_bursts = bool(options.reanalyze_bursts) or auto_reanalyze_for_fixed_y
+
+    if should_reanalyze_bursts:
+        network_results_path = pipeline.output_dir / "network_results.json"
+        spike_times_path = pipeline.output_dir / "spike_times.npy"
+        if not network_results_path.exists() and not spike_times_path.exists():
+            raise RuntimeError(
+                "Fixed-y/reanalyze mode requires existing outputs in the well output directory "
+                "(expected spike_times.npy or network_results.json). "
+                "Run once without --fixed-y, or use --force-restart to run the full pipeline."
+            )
         pipeline._run_burst_analysis(
             plot_mode=options.plot_mode,
             plot_debug=bool(options.plot_debug),
@@ -1627,7 +1858,7 @@ def main():
     plot_group.add_argument("--plot-debug", action="store_true",
         help="Overlay burst and superburst intervals on raster plot")
     plot_group.add_argument("--fixed-y", action="store_true",
-        help="Use fixed y-axis limits for raster plots — run once without it first to generate summary")
+        help="Use fixed y-axis limits for raster plots; by default this reuses existing outputs without rerunning sorting")
     # --- Curation ---
     cur_group = parser.add_argument_group("curation")
     cur_group.add_argument("--no-curation", action="store_true",
@@ -1770,8 +2001,16 @@ def main():
     rec = args.rec or "rec0000"
 
     try:
+        should_reanalyze_bursts = bool(args.reanalyze_bursts) or (
+            bool(fixed_y)
+            and not bool(args.force_restart)
+            and args.resume_from is None
+        )
+
         if args.reanalyze_bursts:
             print("Re-analyzing bursts only on existing spike times...")
+        elif should_reanalyze_bursts and fixed_y:
+            print("Fixed-y requested: reusing existing outputs (no preprocessing/sorting rerun).")
 
         result = run_mea_pipeline(
             MEARunOptions(
@@ -1812,7 +2051,7 @@ def main():
                     "force_rerun_analyzer": bool(args.rerun_analyzer),
                     "output_subdir_after_well": resolved.get("output_subdir_after_well"),
                 },
-                reanalyze_bursts=bool(args.reanalyze_bursts),
+                reanalyze_bursts=should_reanalyze_bursts,
                 skip_spikesorting=bool(args.skip_spikesorting),
                 run_analyzer=True,
                 run_reports=True,
