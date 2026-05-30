@@ -1180,8 +1180,13 @@ class MEAPipeline:
                 os.replace(temp_file, final_file)
                 self.logger.info(f"Successfully saved: {final_file}")
 
-            # C. Sort units for raster
-            sorted_units = self._sort_units_for_raster(spike_times, raster_sort)
+            # C. Build raster data to include all recording channels
+            raster_spike_times, channel_order = self._build_channel_raster_spike_times(spike_times)
+            sorted_units = self._sort_units_for_raster(
+                raster_spike_times,
+                raster_sort,
+                default_order=(channel_order if raster_sort == 'none' else None),
+            )
 
             # D. Build figure
             ax_network_red = None
@@ -1192,7 +1197,7 @@ class MEAPipeline:
 
                 helper.plot_clean_raster(
                     ax_raster,
-                    spike_times,
+                    raster_spike_times,
                     sorted_units,
                     color="gray",
                     markersize=4,
@@ -1211,7 +1216,7 @@ class MEAPipeline:
 
                 helper.plot_clean_raster(
                     ax_raster,
-                    spike_times,
+                    raster_spike_times,
                     sorted_units,
                     color="gray",
                     markersize=4,
@@ -1304,9 +1309,10 @@ class MEAPipeline:
             # Fixed Y Logic
             if fixed_y:
                 self._save_fixed_y_plots(
-                    spike_times=spike_times,
+                    spike_times=raster_spike_times,
                     network_data=network_data,
                     raster_sort=raster_sort,
+                    default_order=(channel_order if raster_sort == 'none' else None),
                 )
                 
 
@@ -1315,7 +1321,7 @@ class MEAPipeline:
             traceback.print_exc()
             raise e
 
-    def _save_fixed_y_plots(self, spike_times, network_data, raster_sort="none"):
+    def _save_fixed_y_plots(self, spike_times, network_data, raster_sort="none", default_order=None):
         summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
         if not summary_file.exists():
             self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
@@ -1338,7 +1344,11 @@ class MEAPipeline:
 
         fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
         ax_raster2, ax_network2 = axs2
-        sorted_units = self._sort_units_for_raster(spike_times, raster_sort) if spike_times else None
+        sorted_units = self._sort_units_for_raster(
+            spike_times,
+            raster_sort,
+            default_order=default_order,
+        ) if spike_times else None
         helper.plot_clean_raster(
             ax_raster2,
             spike_times,
@@ -1404,12 +1414,85 @@ class MEAPipeline:
         else:
             self.logger.info("No spike_times.npy found; generating fixed-y plots with network trace only.")
 
-        self._save_fixed_y_plots(spike_times=spike_times, network_data=network_data, raster_sort=raster_sort)
+        raster_spike_times, channel_order = self._build_channel_raster_spike_times(spike_times)
+        self._save_fixed_y_plots(
+            spike_times=raster_spike_times,
+            network_data=network_data,
+            raster_sort=raster_sort,
+            default_order=(channel_order if raster_sort == 'none' else None),
+        )
 
-    def _sort_units_for_raster(self, spike_times, raster_sort):
+    def _build_channel_raster_spike_times(self, spike_times):
+        """Build raster spike-times over all recording channels, keeping no-spike channels empty."""
+        if self.recording is None:
+            return spike_times, None
+
+        try:
+            channel_order = list(self.recording.get_channel_ids())
+        except Exception as exc:
+            self.logger.warning("Could not load recording channel IDs for raster plotting: %s", exc)
+            return spike_times, None
+
+        if not channel_order:
+            return spike_times, None
+
+        channel_spike_lists = {ch: [] for ch in channel_order}
+        channel_id_set = set(channel_order)
+
+        # Case 1: keys are already channels (e.g., spike-detection-only mode)
+        if all(uid in channel_id_set for uid in spike_times.keys()):
+            for ch, times in spike_times.items():
+                if ch in channel_spike_lists and times is not None and len(times) > 0:
+                    channel_spike_lists[ch].append(np.asarray(times))
+        else:
+            # Case 2: keys are sorted unit IDs — map units to nearest physical channel
+            unit_to_channel = {}
+            if self.analyzer is not None:
+                try:
+                    unit_ids = np.asarray(self.analyzer.unit_ids)
+                    unit_locations = np.asarray(self.analyzer.get_extension("unit_locations").get_data())
+                    channel_locations = np.asarray(self.recording.get_channel_locations())
+
+                    if unit_locations.ndim == 2 and channel_locations.ndim == 2:
+                        n_dim = min(unit_locations.shape[1], channel_locations.shape[1], 2)
+                        if n_dim >= 1:
+                            unit_loc_xy = unit_locations[:, :n_dim]
+                            channel_loc_xy = channel_locations[:, :n_dim]
+
+                            for uid in spike_times.keys():
+                                idx_matches = np.where(unit_ids == uid)[0]
+                                if idx_matches.size == 0:
+                                    continue
+                                unit_idx = int(idx_matches[0])
+                                unit_loc = unit_loc_xy[unit_idx]
+                                distances = np.sum((channel_loc_xy - unit_loc) ** 2, axis=1)
+                                nearest_idx = int(np.argmin(distances))
+                                unit_to_channel[uid] = channel_order[nearest_idx]
+                except Exception as exc:
+                    self.logger.warning(
+                        "Failed mapping sorted units to recording channels for raster plot: %s",
+                        exc,
+                    )
+
+            for uid, times in spike_times.items():
+                ch = unit_to_channel.get(uid)
+                if ch in channel_spike_lists and times is not None and len(times) > 0:
+                    channel_spike_lists[ch].append(np.asarray(times))
+
+        channel_spike_times = {}
+        for ch in channel_order:
+            traces = channel_spike_lists[ch]
+            if traces:
+                channel_spike_times[ch] = np.sort(np.concatenate(traces))
+            else:
+                channel_spike_times[ch] = np.array([])
+
+        return channel_spike_times, channel_order
+
+    def _sort_units_for_raster(self, spike_times, raster_sort, default_order=None):
         """Returns ordered list of unit keys for raster y-axis."""
         if raster_sort == 'none':
-            return None  # plot_clean_raster handles default ordering itself
+            return list(default_order) if default_order is not None else None
 
         if raster_sort == 'firing_rate':
             return sorted(spike_times.keys(), key=lambda uid: len(spike_times[uid]))
