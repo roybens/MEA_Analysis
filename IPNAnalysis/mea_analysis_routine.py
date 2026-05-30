@@ -1140,7 +1140,13 @@ class MEAPipeline:
                 self.logger.info("Loading spike times from %s", spike_times_path)
                 spike_times = np.load(spike_times_path, allow_pickle=True).item()
             else:
-                self.logger.error("No spike times found for burst analysis.")
+                if fixed_y:
+                    self.logger.warning(
+                        "No spike times found for burst analysis; attempting fixed-y replot from existing network results."
+                    )
+                    self._replot_fixed_y_from_saved_results(raster_sort=raster_sort)
+                else:
+                    self.logger.error("No spike times found for burst analysis.")
                 return
 
         if not spike_times:
@@ -1295,51 +1301,110 @@ class MEAPipeline:
 
             self.logger.info("Burst analysis plots saved successfully.")
 
-            # Fixed Y Logic 
+            # Fixed Y Logic
             if fixed_y:
-                summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
-                if not summary_file.exists():
-                    self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
-                else:
-                    with open(summary_file, 'r') as f:
-                        summary = json.load(f)
-                    # Flatten all values and find global max
-                    all_maxima = [
-                        v for date in summary.values()
-                        for chip in date.values()
-                        for v in chip.values()
-                    ]
-                    global_max = max(all_maxima)
-                    self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
-
-                    # Replot with fixed y
-                    fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-                    ax_raster2, ax_network2 = axs2
-                    helper.plot_clean_raster(ax_raster2, spike_times, color='gray', markersize=4, markeredgewidth=0.5, alpha=1.0)
-                    helper.plot_clean_network(ax_network2, **network_data["plot_data"])
-                    ax_network2.set_ylim(0, global_max)
-                    plt.tight_layout()
-                    plt.subplots_adjust(hspace=0.05)
-                    for start, end in sb_intervals: 
-                        ax_network2.axvspan(start, end, color='gray', alpha=0.3)
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.svg")
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.png", dpi=300)
-                    ax_raster2.set_xlim(0, 60)
-                    ax_network2.set_xlim(0, 60)
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_60s.svg")
-                    ax_raster2.set_xlim(0, 30)
-                    ax_network2.set_xlim(0, 30)
-                    ax_network2.set_xlabel("Time (s)")
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
-                    plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
-        
-                    plt.close(fig2)
+                self._save_fixed_y_plots(
+                    spike_times=spike_times,
+                    network_data=network_data,
+                    raster_sort=raster_sort,
+                )
                 
 
         except Exception as e:
             self.logger.error(f"Burst analysis error: {e}")
             traceback.print_exc()
             raise e
+
+    def _save_fixed_y_plots(self, spike_times, network_data, raster_sort="none"):
+        summary_file = self.output_root / self.project_name / f"{self.project_name}_y_max_summary.json"
+        if not summary_file.exists():
+            self.logger.error(f"No y-max summary found at {summary_file}. Run without --fixed-y first.")
+            return
+
+        with open(summary_file, 'r') as f:
+            summary = json.load(f)
+        # Flatten all values and find global max
+        all_maxima = [
+            v for date in summary.values()
+            for chip in date.values()
+            for v in chip.values()
+        ]
+        if not all_maxima:
+            self.logger.error(f"y-max summary file is empty: {summary_file}")
+            return
+
+        global_max = max(all_maxima)
+        self.logger.info(f"Applying fixed y-max: {global_max:.4f}")
+
+        fig2, axs2 = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        ax_raster2, ax_network2 = axs2
+        sorted_units = self._sort_units_for_raster(spike_times, raster_sort) if spike_times else None
+        helper.plot_clean_raster(
+            ax_raster2,
+            spike_times,
+            sorted_units,
+            color='gray',
+            markersize=4,
+            markeredgewidth=0.5,
+            alpha=1.0
+        )
+        helper.plot_clean_network(ax_network2, **network_data["plot_data"])
+        ax_network2.set_ylim(0, global_max)
+        plt.tight_layout()
+        plt.subplots_adjust(hspace=0.05)
+
+        superburst_events = network_data.get("superbursts", {}).get("events", [])
+        for ev in superburst_events:
+            start = ev.get("start")
+            end = ev.get("end")
+            if start is not None and end is not None:
+                ax_network2.axvspan(start, end, color='gray', alpha=0.3)
+
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.svg")
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot.png", dpi=300)
+        ax_raster2.set_xlim(0, 60)
+        ax_network2.set_xlim(0, 60)
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_60s.svg")
+        ax_raster2.set_xlim(0, 30)
+        ax_network2.set_xlim(0, 30)
+        ax_network2.set_xlabel("Time (s)")
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.svg")
+        plt.savefig(self.output_dir / "fixed_y_raster_burst_plot_30s.png", dpi=300)
+        plt.close(fig2)
+
+    def _replot_fixed_y_from_saved_results(self, raster_sort="none"):
+        network_results_path = self.output_dir / "network_results.json"
+        if not network_results_path.exists():
+            self.logger.error(
+                "Cannot generate fixed-y plots without spike times: missing %s",
+                network_results_path,
+            )
+            return
+
+        try:
+            with open(network_results_path, "r") as f:
+                network_data = json.load(f)
+        except Exception as exc:
+            self.logger.error("Failed to load %s: %s", network_results_path, exc)
+            return
+
+        if "plot_data" not in network_data:
+            self.logger.error("network_results.json has no plot_data; cannot regenerate fixed-y plots.")
+            return
+
+        spike_times = {}
+        spike_times_path = self.output_dir / "spike_times.npy"
+        if spike_times_path.exists():
+            try:
+                self.logger.info("Loading spike times from %s for fixed-y replot", spike_times_path)
+                spike_times = np.load(spike_times_path, allow_pickle=True).item()
+            except Exception as exc:
+                self.logger.warning("Failed to load spike times from %s: %s", spike_times_path, exc)
+                spike_times = {}
+        else:
+            self.logger.info("No spike_times.npy found; generating fixed-y plots with network trace only.")
+
+        self._save_fixed_y_plots(spike_times=spike_times, network_data=network_data, raster_sort=raster_sort)
 
     def _sort_units_for_raster(self, spike_times, raster_sort):
         """Returns ordered list of unit keys for raster y-axis."""
